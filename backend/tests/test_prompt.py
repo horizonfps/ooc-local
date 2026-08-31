@@ -211,7 +211,9 @@ def test_build_master_prompt_unknown_weather_code_falls_back_raw(monkeypatch, tm
     start = scenario.start()
     characters = list(scenario.characters.values())
 
-    hud = HudState(turn=3, location="patio", time="09:30", weather="chuvisco")
+    # model_construct bypasses validation: the prompt must survive codes that
+    # HudState itself rejects (TCK-019 validators)
+    hud = HudState.model_construct(turn=3, location="patio", time="09:30", weather="chuvisco")
     prompt = build_master_prompt(scenario, start, hud, characters)
 
     assert "Clima: chuvisco" in prompt
