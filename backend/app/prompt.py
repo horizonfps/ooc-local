@@ -1,9 +1,47 @@
 from __future__ import annotations
 
+import re
+
 from app.hud import HudState
 from app.scenario import Character, LoadedScenario, StartConfig
 
-MASTER_PROMPT_VERSION = 1
+MASTER_PROMPT_VERSION = 2
+
+WEATHER_LABELS: dict[str, dict[str, str]] = {
+    "pt-br": {
+        "clear": "Limpo",
+        "cloudy": "Nublado",
+        "rain": "Chuva",
+        "storm": "Tempestade",
+        "snow": "Neve",
+        "fog": "Neblina",
+        "night": "Noite",
+    },
+    "en": {
+        "clear": "Clear",
+        "cloudy": "Cloudy",
+        "rain": "Rain",
+        "storm": "Storm",
+        "snow": "Snow",
+        "fog": "Fog",
+        "night": "Night",
+    },
+}
+
+_HEADING_RE = re.compile(r"^(#{1,6})([ \t].*)$")
+
+
+def _neutralize_headings(text: str) -> str:
+    lines = text.split("\n")
+    result = []
+    for line in lines:
+        match = _HEADING_RE.match(line)
+        if match:
+            level = min(len(match.group(1)) + 3, 6)
+            result.append(f"{'#' * level}{match.group(2)}")
+        else:
+            result.append(line)
+    return "\n".join(result)
 
 _TEMPLATES = {
     "pt-br": {
@@ -108,10 +146,11 @@ def build_master_prompt(
     compact: str | None = None,
 ) -> str:
     template = _TEMPLATES[scenario.meta.locale]
+    locale_weather_labels = WEATHER_LABELS[scenario.meta.locale]
 
     sections = [
         f"{template['narrator_header']}\n{template['narrator_body']}",
-        f"{template['world_header']}\n{scenario.world}",
+        f"{template['world_header']}\n{_neutralize_headings(scenario.world)}",
     ]
 
     if characters:
@@ -122,15 +161,18 @@ def build_master_prompt(
         characters_body = template["no_characters"]
     sections.append(f"{template['characters_header']}\n{characters_body}")
 
+    weather_label = locale_weather_labels.get(hud.weather, hud.weather)
     hud_body = (
         f"{template['hud_turn']}: {hud.turn}\n"
         f"{template['hud_location']}: {hud.location}\n"
         f"{template['hud_time']}: {hud.time}\n"
-        f"{template['hud_weather']}: {hud.weather}"
+        f"{template['hud_weather']}: {weather_label}"
     )
     sections.append(f"{template['hud_header']}\n{hud_body}")
 
-    sections.append(f"{template['opening_header']}\n{start.opening_scene}")
+    sections.append(
+        f"{template['opening_header']}\n{_neutralize_headings(start.opening_scene)}"
+    )
 
     if compact is not None:
         sections.append(f"{template['summary_header']}\n{compact}")

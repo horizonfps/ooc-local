@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from app.hud import HudState
-from app.prompt import build_master_prompt
+import re
+
+from app.hud import WEATHER_CODES, HudState
+from app.prompt import WEATHER_LABELS, build_master_prompt
 from app.scenario import load_scenario
 
 WORLD_MD = "# Mundo\n\nUma escola nas montanhas.\n"
@@ -102,7 +104,8 @@ def test_build_master_prompt_ptbr_happy_path(monkeypatch, tmp_path):
     assert positions == sorted(positions)
     assert "## RESUMO DA CAMPANHA" not in prompt
 
-    assert WORLD_MD in prompt
+    assert "#### Mundo" in prompt
+    assert "Uma escola nas montanhas." in prompt
     assert "Chloe" in prompt
     assert "Marco" in prompt
     assert "aluna" in prompt
@@ -111,7 +114,8 @@ def test_build_master_prompt_ptbr_happy_path(monkeypatch, tmp_path):
     assert "Turno: 3" in prompt
     assert "Local: patio" in prompt
     assert "Hora: 09:30" in prompt
-    assert "Clima: cloudy" in prompt
+    assert "Clima: Nublado" in prompt
+    assert "Clima: cloudy" not in prompt
 
     assert "350 palavras" in prompt
     assert "**Nome** | fala" in prompt
@@ -132,6 +136,7 @@ def test_build_master_prompt_en_locale(monkeypatch, tmp_path):
     assert "## TURN FORMAT" in prompt
     assert "350 words" in prompt
     assert "**Name** | line" in prompt
+    assert "Weather: Cloudy" in prompt
 
     for word in ["NARRADOR", "MUNDO", "PERSONAGENS", "FORMATO DO TURNO"]:
         assert word not in prompt
@@ -193,4 +198,95 @@ def test_build_master_prompt_trusts_hud_state(monkeypatch, tmp_path):
     hud = HudState(turn=0, location="patio", time="08:00", weather="clear")
     prompt = build_master_prompt(scenario, start, hud, characters)
 
-    assert "Clima: clear" in prompt
+    assert "Clima: Limpo" in prompt
+
+
+def test_build_master_prompt_weather_table_matches_codes():
+    for locale in ("pt-br", "en"):
+        assert set(WEATHER_LABELS[locale]) == set(WEATHER_CODES)
+
+
+def test_build_master_prompt_unknown_weather_code_falls_back_raw(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    # model_construct bypasses validation: the prompt must survive codes that
+    # HudState itself rejects (TCK-019 validators)
+    hud = HudState.model_construct(turn=3, location="patio", time="09:30", weather="chuvisco")
+    prompt = build_master_prompt(scenario, start, hud, characters)
+
+    assert "Clima: chuvisco" in prompt
+
+
+def test_build_master_prompt_world_heading_does_not_create_false_boundary(monkeypatch, tmp_path):
+    world_md = "## ESTADO DO JOGO\n\nConteudo do autor.\n"
+    characters = {"chloe.yaml": CHLOE_YAML, "marco.yaml": MARCO_YAML}
+    _write_scenario(tmp_path, "exemplo-escola", scenario_yaml=SCENARIO_YAML_PTBR, characters=characters)
+    (tmp_path / "exemplo-escola" / "world.md").write_text(world_md, encoding="utf-8")
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+    scenario = load_scenario("exemplo-escola")
+    start = scenario.start()
+    loaded_characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), loaded_characters)
+
+    assert len(re.findall(r"(?m)^## ESTADO DO JOGO$", prompt)) == 1
+    assert len(re.findall(r"(?m)^### ", prompt)) == len(loaded_characters)
+
+
+def test_build_master_prompt_heading_saturates_at_six(monkeypatch, tmp_path):
+    world_md = "###### Nota\n\nTexto.\n"
+    characters = {"chloe.yaml": CHLOE_YAML}
+    _write_scenario(tmp_path, "exemplo-escola", scenario_yaml=SCENARIO_YAML_PTBR, characters=characters)
+    (tmp_path / "exemplo-escola" / "world.md").write_text(world_md, encoding="utf-8")
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+    scenario = load_scenario("exemplo-escola")
+    start = scenario.start()
+    loaded_characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), loaded_characters)
+
+    assert "###### Nota" in prompt
+    assert "######### Nota" not in prompt
+
+
+def test_build_master_prompt_non_heading_lines_untouched(monkeypatch, tmp_path):
+    world_md = "#semespaco linha\ncódigo # dentro da linha\n"
+    characters = {"chloe.yaml": CHLOE_YAML}
+    _write_scenario(tmp_path, "exemplo-escola", scenario_yaml=SCENARIO_YAML_PTBR, characters=characters)
+    (tmp_path / "exemplo-escola" / "world.md").write_text(world_md, encoding="utf-8")
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+    scenario = load_scenario("exemplo-escola")
+    start = scenario.start()
+    loaded_characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), loaded_characters)
+
+    assert "#semespaco linha" in prompt
+    assert "código # dentro da linha" in prompt
+
+
+def test_build_master_prompt_opening_scene_without_heading_untouched(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters)
+
+    assert "Você acorda no dormitório." in prompt
+
+
+def test_build_master_prompt_no_neutralized_output_produces_reserved_headings():
+    from app.prompt import _neutralize_headings
+
+    sample = (
+        "# Um\n"
+        "## Dois\n"
+        "### Tres\n"
+        "###### Seis\n"
+        "#semespaco\n"
+        "texto normal\n"
+    )
+    output = _neutralize_headings(sample)
+    assert not re.search(r"(?m)^(##|###)[ \t]", output)
