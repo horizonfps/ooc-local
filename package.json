@@ -7,7 +7,9 @@
     "dev:web": "cd frontend && npm run dev",
     "check": "npm run check:api && npm run check:web",
     "check:api": "cd backend && uv run pytest -q",
-    "check:web": "cd frontend && npx tsc -b"
+    "check:web": "cd frontend && npx tsc -b",
+    "verify": "npm run check",
+    "build": "cd frontend && npm run build"
   },
   "devDependencies": {
     "concurrently": "^9.2.0"

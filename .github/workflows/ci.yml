@@ -1,0 +1,46 @@
+# HRZ Workflow CI - Node frontend + Python/uv backend
+name: CI
+
+on:
+  pull_request:
+  push:
+    # integration/** é a branch do integration-check: sem esse trigger o
+    # substituto do merge queue cria a branch e nenhum CI roda.
+    branches: [main, "integration/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: npm ci
+      - run: npm ci --prefix frontend
+      - run: uv sync --directory backend
+
+      - name: Verify
+        run: npm run verify
+
+      - name: Build
+        run: npm run build
