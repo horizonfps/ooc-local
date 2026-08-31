@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -407,5 +408,55 @@ describe('GameScreen turns', () => {
     expect(await screen.findAllByText(t('game.notFound.title'))).not.toHaveLength(0)
     expect(screen.queryByRole('button', { name: t('common.retry') })).not.toBeInTheDocument()
     expect((textarea as HTMLTextAreaElement).value).toBe('still typed')
+  })
+
+  it('records a single player/narrator pair per turn under StrictMode', async () => {
+    const user = userEvent.setup()
+    mockRoutedFetch({
+      get: () => jsonResponse(session()),
+      post: () => sseResponse([{ delta: 'The hall answers.' }, { hud: { turn: 1, location: 'Hallway', time: 'Night', weather: 'clear' } }, '[DONE]']),
+    })
+    render(
+      <StrictMode>
+        <GameScreen sessionId="sess-1" />
+      </StrictMode>,
+    )
+
+    await screen.findByText('Once upon a time.')
+    const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+    await user.type(textarea, 'knock{Enter}')
+
+    await screen.findByText('The hall answers.')
+    await waitFor(() => {
+      expect(screen.getAllByText('knock', { selector: '.game-turn-text' })).toHaveLength(1)
+      expect(screen.getAllByText('The hall answers.')).toHaveLength(1)
+    })
+  })
+
+  it('clears the textarea after a successful retry of a pre-stream error', async () => {
+    const user = userEvent.setup()
+    let failNext = true
+    mockRoutedFetch({
+      get: () => jsonResponse(session()),
+      post: () => {
+        if (failNext) {
+          failNext = false
+          return jsonResponse({}, 503)
+        }
+        return sseResponse([{ delta: 'It works now.' }, { hud: { turn: 1, location: 'Hallway', time: 'Night', weather: 'clear' } }, '[DONE]'])
+      },
+    })
+    render(<GameScreen sessionId="sess-1" />)
+
+    await screen.findByText('Once upon a time.')
+    const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+    await user.type(textarea, 'try again{Enter}')
+
+    await screen.findByText(t('error.chatDisabled.title'))
+    expect((textarea as HTMLTextAreaElement).value).toBe('try again')
+
+    await user.click(screen.getByRole('button', { name: t('common.retry') }))
+    await screen.findByText('It works now.')
+    expect((textarea as HTMLTextAreaElement).value).toBe('')
   })
 })

@@ -160,9 +160,13 @@ export function GameScreen(props: { sessionId: string }) {
     let sawError = false
     let sawHud = false
     let succeeded = false
+    let narratorText = ''
     try {
       await streamTurn(sessionId, message, {
-        onDelta: (delta) => setPending((p) => (p ? { ...p, text: p.text + delta } : p)),
+        onDelta: (delta) => {
+          narratorText += delta
+          setPending((p) => (p ? { ...p, text: p.text + delta } : p))
+        },
         onHud: (newHud) => {
           sawHud = true
           setHud(newHud)
@@ -178,16 +182,14 @@ export function GameScreen(props: { sessionId: string }) {
       if (!sawError) {
         succeeded = true
         if (!sawHud) setHudStale(true)
-        setPending((p) => {
-          if (!p) return p
-          setExtraTurns((prev) => [
-            ...prev,
-            { index: p.index, role: 'player', text: p.message },
-            { index: p.index, role: 'narrator', text: p.text },
-          ])
-          setDoneAnnouncement(t('game.turn.done', { index: p.index }))
-          return null
-        })
+        setExtraTurns((prev) => [
+          ...prev,
+          { index, role: 'player', text: message },
+          { index, role: 'narrator', text: narratorText },
+        ])
+        setDoneAnnouncement(t('game.turn.done', { index }))
+        setPending(null)
+        setDraft((d) => (d === message ? '' : d))
       }
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
