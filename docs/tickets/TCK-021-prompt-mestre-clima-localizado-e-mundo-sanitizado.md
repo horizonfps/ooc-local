@@ -1,7 +1,7 @@
 ---
 id: TCK-021
 title: Localizar o clima no prompt e neutralizar headings do texto do autor
-status: in_review
+status: done
 points: 3
 blockedBy: []
 files:

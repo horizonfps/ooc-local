@@ -1,7 +1,7 @@
 ---
 id: TCK-015
 title: Tirar da janela de contexto os turnos já cobertos pelo resumo
-status: in_review
+status: done
 points: 5
 blockedBy: []
 files:
