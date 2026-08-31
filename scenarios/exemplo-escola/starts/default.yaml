@@ -32,7 +32,7 @@ suggestions:
   - Se aproximar de Chloe e comentar sobre o caderno
   - Observar Ashlee e o grupo dela à distância
 hud:
-  location: portão da escola
+  location: pátio da escola
   time: "07:50"
   weather: clear
 characters: [chloe, ashlee, mika]
