@@ -1,7 +1,7 @@
 ---
 id: TCK-012
 title: Abrir a sessão na tela de jogo com prólogo, histórico e HUD
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-008, TCK-009, TCK-010, TCK-011, TCK-013]
 files:
