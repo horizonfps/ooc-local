@@ -1,7 +1,7 @@
 ---
 id: TCK-005
 title: Persistir sessões em event store SQLite e expor criar, listar e abrir
-status: ready
+status: done
 points: 5
 blockedBy: [TCK-001]
 files:

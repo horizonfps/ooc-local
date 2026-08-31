@@ -1,7 +1,7 @@
 ---
 id: TCK-013
 title: Navegar por hash e padronizar estados vazio, carregando e erro na UI
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-008]
 files:

@@ -1,7 +1,7 @@
 ---
 id: TCK-003
 title: Montar o prompt-mestre guiado a partir do cenário, personagens e HUD
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-001]
 files:

@@ -1,7 +1,7 @@
 ---
 id: TCK-010
 title: Renderizar o texto do turno com narração, falas e filtro de tags
-status: ready
+status: done
 points: 3
 blockedBy: [TCK-008]
 files:
