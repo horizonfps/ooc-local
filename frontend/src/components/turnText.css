@@ -1,0 +1,56 @@
+.turnText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.turnText-line {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+}
+
+.turnText-line--narration em {
+  font-style: italic;
+  color: #e6e6eb;
+  line-height: 1.6;
+}
+
+.turnText-line--speech {
+  line-height: 1.5;
+}
+
+.turnText-speaker {
+  font-style: normal;
+  font-weight: 700;
+  color: #7fb0ff;
+}
+
+.turnText-speaker::after {
+  content: '\2014';
+  margin: 0 0.4em;
+  color: #5a5f6e;
+}
+
+.turnText-speech {
+  font-style: normal;
+}
+
+.turnText-srLabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 360px) {
+  .turnText-line {
+    font-size: 15px;
+  }
+}
