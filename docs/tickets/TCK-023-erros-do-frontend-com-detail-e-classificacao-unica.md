@@ -1,7 +1,7 @@
 ---
 id: TCK-023
 title: Preservar o detail do backend e unificar a classificação de erro da tela de jogo
-status: ready
+status: in_review
 points: 3
 blockedBy: [TCK-022]
 files:

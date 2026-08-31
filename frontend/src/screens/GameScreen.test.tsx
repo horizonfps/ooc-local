@@ -1,10 +1,24 @@
-import { StrictMode } from 'react'
+import { createElement, StrictMode } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GameScreen } from './GameScreen'
 import { t } from '../i18n'
 import type { SessionDetail } from '../api'
+import type { HudView } from '../components/Hud'
+
+const { hudCalls } = vi.hoisted(() => ({ hudCalls: [] as (HudView | null)[] }))
+
+vi.mock('../components/Hud', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../components/Hud')>()
+  return {
+    ...actual,
+    Hud: (props: Parameters<typeof actual.Hud>[0]) => {
+      hudCalls.push(props.hud)
+      return createElement(actual.Hud, props)
+    },
+  }
+})
 
 function jsonResponse(body: unknown, status = 200) {
   return {
@@ -127,6 +141,7 @@ function mockRoutedFetch(opts: {
 beforeEach(() => {
   location.hash = ''
   document.title = 'ooc-local'
+  hudCalls.length = 0
 })
 
 afterEach(() => {
@@ -192,6 +207,22 @@ describe('GameScreen', () => {
     expect(screen.getAllByText(t('hud.placeholder')).length).toBeGreaterThan(0)
     resolve(jsonResponse(session()))
     await screen.findByText('Hallway')
+  })
+
+  it('never passes a null hud to Hud once the session data has arrived', async () => {
+    let resolve: (value: Response) => void = () => {}
+    const pending = new Promise<Response>((r) => {
+      resolve = r
+    })
+    mockFetch(() => pending)
+    render(<GameScreen sessionId="sess-1" />)
+
+    resolve(jsonResponse(session()))
+    await screen.findByText('Hallway')
+
+    const firstRealIndex = hudCalls.findIndex((h) => h !== null)
+    expect(firstRealIndex).toBeGreaterThanOrEqual(0)
+    expect(hudCalls.slice(firstRealIndex).every((h) => h !== null)).toBe(true)
   })
 
   it('shows a not-found state without a retry button on 404', async () => {
@@ -444,9 +475,9 @@ describe('GameScreen turns', () => {
     expect(screen.queryByText(t('game.turn.error'))).not.toBeInTheDocument()
   })
 
-  it('shows the chat-disabled error family on a 503 without dropping the player message', async () => {
+  it('shows the chat-disabled error family on a 503 without dropping the player message, with the backend detail in the technical details', async () => {
     const user = userEvent.setup()
-    mockRoutedFetch({ get: () => jsonResponse(session()), post: () => jsonResponse({}, 503) })
+    mockRoutedFetch({ get: () => jsonResponse(session()), post: () => jsonResponse({ detail: 'chat disabled by flag' }, 503) })
     render(<GameScreen sessionId="sess-1" />)
 
     await screen.findByText('Once upon a time.')
@@ -455,6 +486,34 @@ describe('GameScreen turns', () => {
 
     expect(await screen.findByText(t('error.chatDisabled.title'))).toBeInTheDocument()
     expect(screen.getByText('try anyway', { selector: '.game-turn-text' })).toBeInTheDocument()
+
+    await user.click(screen.getByText(t('common.details')))
+    expect(screen.getByText('HTTP 503 — chat disabled by flag')).toBeInTheDocument()
+  })
+
+  it('does not throw and keeps message plain when the error body is not JSON', async () => {
+    mockFetch(
+      () =>
+        ({
+          ok: false,
+          status: 500,
+          json: async () => {
+            throw new SyntaxError('unexpected token')
+          },
+        }) as unknown as Response,
+    )
+    render(<GameScreen sessionId="sess-1" />)
+
+    expect(await screen.findByText(t('error.unexpected.title'))).toBeInTheDocument()
+  })
+
+  it('ignores a list-shaped detail from a pydantic 422 and keeps the plain HTTP message', async () => {
+    mockFetch(() => jsonResponse({ detail: [{ msg: 'field required' }] }, 500))
+    render(<GameScreen sessionId="sess-1" />)
+
+    const user = userEvent.setup()
+    await user.click(await screen.findByText(t('common.details')))
+    expect(screen.getByText('HTTP 500')).toBeInTheDocument()
   })
 
   it('shows the not-found state with a back button and no retry on a 404, keeping the typed text', async () => {
@@ -652,5 +711,64 @@ describe('GameScreen turns', () => {
     await user.type(textarea, 'go{Enter}')
 
     expect(await screen.findByText(t('error.unexpected.title'))).toBeInTheDocument()
+  })
+
+  it('shows the offline error family when the turn POST rejects, preserving the message and retrying', async () => {
+    const user = userEvent.setup()
+    let callCount = 0
+    mockRoutedFetch({
+      get: () => jsonResponse(session()),
+      post: () => {
+        callCount += 1
+        if (callCount === 1) throw new TypeError('Failed to fetch')
+        return sseResponse([{ delta: 'ok now' }, { hud: { turn: 1, location: 'Yard', time: 'Day', weather: 'clear' } }, '[DONE]'])
+      },
+    })
+    render(<GameScreen sessionId="sess-1" />)
+
+    await screen.findByText('Once upon a time.')
+    const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+    await user.type(textarea, 'reach out{Enter}')
+
+    expect(await screen.findByText(t('error.offline.title'))).toBeInTheDocument()
+    expect(screen.getByText('reach out', { selector: '.game-turn-text' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: t('common.retry') }))
+    await screen.findByText('ok now')
+  })
+
+  it('exposes aria-busy on submit, aria-live=off while streaming and role=status while thinking, and announces completion', async () => {
+    const user = userEvent.setup()
+    const ref: { c: ReadableStreamDefaultController<Uint8Array> | null } = { c: null }
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        ref.c = c
+      },
+    })
+    mockRoutedFetch({
+      get: () => jsonResponse(session()),
+      post: () => ({ ok: true, status: 200, body: stream }) as unknown as Response,
+    })
+    render(<GameScreen sessionId="sess-1" />)
+
+    await screen.findByText('Once upon a time.')
+    const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+    const button = screen.getByRole('button', { name: t('game.input.send') })
+    await user.type(textarea, 'go{Enter}')
+
+    expect(button).toHaveAttribute('aria-busy', 'true')
+    const thinking = screen.getByText(t('game.turn.thinking'))
+    expect(thinking).toHaveAttribute('role', 'status')
+    expect(document.querySelector('[aria-live="off"]')).not.toBeNull()
+
+    ref.c?.enqueue(new TextEncoder().encode('data: {"delta":"It creaks."}\n\n'))
+    await screen.findByText('It creaks.')
+    expect(screen.queryByText(t('game.turn.thinking'))).not.toBeInTheDocument()
+
+    ref.c?.enqueue(new TextEncoder().encode('data: {"hud":{"turn":1,"location":"Yard","time":"Day","weather":"clear"}}\n\n'))
+    ref.c?.enqueue(new TextEncoder().encode('data: [DONE]\n\n'))
+    ref.c?.close()
+
+    await waitFor(() => expect(screen.getByText(t('game.turn.done', { index: 1 }))).toBeInTheDocument())
   })
 })
