@@ -1,7 +1,7 @@
 ---
 id: TCK-002
 title: Criar o cenário exemplo-escola com escola e 3 NPCs
-status: ready
+status: in_review
 points: 2
 blockedBy: [TCK-001]
 files:
