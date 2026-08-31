@@ -1,10 +1,24 @@
 export class ApiError extends Error {
   status: number
+  detail: string | null
 
-  constructor(status: number, message: string) {
-    super(message)
+  constructor(status: number, detail: string | null) {
+    super(detail ? `HTTP ${status} — ${detail}` : `HTTP ${status}`)
     this.status = status
+    this.detail = detail
   }
+}
+
+async function detailOf(response: Response): Promise<string | null> {
+  try {
+    const body = await response.json()
+    if (body && typeof body === 'object' && typeof (body as { detail?: unknown }).detail === 'string') {
+      return (body as { detail: string }).detail
+    }
+  } catch {
+    // no JSON body, or not parseable
+  }
+  return null
 }
 
 export type ScenarioSummary = { id: string; name: string; tagline: string | null; locale: string }
@@ -31,7 +45,7 @@ export type SessionDetail = {
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, init)
   if (!response.ok) {
-    throw new ApiError(response.status, `HTTP ${response.status}`)
+    throw new ApiError(response.status, await detailOf(response))
   }
   return response.json() as Promise<T>
 }
@@ -81,7 +95,7 @@ export async function streamTurn(sessionId: string, message: string, h: TurnHand
     throw err
   }
   if (!response.ok) {
-    throw new ApiError(response.status, `HTTP ${response.status}`)
+    throw new ApiError(response.status, await detailOf(response))
   }
   if (!response.body) {
     throw new Error('missing response body')

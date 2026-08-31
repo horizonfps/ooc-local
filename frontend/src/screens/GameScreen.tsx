@@ -4,8 +4,8 @@ import { ErrorState } from '../components/ErrorState'
 import { Hud } from '../components/Hud'
 import { Loading } from '../components/Loading'
 import { TurnText } from '../components/TurnText'
-import { ApiError, fetchSession, streamTurn, type HudState, type SessionDetail, type TurnView } from '../api'
-import { describeError } from '../errors'
+import { fetchSession, streamTurn, type HudState, type SessionDetail, type TurnView } from '../api'
+import { classifyError, describeError, type ErrorKind } from '../errors'
 import { t } from '../i18n'
 import { navigate } from '../useHashRoute'
 import './game.css'
@@ -16,13 +16,10 @@ type GameState =
   | { phase: 'notFound' }
   | { phase: 'ready'; session: SessionDetail }
 
-type PreStreamKind = 'chatDisabled' | 'offline' | 'unexpected'
-
 type PendingTurn =
   | { index: number; message: string; text: string; status: 'streaming' }
   | { index: number; message: string; text: string; status: 'error'; kind: 'stream'; cause: string }
-  | { index: number; message: string; text: string; status: 'error'; kind: PreStreamKind; title: string; body: string; cause: string }
-  | { index: number; message: string; text: string; status: 'error'; kind: 'notFound' }
+  | { index: number; message: string; text: string; status: 'error'; kind: ErrorKind; title: string; body: string; cause: string }
 
 function isReducedMotion(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
@@ -67,7 +64,7 @@ export function GameScreen(props: { sessionId: string }) {
     fetchSession(sessionId)
       .then((session) => setState({ phase: 'ready', session }))
       .catch((error) => {
-        if (error instanceof ApiError && error.status === 404) {
+        if (classifyError(error).kind === 'notFound') {
           setState({ phase: 'notFound' })
         } else {
           setState({ phase: 'error', error })
@@ -224,15 +221,12 @@ export function GameScreen(props: { sessionId: string }) {
       }
     } catch (err) {
       if (controller.signal.aborted) return
-      if (err instanceof ApiError && err.status === 404) {
-        setPending((p) => (p ? { index: p.index, message: p.message, text: p.text, status: 'error', kind: 'notFound' } : p))
-      } else {
-        const described = describeError(err)
-        const kind: PreStreamKind = err instanceof TypeError ? 'offline' : err instanceof ApiError && err.status === 503 ? 'chatDisabled' : 'unexpected'
-        setPending((p) =>
-          p ? { index: p.index, message: p.message, text: p.text, status: 'error', kind, title: described.title, body: described.body, cause: described.cause } : p,
-        )
-      }
+      const classified = classifyError(err)
+      setPending((p) =>
+        p
+          ? { index: p.index, message: p.message, text: p.text, status: 'error', kind: classified.kind, title: classified.title, body: classified.body, cause: classified.cause }
+          : p,
+      )
       setHudStale(true)
       setDraft(message)
     } finally {
@@ -271,6 +265,7 @@ export function GameScreen(props: { sessionId: string }) {
 
   const scenarioName = state.phase === 'ready' ? state.session.scenarioName : ''
   const turns = state.phase === 'ready' ? [...state.session.turns, ...extraTurns] : []
+  const hudView = state.phase === 'ready' ? (hud ?? state.session.hud) : null
 
   return (
     <main className="game">
@@ -283,7 +278,7 @@ export function GameScreen(props: { sessionId: string }) {
         </h1>
       </div>
 
-      <Hud hud={state.phase === 'ready' ? hud : null} busy={turnPhase === 'streaming'} stale={hudStale} />
+      <Hud hud={hudView} busy={turnPhase === 'streaming'} stale={hudStale} />
 
       {state.phase === 'loading' ? (
         <div className="game-history game-history--skeleton" aria-hidden="true">
@@ -370,7 +365,7 @@ export function GameScreen(props: { sessionId: string }) {
 
               {pending.status === 'error' && pending.kind === 'notFound' ? (
                 <>
-                  <ErrorState title={t('game.notFound.title')} body={t('game.notFound.body')} />
+                  <ErrorState title={pending.title} body={pending.body} />
                   <div className="game-notFound-back">
                     <button type="button" onClick={() => navigate('#/')}>
                       {t('common.back')}
