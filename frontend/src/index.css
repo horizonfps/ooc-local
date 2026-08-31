@@ -1,12 +1,45 @@
 :root {
   color-scheme: dark;
   font-family: system-ui, sans-serif;
+
+  --bg: #14151a;
+  --fg: #e6e6eb;
+  --fg-muted: #8a8f9e;
+  --surface: #1e2027;
+  --accent: #2b3a55;
+  --focus: #6ea8fe;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  background: #14151a;
-  color: #e6e6eb;
+  background: var(--bg);
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+button {
+  min-height: 44px;
+  min-width: 44px;
 }
 
 .chat {
@@ -15,13 +48,19 @@ body {
   padding: 1rem;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100dvh;
   box-sizing: border-box;
+}
+
+@media (max-width: 480px) {
+  .chat {
+    padding: 0.75rem;
+  }
 }
 
 .chat h1 {
   font-size: 1rem;
-  color: #8a8f9e;
+  color: var(--fg-muted);
   margin: 0 0 1rem;
 }
 
