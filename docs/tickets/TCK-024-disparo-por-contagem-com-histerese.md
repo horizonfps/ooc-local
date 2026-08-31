@@ -98,8 +98,13 @@ Grep em `backend/tests/`, sobre o estado do repositório **depois** do TCK-015:
   `select_window` vazou para dentro de `build_context`.
 - `test_fits_true_under_budget` (`:121`) e `test_fits_false_over_budget`
   (`:126`): `fits` não muda de assinatura nem de regra. Válidos.
-- Nenhum teste existente afere `_shrink_to_fit` diretamente (grep confirma):
-  a função sai sem quebrar nada.
+- `test_shrink_to_fit_always_returns_an_even_count`
+  (`backend/tests/test_compact.py:247`) chama `turn._shrink_to_fit` direto e
+  afere `n == 4` (contagem sempre par). O teste nasceu no TCK-015, depois desta
+  spec. Adaptação: reescrever contra `select_window`, preservando a asserção de
+  paridade; o valor esperado de `n` é recalculado pelas regras de
+  `select_window` sobre a mesma preparação (a invariante "sempre par" vale
+  igualmente, e este ticket já tem AC próprio para ela).
 
 ## Comportamento esperado
 
