@@ -18,6 +18,7 @@ from app.sessions import (
     StartNotFound,
     create_session,
     get_session,
+    init_db,
     list_sessions,
 )
 from app.turn import run_turn
@@ -26,6 +27,7 @@ SMOKE_SYSTEM_PROMPT = "You are the narrator of an interactive story. Reply brief
 
 app = FastAPI(title="ooc-local")
 setup_logging()
+init_db()
 
 
 class ChatRequest(BaseModel):

@@ -202,6 +202,67 @@ def test_complete_joins_stream_chat_deltas(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# history_events / events_to_messages / _shrink_to_fit
+# ---------------------------------------------------------------------------
+
+
+def test_history_events_filters_by_compact_seq(scenarios_root):
+    _write_scenario(scenarios_root)
+    session = sessions.create_session("exemplo-escola")
+
+    pairs = []
+    for i in range(3):
+        pairs.append(("player_turn", {"text": f"jogador {i}"}))
+        pairs.append(("narrator_turn", {"text": f"narrador {i}"}))
+    sessions.append_events(session.id, pairs)
+
+    assert len(turn.history_events(session.id, None)) == 6
+
+    from_seq_4 = turn.history_events(session.id, 4)
+    assert [e.seq for e in from_seq_4] == [5, 6]
+
+    assert turn.history_events(session.id, 999) == []
+
+
+def test_events_to_messages_is_order_preserving_and_one_to_one(scenarios_root):
+    _write_scenario(scenarios_root)
+    session = sessions.create_session("exemplo-escola")
+    sessions.append_events(
+        session.id,
+        [
+            ("player_turn", {"text": "primeira fala"}),
+            ("narrator_turn", {"text": "primeira resposta"}),
+            ("player_turn", {"text": "segunda fala"}),
+        ],
+    )
+
+    events = turn.history_events(session.id, None)
+    messages = turn.events_to_messages(events)
+
+    assert len(messages) == len(events)
+    assert [m.role for m in messages] == ["user", "assistant", "user"]
+    assert [m.content for m in messages] == ["primeira fala", "primeira resposta", "segunda fala"]
+
+
+def test_shrink_to_fit_always_returns_an_even_count():
+    huge = "x" * (compact.INPUT_BUDGET_TOKENS * 4)
+    system = ChatMessage(role="system", content="s")
+    tail = ChatMessage(role="user", content="t")
+    history = [
+        ChatMessage(role="user", content=huge),
+        ChatMessage(role="assistant", content=huge),
+        ChatMessage(role="user", content=huge),
+        ChatMessage(role="assistant", content=huge),
+        ChatMessage(role="user", content="curto"),
+    ]
+
+    n = turn._shrink_to_fit(system, history, tail)
+
+    assert n % 2 == 0
+    assert n == 4
+
+
+# ---------------------------------------------------------------------------
 # run_turn integration
 # ---------------------------------------------------------------------------
 
@@ -225,7 +286,7 @@ def test_short_history_skips_compact_and_matches_tck006(scenarios_root, monkeypa
         events = _stream_events(response)
 
     assert events[-1]["hud"]["turn"] == 1
-    assert sessions.get_compact(session["id"]) is None
+    assert sessions.get_compact(session["id"])[0] is None
     compact_events = [e for e in sessions.read_events(session["id"]) if e.kind == "compact"]
     assert compact_events == []
 
@@ -261,11 +322,14 @@ def test_budget_overflow_triggers_compact_and_context_gets_resumo(scenarios_root
         events = _stream_events(response)
 
     assert events[-1]["hud"]["turn"] == 1
-    assert sessions.get_compact(session["id"]) == "Resumo: promessa feita, conflito aberto com Chloe."
+    resumo, covered_seq = sessions.get_compact(session["id"])
+    assert resumo == "Resumo: promessa feita, conflito aberto com Chloe."
 
     compact_events = [e for e in sessions.read_events(session["id"]) if e.kind == "compact"]
     assert len(compact_events) == 1
     assert compact_events[0].payload["text"] == "Resumo: promessa feita, conflito aberto com Chloe."
+    assert compact_events[0].payload["to_seq"] == covered_seq
+    assert compact_events[0].payload["from_seq"] <= compact_events[0].payload["to_seq"]
 
     narrator_messages = captured_narrator[0]
     system_content = narrator_messages[0].content
@@ -289,7 +353,8 @@ def test_second_turn_reuses_compact_without_calling_utility_again(scenarios_root
     sessions.set_compact(
         session["id"],
         "Resumo do bloco antigo.",
-        {"replaced_turns": 3, "from_index": 0, "to_index": 3},
+        0,
+        {"replaced_turns": 3, "from_seq": 0, "to_seq": 0},
     )
     sessions.append_events(
         session["id"],
@@ -313,7 +378,7 @@ def test_second_turn_reuses_compact_without_calling_utility_again(scenarios_root
         _stream_events(response)
 
     assert utility_calls == []
-    assert sessions.get_compact(session["id"]) == "Resumo do bloco antigo."
+    assert sessions.get_compact(session["id"])[0] == "Resumo do bloco antigo."
 
 
 def test_second_compaction_replaces_previous_compact(scenarios_root, monkeypatch):
@@ -350,7 +415,7 @@ def test_second_compaction_replaces_previous_compact(scenarios_root, monkeypatch
     ) as response:
         _stream_events(response)
 
-    assert sessions.get_compact(session["id"]) == "Primeiro resumo."
+    assert sessions.get_compact(session["id"])[0] == "Primeiro resumo."
 
     _push_long_pairs()
 
@@ -362,7 +427,7 @@ def test_second_compaction_replaces_previous_compact(scenarios_root, monkeypatch
     assert len(utility_prompts) == 2
     second_prompt_text = "\n".join(m.content for m in utility_prompts[1])
     assert "Primeiro resumo." in second_prompt_text
-    assert sessions.get_compact(session["id"]) == "Segundo resumo substitui o primeiro."
+    assert sessions.get_compact(session["id"])[0] == "Segundo resumo substitui o primeiro."
 
 
 def test_utility_failure_falls_back_to_truncated_window(scenarios_root, monkeypatch):
@@ -396,7 +461,7 @@ def test_utility_failure_falls_back_to_truncated_window(scenarios_root, monkeypa
         events = _stream_events(response)
 
     assert events[-1]["hud"]["turn"] == 1
-    assert sessions.get_compact(session["id"]) is None
+    assert sessions.get_compact(session["id"])[0] is None
     compact_events = [e for e in sessions.read_events(session["id"]) if e.kind == "compact"]
     assert compact_events == []
 
@@ -436,7 +501,173 @@ def test_flag_compact_false_behaves_like_tck006(scenarios_root, monkeypatch):
         _stream_events(response)
 
     assert utility_calls == []
-    assert sessions.get_compact(session["id"]) is None
+    assert sessions.get_compact(session["id"])[0] is None
+
+
+def test_budget_overflow_with_more_than_window_turns_covers_full_history(scenarios_root, monkeypatch):
+    """22 pairs not covered by any prior compact: this is the case that let the
+    original defect through, because it exceeds WINDOW_TURNS (18)."""
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    long_pairs = []
+    for i in range(22):
+        long_pairs.append(("player_turn", {"text": f"jogador {i} " + "lorem " * 500}))
+        long_pairs.append(("narrator_turn", {"text": f"narrador {i} " + "ipsum " * 500}))
+    sessions.append_events(session["id"], long_pairs)
+
+    seq_to_text = {e.seq: e.payload["text"] for e in sessions.read_events(session["id"])}
+
+    utility_prompts = []
+    captured_narrator = []
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            utility_prompts.append(messages)
+            yield "Resumo dos 22 pares."
+        else:
+            captured_narrator.append(messages)
+            yield "voce continua andando."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "proximo turno"}
+    ) as response:
+        _stream_events(response)
+
+    resumo, covered_seq = sessions.get_compact(session["id"])
+    assert resumo == "Resumo dos 22 pares."
+
+    compact_events = [e for e in sessions.read_events(session["id"]) if e.kind == "compact"]
+    assert len(compact_events) == 1
+    assert compact_events[0].payload["to_seq"] == covered_seq
+
+    # The candidate window must have been built over the FULL 22 pairs, not a
+    # window already truncated to the last 18: the first summarized turn is
+    # the very first turn of the session.
+    assert compact_events[0].payload["from_seq"] == min(seq_to_text)
+
+    summarized_texts = [text for seq, text in seq_to_text.items() if seq <= covered_seq]
+    remaining_texts = [text for seq, text in seq_to_text.items() if seq > covered_seq]
+    assert summarized_texts
+    assert remaining_texts
+
+    utility_prompt_text = "\n".join(m.content for m in utility_prompts[0])
+    narrator_prompt_text = "\n".join(m.content for m in captured_narrator[0])
+
+    for text in summarized_texts:
+        assert text in utility_prompt_text
+        assert text not in narrator_prompt_text
+    for text in remaining_texts:
+        assert text in narrator_prompt_text
+        assert text not in utility_prompt_text
+
+    first_remaining_seq = min(seq for seq in seq_to_text if seq > covered_seq)
+    assert captured_narrator[0][1].content == seq_to_text[first_remaining_seq]
+
+
+def test_25_short_pairs_below_budget_are_never_compacted(scenarios_root, monkeypatch):
+    """More than WINDOW_TURNS pairs, but light enough to fit the budget: with
+    the count-based cutoff removed from the compact path, nothing is silently
+    dropped (the TCK-024 count trigger is what will compact this later)."""
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    pairs = []
+    for i in range(25):
+        pairs.append(("player_turn", {"text": f"jogador {i}"}))
+        pairs.append(("narrator_turn", {"text": f"narrador {i}"}))
+    sessions.append_events(session["id"], pairs)
+
+    captured_narrator = []
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            raise AssertionError("utility should not be called")
+        captured_narrator.append(messages)
+        yield "voce continua andando."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "proximo turno"}
+    ) as response:
+        _stream_events(response)
+
+    assert sessions.get_compact(session["id"])[0] is None
+    non_system_non_new = captured_narrator[0][1:-1]
+    assert len(non_system_non_new) == 50
+    assert non_system_non_new[0].content == "jogador 0"
+
+
+def test_compact_seq_beyond_all_events_yields_empty_history(scenarios_root):
+    _write_scenario(scenarios_root)
+    session = sessions.create_session("exemplo-escola")
+    sessions.append_events(
+        session.id,
+        [("player_turn", {"text": "fala"}), ("narrator_turn", {"text": "resposta"})],
+    )
+
+    full = turn.history_events(session.id, 999)
+    assert full == []
+
+    messages = turn.build_context(session.id, "mensagem nova", compact_seq=999, history=full)
+    assert len(messages) == 2
+    assert messages[0].role == "system"
+    assert messages[1].content == "mensagem nova"
+
+
+def test_legacy_session_with_compact_text_and_null_compact_seq_includes_full_history(
+    scenarios_root, monkeypatch
+):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    # A legacy row: compact text present but compact_seq is NULL, as if
+    # written before this ticket's migration.
+    conn = sqlite3.connect(sessions.db_path())
+    conn.execute("UPDATE sessions SET compact = ? WHERE id = ?", ("Resumo legado.", session["id"]))
+    conn.commit()
+    conn.close()
+
+    sessions.append_events(
+        session["id"],
+        [("player_turn", {"text": "fala legada"}), ("narrator_turn", {"text": "resposta legada"})],
+    )
+
+    captured_narrator = []
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            raise AssertionError("utility should not be called")
+        captured_narrator.append(messages)
+        yield "voce continua andando."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "proximo turno"}
+    ) as response:
+        _stream_events(response)
+
+    narrator_messages = captured_narrator[0]
+    assert "Resumo legado." in narrator_messages[0].content
+    contents = [m.content for m in narrator_messages]
+    assert "fala legada" in contents
+    assert "resposta legada" in contents
 
 
 # ---------------------------------------------------------------------------
@@ -481,9 +712,65 @@ def test_init_db_migrates_old_schema_without_compact_column(tmp_path, monkeypatc
     sessions.init_db()
     sessions.init_db()
 
-    assert sessions.get_compact("s1") is None
+    assert sessions.get_compact("s1") == (None, None)
 
     conn = sqlite3.connect(db_path)
     row = conn.execute("SELECT scenario_id FROM sessions WHERE id = 's1'").fetchone()
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
     conn.close()
     assert row[0] == "exemplo-escola"
+    assert {"compact", "compact_seq"} <= columns
+
+
+def test_init_db_migrates_old_schema_with_compact_but_no_compact_seq(tmp_path, monkeypatch):
+    db_path = tmp_path / "old.db"
+    monkeypatch.setenv("OOC_SESSIONS_DB", str(db_path))
+
+    old_conn = sqlite3.connect(db_path)
+    old_conn.executescript(
+        """
+        CREATE TABLE sessions (
+          id            TEXT PRIMARY KEY,
+          scenario_id   TEXT NOT NULL,
+          scenario_name TEXT NOT NULL,
+          start_id      TEXT NOT NULL,
+          created_at    TEXT NOT NULL,
+          updated_at    TEXT NOT NULL,
+          hud           TEXT NOT NULL,
+          compact       TEXT
+        );
+        CREATE TABLE events (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id TEXT NOT NULL REFERENCES sessions(id),
+          seq        INTEGER NOT NULL,
+          kind       TEXT NOT NULL,
+          payload    TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          UNIQUE(session_id, seq)
+        );
+        """
+    )
+    old_conn.execute(
+        "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ("s1", "exemplo-escola", "Exemplo", "default", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z", "{}", None),
+    )
+    old_conn.commit()
+    old_conn.close()
+
+    sessions.init_db()
+
+    conn = sqlite3.connect(db_path)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
+    conn.close()
+    assert columns == {
+        "id",
+        "scenario_id",
+        "scenario_name",
+        "start_id",
+        "created_at",
+        "updated_at",
+        "hud",
+        "compact",
+        "compact_seq",
+    }
+    assert sessions.get_compact("s1") == (None, None)

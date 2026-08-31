@@ -23,7 +23,9 @@ CREATE TABLE IF NOT EXISTS sessions (
   start_id      TEXT NOT NULL,
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL,
-  hud           TEXT NOT NULL
+  hud           TEXT NOT NULL,
+  compact       TEXT,
+  compact_seq   INTEGER
 );
 CREATE TABLE IF NOT EXISTS events (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -112,20 +114,24 @@ def _connect() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA_SQL)
-    _migrate_compact_column(conn)
     return conn
 
 
-def _migrate_compact_column(conn: sqlite3.Connection) -> None:
+def _migrate_session_columns(conn: sqlite3.Connection) -> None:
     columns = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
     if "compact" not in columns:
         conn.execute("ALTER TABLE sessions ADD COLUMN compact TEXT")
-        conn.commit()
+    if "compact_seq" not in columns:
+        conn.execute("ALTER TABLE sessions ADD COLUMN compact_seq INTEGER")
+    conn.commit()
 
 
 def init_db() -> None:
     conn = _connect()
-    conn.close()
+    try:
+        _migrate_session_columns(conn)
+    finally:
+        conn.close()
 
 
 def _now_iso() -> str:
@@ -301,10 +307,10 @@ def append_events(session_id: str, events: list[NewEvent], hud: HudState | None 
         conn.close()
 
 
-def get_compact(session_id: str) -> str | None:
+def get_compact(session_id: str) -> tuple[str | None, int | None]:
     conn = _connect()
     try:
-        cur = conn.execute("SELECT compact FROM sessions WHERE id = ?", (session_id,))
+        cur = conn.execute("SELECT compact, compact_seq FROM sessions WHERE id = ?", (session_id,))
         row = cur.fetchone()
     finally:
         conn.close()
@@ -312,10 +318,10 @@ def get_compact(session_id: str) -> str | None:
     if row is None:
         raise SessionNotFound(session_id)
 
-    return row[0]
+    return row[0], row[1]
 
 
-def set_compact(session_id: str, text: str, payload: dict) -> None:
+def set_compact(session_id: str, text: str, covered_seq: int, payload: dict) -> None:
     now = _now_iso()
     event_payload = {"text": text, **payload}
     conn = _connect()
@@ -328,7 +334,8 @@ def set_compact(session_id: str, text: str, payload: dict) -> None:
                 (session_id, seq, "compact", json.dumps(event_payload, ensure_ascii=False), now),
             )
             conn.execute(
-                "UPDATE sessions SET compact = ?, updated_at = ? WHERE id = ?", (text, now, session_id)
+                "UPDATE sessions SET compact = ?, compact_seq = ?, updated_at = ? WHERE id = ?",
+                (text, covered_seq, now, session_id),
             )
     except sqlite3.Error as exc:
         emit("session_db_error", op="set_compact", error=str(exc))

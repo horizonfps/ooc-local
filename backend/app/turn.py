@@ -12,6 +12,7 @@ from app.observability import emit
 from app.prompt import MASTER_PROMPT_VERSION, build_master_prompt
 from app.scenario import Character, LoadedScenario, StartConfig, load_scenario
 from app.sessions import (
+    Event,
     ScenarioNotFound,
     append_events,
     get_compact,
@@ -30,7 +31,31 @@ def _characters_in_scene(scenario: LoadedScenario, start: StartConfig) -> list[C
     return [scenario.characters[char_id] for char_id in start.characters]
 
 
-def build_context(session_id: str, message: str, compact: str | None = None) -> list[ChatMessage]:
+def history_events(session_id: str, compact_seq: int | None) -> list[Event]:
+    """All turn events with seq > compact_seq, in order. Never truncates."""
+    events = read_events(session_id, kinds=("player_turn", "narrator_turn"))
+    if compact_seq is None:
+        return events
+    return [event for event in events if event.seq > compact_seq]
+
+
+def events_to_messages(events: list[Event]) -> list[ChatMessage]:
+    """1:1, order-preserving mapping: player_turn -> user, narrator_turn -> assistant."""
+    messages = []
+    for event in events:
+        role = "user" if event.kind == "player_turn" else "assistant"
+        messages.append(ChatMessage(role=role, content=event.payload["text"]))
+    return messages
+
+
+def build_context(
+    session_id: str,
+    message: str,
+    compact: str | None = None,
+    compact_seq: int | None = None,
+    *,
+    history: list[Event] | None = None,
+) -> list[ChatMessage]:
     row = get_session_row(session_id)
     scenario = load_scenario(row.scenario_id)
     try:
@@ -41,65 +66,84 @@ def build_context(session_id: str, message: str, compact: str | None = None) -> 
     characters = _characters_in_scene(scenario, start)
     system = build_master_prompt(scenario, start, row.hud, characters, compact)
 
-    events = read_events(session_id, kinds=("player_turn", "narrator_turn"))
-    windowed = events[-(WINDOW_TURNS * 2) :]
+    if history is None:
+        events = history_events(session_id, None)
+        windowed = events[-(WINDOW_TURNS * 2) :]
+    else:
+        windowed = history
 
     messages = [ChatMessage(role="system", content=system)]
-    for event in windowed:
-        role = "user" if event.kind == "player_turn" else "assistant"
-        messages.append(ChatMessage(role=role, content=event.payload["text"]))
+    messages.extend(events_to_messages(windowed))
     messages.append(ChatMessage(role="user", content=message))
     return messages
 
 
-def _shrink_to_fit(messages: list[ChatMessage]) -> tuple[list[ChatMessage], list[ChatMessage]]:
-    """Drop the oldest turn pairs from the window until the messages fit the budget."""
-    system, *history, tail = messages
-    outgoing: list[ChatMessage] = []
-    while len(history) >= 2 and not fits([system, *history, tail]):
-        outgoing.extend(history[:2])
-        history = history[2:]
-    return [system, *history, tail], outgoing
+def _shrink_to_fit(system: ChatMessage, history: list[ChatMessage], tail: ChatMessage) -> int:
+    """How many messages leave the START of history for the rest to fit the budget. Always even."""
+    remaining = history
+    dropped = 0
+    while len(remaining) >= 2 and not fits([system, *remaining, tail]):
+        remaining = remaining[2:]
+        dropped += 2
+    return dropped
 
 
 async def _maybe_compact(
     session_id: str, message: str, config, locale: str
 ) -> tuple[list[ChatMessage], str | None]:
-    current_compact = get_compact(session_id) if config.flag("compact") else None
-    messages = build_context(session_id, message, compact=current_compact)
+    if not config.flag("compact"):
+        return build_context(session_id, message), None
 
-    if not config.flag("compact") or fits(messages):
+    current_compact, current_seq = get_compact(session_id)
+    full = history_events(session_id, current_seq)
+    messages = build_context(
+        session_id, message, compact=current_compact, compact_seq=current_seq, history=full
+    )
+
+    if fits(messages):
         return messages, None
 
-    trimmed, outgoing = _shrink_to_fit(messages)
-    if not outgoing:
-        return trimmed, None
+    n = _shrink_to_fit(messages[0], messages[1:-1], messages[-1])
+    if n == 0:
+        return messages, None
+
+    outgoing = messages[1 : 1 + n]
 
     started = time.monotonic()
     error: str | None = None
+    new_compact = None
     try:
         new_compact = await compact_block(current_compact, outgoing, locale)
     except CompactError as exc:
         error = str(exc)
-        messages = trimmed
+        messages = [messages[0], *messages[1 + n :]]
     else:
+        from_seq = full[0].seq
+        covered_seq = full[n - 1].seq
         set_compact(
             session_id,
             new_compact,
-            {"replaced_turns": len(outgoing) // 2, "from_index": 0, "to_index": len(outgoing) // 2},
+            covered_seq,
+            {"replaced_turns": n // 2, "from_seq": from_seq, "to_seq": covered_seq},
         )
-        messages = build_context(session_id, message, compact=new_compact)
+        messages = build_context(
+            session_id, message, compact=new_compact, compact_seq=covered_seq, history=full[n:]
+        )
         if not fits(messages):
-            messages, _ = _shrink_to_fit(messages)
+            trimmed_n = _shrink_to_fit(messages[0], messages[1:-1], messages[-1])
+            messages = [messages[0], *messages[1 + trimmed_n :]]
 
     emit(
         "compact_run",
         session_id=session_id,
-        turns_summarized=len(outgoing) // 2,
+        turns_summarized=n // 2,
         in_tokens=sum(estimate_tokens(m.content) for m in outgoing),
         out_tokens=0 if error else estimate_tokens(new_compact),
         duration_ms=int((time.monotonic() - started) * 1000),
         error=error,
+        from_seq=None if error else full[0].seq,
+        to_seq=None if error else full[n - 1].seq,
+        covered_seq=None if error else full[n - 1].seq,
     )
     return messages, error
 
