@@ -9,6 +9,7 @@ from app.config import load_config
 from app.llm.base import ChatMessage
 from app.llm.openai_compat import OpenAICompatProvider
 from app.observability import emit, setup_logging
+from app.scenario import list_scenarios
 
 SMOKE_SYSTEM_PROMPT = "You are the narrator of an interactive story. Reply briefly, in character."
 
@@ -23,6 +24,19 @@ class ChatRequest(BaseModel):
 @app.get("/api/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/scenarios")
+async def scenarios() -> list[dict[str, str | None]]:
+    return [
+        {
+            "id": scenario.id,
+            "name": scenario.meta.name,
+            "tagline": scenario.meta.tagline,
+            "locale": scenario.meta.locale,
+        }
+        for scenario in list_scenarios()
+    ]
 
 
 @app.post("/api/chat")
