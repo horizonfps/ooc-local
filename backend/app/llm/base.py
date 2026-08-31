@@ -9,6 +9,12 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class GenerationOptions(BaseModel):
+    max_tokens: int | None = None
+    temperature: float | None = None
+    timeout_s: float = 120.0
+
+
 class LLMProvider(ABC):
     @abstractmethod
     def stream_chat(self, messages: list[ChatMessage], model: str) -> AsyncIterator[str]:

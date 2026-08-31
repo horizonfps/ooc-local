@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 
 from app.config import load_config
-from app.llm.base import ChatMessage
+from app.llm.base import ChatMessage, GenerationOptions
 from app.llm.openai_compat import OpenAICompatProvider
 
 CONTEXT_BUDGET_TOKENS = 24_000
@@ -14,6 +14,9 @@ INPUT_BUDGET_TOKENS = CONTEXT_BUDGET_TOKENS - OUTPUT_RESERVE_TOKENS
 
 COMPACT_KEEP_TURNS = 9
 COMPACT_RESERVE_TOKENS = 700
+
+COMPACT_MAX_TOKENS = 400
+COMPACT_OPTIONS = GenerationOptions(max_tokens=COMPACT_MAX_TOKENS, temperature=0.2, timeout_s=25.0)
 
 _PROMPT_TEMPLATES = {
     "pt-br": {
@@ -97,7 +100,7 @@ def _build_prompt(previous: str | None, outgoing: list[ChatMessage], locale: str
 async def compact_block(previous: str | None, outgoing: list[ChatMessage], locale: str) -> str:
     config = load_config()
     role = config.models["utility"]
-    provider = OpenAICompatProvider(config.providers[role.provider])
+    provider = OpenAICompatProvider(config.providers[role.provider], COMPACT_OPTIONS)
 
     prompt_messages = _build_prompt(previous, outgoing, locale)
     try:
