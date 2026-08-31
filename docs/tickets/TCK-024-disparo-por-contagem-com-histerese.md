@@ -1,7 +1,7 @@
 ---
 id: TCK-024
 title: Disparar o compact por contagem de turnos, com histerese e corte auditável
-status: ready
+status: in_review
 points: 3
 blockedBy: [TCK-015]
 files:

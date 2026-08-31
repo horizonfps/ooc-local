@@ -3,7 +3,14 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncIterator
 
-from app.compact import CompactError, compact_block, estimate_tokens, fits
+from app.compact import (
+    COMPACT_KEEP_TURNS,
+    CompactError,
+    compact_block,
+    estimate_tokens,
+    fits,
+    select_window,
+)
 from app.config import load_config
 from app.hud import advance
 from app.llm.base import ChatMessage
@@ -78,16 +85,6 @@ def build_context(
     return messages
 
 
-def _shrink_to_fit(system: ChatMessage, history: list[ChatMessage], tail: ChatMessage) -> int:
-    """How many messages leave the START of history for the rest to fit the budget. Always even."""
-    remaining = history
-    dropped = 0
-    while len(remaining) >= 2 and not fits([system, *remaining, tail]):
-        remaining = remaining[2:]
-        dropped += 2
-    return dropped
-
-
 async def _maybe_compact(
     session_id: str, message: str, config, locale: str
 ) -> tuple[list[ChatMessage], str | None]:
@@ -100,10 +97,7 @@ async def _maybe_compact(
         session_id, message, compact=current_compact, compact_seq=current_seq, history=full
     )
 
-    if fits(messages):
-        return messages, None
-
-    n = _shrink_to_fit(messages[0], messages[1:-1], messages[-1])
+    n = select_window(messages[0], messages[1:-1], messages[-1], WINDOW_TURNS, COMPACT_KEEP_TURNS)
     if n == 0:
         return messages, None
 
@@ -130,8 +124,18 @@ async def _maybe_compact(
             session_id, message, compact=new_compact, compact_seq=covered_seq, history=full[n:]
         )
         if not fits(messages):
-            trimmed_n = _shrink_to_fit(messages[0], messages[1:-1], messages[-1])
-            messages = [messages[0], *messages[1 + trimmed_n :]]
+            body = messages[1:-1]
+            dropped = 0
+            while len(body) >= 2 and not fits([messages[0], *body, messages[-1]]):
+                body = body[2:]
+                dropped += 2
+            messages = [messages[0], *body, messages[-1]]
+            emit(
+                "compact_overflow",
+                session_id=session_id,
+                dropped_turns=dropped // 2,
+                compact_tokens=estimate_tokens(new_compact),
+            )
 
     emit(
         "compact_run",

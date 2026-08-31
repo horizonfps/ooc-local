@@ -12,6 +12,9 @@ COMPACT_TARGET_TOKENS = 400
 
 INPUT_BUDGET_TOKENS = CONTEXT_BUDGET_TOKENS - OUTPUT_RESERVE_TOKENS
 
+COMPACT_KEEP_TURNS = 9
+COMPACT_RESERVE_TOKENS = 700
+
 _PROMPT_TEMPLATES = {
     "pt-br": {
         "system": (
@@ -47,6 +50,32 @@ def estimate_tokens(text: str) -> int:
 def fits(messages: list[ChatMessage]) -> bool:
     total = sum(estimate_tokens(message.content) for message in messages)
     return total <= INPUT_BUDGET_TOKENS
+
+
+def select_window(
+    system: ChatMessage,
+    history: list[ChatMessage],
+    tail: ChatMessage,
+    window_turns: int,
+    keep_turns: int,
+) -> int:
+    """How many messages leave the START of history. Always even.
+
+    Decides the cutoff in a single pass: count trigger first (hysteresis down
+    to keep_turns pairs), then budget trigger on top of it. 0 means no
+    compaction. The window is never emptied: at least one pair always stays.
+    """
+    n = 0
+
+    if len(history) // 2 > window_turns:
+        while (len(history) - n) // 2 > keep_turns:
+            n += 2
+
+    placeholder = ChatMessage(role="system", content="x" * (COMPACT_RESERVE_TOKENS * 4))
+    while (len(history) - n) // 2 > 1 and not fits([system, *history[n:], tail, placeholder]):
+        n += 2
+
+    return n
 
 
 def _build_prompt(previous: str | None, outgoing: list[ChatMessage], locale: str) -> list[ChatMessage]:

@@ -202,7 +202,7 @@ def test_complete_joins_stream_chat_deltas(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# history_events / events_to_messages / _shrink_to_fit
+# history_events / events_to_messages / select_window
 # ---------------------------------------------------------------------------
 
 
@@ -244,7 +244,7 @@ def test_events_to_messages_is_order_preserving_and_one_to_one(scenarios_root):
     assert [m.content for m in messages] == ["primeira fala", "primeira resposta", "segunda fala"]
 
 
-def test_shrink_to_fit_always_returns_an_even_count():
+def test_select_window_always_returns_an_even_count():
     huge = "x" * (compact.INPUT_BUDGET_TOKENS * 4)
     system = ChatMessage(role="system", content="s")
     tail = ChatMessage(role="user", content="t")
@@ -253,13 +253,99 @@ def test_shrink_to_fit_always_returns_an_even_count():
         ChatMessage(role="assistant", content=huge),
         ChatMessage(role="user", content=huge),
         ChatMessage(role="assistant", content=huge),
-        ChatMessage(role="user", content="curto"),
     ]
 
-    n = turn._shrink_to_fit(system, history, tail)
+    n = compact.select_window(system, history, tail, turn.WINDOW_TURNS, compact.COMPACT_KEEP_TURNS)
 
     assert n % 2 == 0
-    assert n == 4
+    assert n == 2
+
+
+def _short_pairs(count):
+    history = []
+    for i in range(count):
+        history.append(ChatMessage(role="user", content=f"jogador {i}"))
+        history.append(ChatMessage(role="assistant", content=f"narrador {i}"))
+    return history
+
+
+def test_select_window_count_trigger_with_hysteresis():
+    system = ChatMessage(role="system", content="s")
+    tail = ChatMessage(role="user", content="t")
+
+    for pairs, expected_n in [(19, 20), (20, 22), (27, 36)]:
+        history = _short_pairs(pairs)
+        n = compact.select_window(system, history, tail, 18, compact.COMPACT_KEEP_TURNS)
+        assert n == expected_n
+        assert (len(history) - n) // 2 == compact.COMPACT_KEEP_TURNS
+
+
+def test_select_window_exactly_window_turns_does_not_compact():
+    system = ChatMessage(role="system", content="s")
+    tail = ChatMessage(role="user", content="t")
+    history = _short_pairs(18)
+
+    assert compact.select_window(system, history, tail, 18, compact.COMPACT_KEEP_TURNS) == 0
+
+
+def test_select_window_budget_trigger_without_count_trigger():
+    system = ChatMessage(role="system", content="s")
+    tail = ChatMessage(role="user", content="t")
+    huge = "x" * (compact.INPUT_BUDGET_TOKENS * 4)
+    history = []
+    for _ in range(12):
+        history.append(ChatMessage(role="user", content=huge))
+        history.append(ChatMessage(role="assistant", content=huge))
+
+    n = compact.select_window(system, history, tail, 18, compact.COMPACT_KEEP_TURNS)
+
+    assert n > 0
+
+
+def test_select_window_reserve_forces_extra_drop():
+    system = ChatMessage(role="system", content="s")
+    tail = ChatMessage(role="user", content="t")
+    budget = compact.INPUT_BUDGET_TOKENS
+    near_budget_chars = (budget - 300) * 4
+    history = [
+        ChatMessage(role="user", content="x" * (near_budget_chars // 2)),
+        ChatMessage(role="assistant", content="x" * (near_budget_chars // 2)),
+        ChatMessage(role="user", content="curto"),
+        ChatMessage(role="assistant", content="curto"),
+    ]
+
+    assert compact.fits([system, *history, tail]) is True
+
+    n = compact.select_window(system, history, tail, 18, compact.COMPACT_KEEP_TURNS)
+
+    assert n > 0
+
+
+def test_select_window_never_empties_the_window():
+    system = ChatMessage(role="system", content="s")
+    tail = ChatMessage(role="user", content="t")
+    huge = "x" * (compact.INPUT_BUDGET_TOKENS * 4)
+    history = [
+        ChatMessage(role="user", content=huge),
+        ChatMessage(role="assistant", content=huge),
+    ]
+
+    assert compact.select_window(system, history, tail, 18, compact.COMPACT_KEEP_TURNS) == 0
+
+
+def test_select_window_empty_history_returns_zero():
+    system = ChatMessage(role="system", content="s")
+    tail = ChatMessage(role="user", content="t")
+
+    assert compact.select_window(system, [], tail, 18, compact.COMPACT_KEEP_TURNS) == 0
+
+
+def test_select_window_keep_turns_larger_than_history_returns_zero():
+    system = ChatMessage(role="system", content="s")
+    tail = ChatMessage(role="user", content="t")
+    history = _short_pairs(5)
+
+    assert compact.select_window(system, history, tail, 18, keep_turns=9) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -571,10 +657,10 @@ def test_budget_overflow_with_more_than_window_turns_covers_full_history(scenari
     assert captured_narrator[0][1].content == seq_to_text[first_remaining_seq]
 
 
-def test_25_short_pairs_below_budget_are_never_compacted(scenarios_root, monkeypatch):
-    """More than WINDOW_TURNS pairs, but light enough to fit the budget: with
-    the count-based cutoff removed from the compact path, nothing is silently
-    dropped (the TCK-024 count trigger is what will compact this later)."""
+def test_25_short_pairs_trigger_compact_by_count(scenarios_root, monkeypatch):
+    """More than WINDOW_TURNS pairs, light enough to fit the budget on their
+    own: the count trigger fires anyway (TCK-024), leaving keep_turns pairs
+    in the window instead of silently keeping all of them uncovered."""
     _write_scenario(scenarios_root)
     monkeypatch.setattr(main, "load_config", lambda: _config())
     monkeypatch.setattr(turn, "load_config", lambda: _config())
@@ -584,17 +670,22 @@ def test_25_short_pairs_below_budget_are_never_compacted(scenarios_root, monkeyp
 
     pairs = []
     for i in range(25):
-        pairs.append(("player_turn", {"text": f"jogador {i}"}))
-        pairs.append(("narrator_turn", {"text": f"narrador {i}"}))
+        pairs.append(("player_turn", {"text": f"jogador {i:02d}"}))
+        pairs.append(("narrator_turn", {"text": f"narrador {i:02d}"}))
     sessions.append_events(session["id"], pairs)
 
+    seq_to_text = {e.seq: e.payload["text"] for e in sessions.read_events(session["id"])}
+
+    utility_prompts = []
     captured_narrator = []
 
     async def fake_stream(self, messages, model):
         if model == "utility-model":
-            raise AssertionError("utility should not be called")
-        captured_narrator.append(messages)
-        yield "voce continua andando."
+            utility_prompts.append(messages)
+            yield "Resumo dos 25 pares curtos."
+        else:
+            captured_narrator.append(messages)
+            yield "voce continua andando."
 
     monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
 
@@ -603,10 +694,184 @@ def test_25_short_pairs_below_budget_are_never_compacted(scenarios_root, monkeyp
     ) as response:
         _stream_events(response)
 
-    assert sessions.get_compact(session["id"])[0] is None
-    non_system_non_new = captured_narrator[0][1:-1]
-    assert len(non_system_non_new) == 50
-    assert non_system_non_new[0].content == "jogador 0"
+    resumo, covered_seq = sessions.get_compact(session["id"])
+    assert resumo == "Resumo dos 25 pares curtos."
+
+    # 25 pairs, keep_turns=9: 16 pairs (32 messages) leave the window.
+    summarized_texts = [text for seq, text in seq_to_text.items() if seq <= covered_seq]
+    remaining_texts = [text for seq, text in seq_to_text.items() if seq > covered_seq]
+    assert len(summarized_texts) == 32
+    assert len(remaining_texts) == 18
+
+    utility_prompt_text = "\n".join(m.content for m in utility_prompts[0])
+    narrator_prompt_text = "\n".join(m.content for m in captured_narrator[0])
+
+    for text in summarized_texts:
+        assert text in utility_prompt_text
+        assert text not in narrator_prompt_text
+    for text in remaining_texts:
+        assert text in narrator_prompt_text
+        assert text not in utility_prompt_text
+
+    first_remaining_seq = min(seq for seq in seq_to_text if seq > covered_seq)
+    assert captured_narrator[0][1].content == seq_to_text[first_remaining_seq]
+
+
+def test_19_short_pairs_call_utility_once_and_include_oldest_pair(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    pairs = []
+    for i in range(19):
+        pairs.append(("player_turn", {"text": f"jogador {i}"}))
+        pairs.append(("narrator_turn", {"text": f"narrador {i}"}))
+    sessions.append_events(session["id"], pairs)
+
+    utility_calls = []
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            utility_calls.append(messages)
+            yield "Resumo dos 19 pares."
+        else:
+            yield "voce continua andando."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "proximo turno"}
+    ) as response:
+        _stream_events(response)
+
+    assert len(utility_calls) == 1
+    prompt_text = "\n".join(m.content for m in utility_calls[0])
+    assert "jogador 0" in prompt_text
+
+
+def test_hysteresis_needs_ten_new_turns_after_a_count_triggered_compact(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    pairs = []
+    for i in range(19):
+        pairs.append(("player_turn", {"text": f"jogador {i}"}))
+        pairs.append(("narrator_turn", {"text": f"narrador {i}"}))
+    sessions.append_events(session["id"], pairs)
+
+    utility_calls = []
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            utility_calls.append(messages)
+            yield "Resumo."
+        else:
+            yield "voce continua andando."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    # Turn 0: triggers the compaction from the 19 pre-stored pairs.
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "turno 0"}
+    ) as response:
+        _stream_events(response)
+    assert len(utility_calls) == 1
+
+    # Turns 1..9: hysteresis holds, no new compaction.
+    for i in range(1, 10):
+        with client.stream(
+            "POST", f"/api/sessions/{session['id']}/turn", json={"message": f"turno {i}"}
+        ) as response:
+            _stream_events(response)
+        assert len(utility_calls) == 1
+
+    # Turn 10: back over the threshold, compacts again.
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "turno 10"}
+    ) as response:
+        _stream_events(response)
+    assert len(utility_calls) == 2
+
+
+def test_compact_overflow_emitted_when_new_summary_still_does_not_fit(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    pairs = []
+    for i in range(19):
+        pairs.append(("player_turn", {"text": f"jogador {i}"}))
+        pairs.append(("narrator_turn", {"text": f"narrador {i}"}))
+    sessions.append_events(session["id"], pairs)
+
+    huge_summary = "x" * (compact.INPUT_BUDGET_TOKENS * 4 * 2)
+
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            yield huge_summary
+        else:
+            yield "voce continua andando mesmo assim."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "proximo turno"}
+    ) as response:
+        events = _stream_events(response)
+
+    assert events[-1]["hud"]["turn"] == 1
+
+    overflow = next(props for name, props in emitted if name == "compact_overflow")
+    assert overflow["dropped_turns"] > 0
+    assert overflow["compact_tokens"] > 0
+    assert overflow["session_id"] == session["id"]
+    assert sessions.get_compact(session["id"])[0] == huge_summary
+
+
+def test_40_short_turns_compact_at_most_four_times(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            yield "Resumo curto."
+        else:
+            yield "voce continua andando."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    for i in range(40):
+        with client.stream(
+            "POST", f"/api/sessions/{session['id']}/turn", json={"message": f"turno {i}"}
+        ) as response:
+            _stream_events(response)
+
+    compact_runs = [props for name, props in emitted if name == "compact_run"]
+    overflows = [props for name, props in emitted if name == "compact_overflow"]
+
+    assert len(compact_runs) <= 4
+    assert all(props["error"] is None for props in compact_runs)
+    assert overflows == []
 
 
 def test_compact_seq_beyond_all_events_yields_empty_history(scenarios_root):
