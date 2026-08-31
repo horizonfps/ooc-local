@@ -114,3 +114,97 @@ def test_parse_tags_is_idempotent():
 def test_tags_returned_in_order_of_appearance():
     text, tags = parse_tags("[BG:sala] [STAT:reputacao:+1] [SPRITE:chloe:sad]")
     assert [t.kind for t in tags] == ["BG", "STAT", "SPRITE"]
+
+
+def test_line_without_tag_with_indentation_and_tab_is_verbatim():
+    text, tags = parse_tags("    Ele espera.\tainda mais.")
+    assert text == "    Ele espera.\tainda mais."
+    assert tags == []
+
+
+def test_first_and_last_line_indentation_survives_when_middle_has_no_tag():
+    text, tags = parse_tags("    Primeira linha.\nSegunda linha.\n    Terceira linha.")
+    assert text == "    Primeira linha.\nSegunda linha.\n    Terceira linha."
+    assert tags == []
+
+
+def test_blank_border_lines_are_dropped_and_indentation_survives():
+    text, tags = parse_tags("\n\n    Ele espera.\n\n")
+    assert text == "    Ele espera."
+    assert tags == []
+
+
+def test_untagged_line_with_deliberate_space_before_ellipsis_is_untouched():
+    text, tags = parse_tags("Ele parou …")
+    assert text == "Ele parou …"
+    assert tags == []
+
+
+def test_tag_glued_between_letters_gets_separator():
+    text, tags = parse_tags("palavra[BG:sala]outra")
+    assert text == "palavra outra"
+    assert len(tags) == 1
+
+
+def test_tag_glued_between_accented_letters_gets_separator():
+    text, tags = parse_tags("olá[BG:x]mundo")
+    assert text == "olá mundo"
+    assert len(tags) == 1
+
+
+def test_tag_glued_before_punctuation_has_no_separator():
+    text, tags = parse_tags("sorri[SPRITE:chloe:happy].")
+    assert text == "sorri."
+    assert len(tags) == 1
+
+
+def test_tag_at_start_and_end_of_line_has_no_spurious_separator():
+    text, tags = parse_tags("[BG:sala]Ela entra e sai[SPRITE:chloe:happy]")
+    assert text == "Ela entra e sai"
+    assert len(tags) == 2
+
+
+def test_nested_bracket_leaves_text_verbatim_with_no_tags():
+    text, tags = parse_tags("[BG:sala [interna]]")
+    assert text == "[BG:sala [interna]]"
+    assert tags == []
+
+    text2, tags2 = parse_tags("[BG:[x]]")
+    assert text2 == "[BG:[x]]"
+    assert tags2 == []
+
+
+def test_stat_rejects_non_ascii_digits():
+    text, tags = parse_tags("[STAT:rep:١٢]")
+    assert text == ""
+    assert len(tags) == 1
+    assert tags[0].valid is False
+
+    text2, tags2 = parse_tags("[STAT:rep:１２]")
+    assert text2 == ""
+    assert len(tags2) == 1
+    assert tags2[0].valid is False
+
+
+def test_stat_accepts_negative_ascii_digits():
+    text, tags = parse_tags("[STAT:rep:-3]")
+    assert text == ""
+    assert len(tags) == 1
+    assert tags[0].valid is True
+
+
+def test_mixed_text_preserves_indentation_drops_tag_only_line_cleans_tagged_line():
+    text, tags = parse_tags(
+        "    Linha indentada sem tag.\n[SPRITE:chloe:sad]\nLinha com tag [STAT:rep:+1] no meio."
+    )
+    assert text == "    Linha indentada sem tag.\nLinha com tag no meio."
+    assert len(tags) == 2
+
+
+def test_parse_tags_is_idempotent_on_mixed_text():
+    original = (
+        "    Linha indentada sem tag.\n[SPRITE:chloe:sad]\nLinha com tag [STAT:rep:+1] no meio."
+    )
+    once, _ = parse_tags(original)
+    twice, _ = parse_tags(once)
+    assert once == twice
