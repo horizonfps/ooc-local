@@ -1,0 +1,38 @@
+name: Primeiro dia
+prologue: >
+  O portão da Escola Estadual Presidente Vargas ainda está entreaberto quando
+  você chega, mochila nova pesando mais do que devia. Sete e cinquenta da
+  manhã, céu limpo, o sol já esquentando o asfalto do pátio. Você é o aluno
+  novo do 3º B — mudou de cidade no meio do ano, o que já é ruim o bastante
+  sem contar que não conhece uma alma ali dentro.
+
+  Grupos se formam e se desfazem nas escadas, conversas que param quando você
+  passa perto. Uma garota de cabelo preso, postura ereta, comanda uma roda
+  perto do bebedouro com a naturalidade de quem está acostumada a ser ouvida —
+  parece ser a Ashlee, o nome que a coordenação te passou como representante
+  de turma. Mais adiante, sentada sozinha no último degrau da escada, uma
+  garota mexe num caderno de capa preta e o fecha rápido quando percebe que
+  alguém se aproxima. E, vindo em sua direção com um sorriso fácil, está a
+  única pessoa que a secretaria avisou que "já sabe que você vem": Mika, que
+  aparentemente puxou a tarefa de te mostrar a escola.
+
+  O sinal ainda não tocou. Você tem alguns minutos no pátio antes da primeira
+  aula, e já dá pra sentir que essa turma carrega alguma coisa que não está na
+  ficha de matrícula.
+opening_scene: >
+  Pátio da escola, poucos minutos antes do sinal. Mika se aproxima sorrindo;
+  Ashlee observa de longe, sem se aproximar ainda; Chloe está sentada na
+  escada com o caderno preto guardado às pressas na mochila.
+play_guide: >
+  Você pode puxar assunto com quem quiser, seguir Mika até a sala, ou reparar
+  no caderno que Chloe escondeu. Nada aqui tem resposta certa — a escola só
+  começa a se abrir conforme você decide onde prestar atenção.
+suggestions:
+  - Cumprimentar Mika e perguntar sobre a escola
+  - Se aproximar de Chloe e comentar sobre o caderno
+  - Observar Ashlee e o grupo dela à distância
+hud:
+  location: portão da escola
+  time: "07:50"
+  weather: clear
+characters: [chloe, ashlee, mika]
