@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -267,3 +269,107 @@ def test_get_session_route_not_found_is_404(scenarios_root):
     response = client.get("/api/sessions/does-not-exist")
     assert response.status_code == 404
     assert response.json() == {"detail": "session not found"}
+
+
+def test_append_events_then_set_compact_seq_is_contiguous(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    detail = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(
+        detail.id,
+        [
+            ("player_turn", {"text": "eu ando"}),
+            ("narrator_turn", {"text": "voce anda"}),
+            ("player_turn", {"text": "eu paro"}),
+        ],
+    )
+    sessions.set_compact(detail.id, "resumo", 3, {})
+
+    events = sessions.read_events(detail.id)
+
+    assert [e.seq for e in events] == [1, 2, 3, 4]
+    assert events[3].kind == "compact"
+
+
+def test_set_compact_records_covered_seq(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    detail = sessions.create_session("exemplo-escola")
+    sessions.append_events(
+        detail.id,
+        [("player_turn", {"text": "eu ando"}), ("narrator_turn", {"text": "voce anda"})],
+    )
+
+    sessions.set_compact(detail.id, "resumo", 2, {})
+
+    text, covered_seq = sessions.get_compact(detail.id)
+    assert text == "resumo"
+    assert covered_seq == 2
+
+
+def test_append_events_empty_list_only_updates_updated_at(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    detail = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(detail.id, [])
+
+    events = sessions.read_events(detail.id)
+    reopened = sessions.get_session(detail.id)
+    assert events == []
+    assert reopened.hud == detail.hud
+
+
+def test_append_events_concurrent_writes_serialize(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    detail = sessions.create_session("exemplo-escola")
+
+    def append_pair(text: str) -> None:
+        sessions.append_events(
+            detail.id,
+            [("player_turn", {"text": text}), ("narrator_turn", {"text": text})],
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(append_pair, "a"), executor.submit(append_pair, "b")]
+        for future in futures:
+            future.result()
+
+    events = sessions.read_events(detail.id)
+    seqs = sorted(e.seq for e in events)
+    assert seqs == [1, 2, 3, 4]
+    assert len(set(seqs)) == 4
+
+
+def test_append_events_rollback_happens_before_close(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    detail = sessions.create_session("exemplo-escola")
+
+    class NotSerializable:
+        pass
+
+    with pytest.raises(TypeError):
+        sessions.append_events(
+            detail.id,
+            [("player_turn", {"text": "oi"}), ("narrator_turn", {"text": NotSerializable()})],
+        )
+
+    events = sessions.read_events(detail.id)
+    assert events == []
+
+
+def test_set_compact_is_atomic_on_failure(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    detail = sessions.create_session("exemplo-escola")
+    sessions.append_events(
+        detail.id,
+        [("player_turn", {"text": "eu ando"}), ("narrator_turn", {"text": "voce anda"})],
+    )
+    sessions.set_compact(detail.id, "resumo original", 2, {})
+
+    with pytest.raises(TypeError):
+        sessions.set_compact(detail.id, "resumo novo", 2, {"bad": object()})
+
+    events = sessions.read_events(detail.id)
+    text, covered_seq = sessions.get_compact(detail.id)
+    assert [e.kind for e in events] == ["player_turn", "narrator_turn", "compact"]
+    assert text == "resumo original"
+    assert covered_seq == 2

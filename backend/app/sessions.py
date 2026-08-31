@@ -280,28 +280,39 @@ def read_events(session_id: str, kinds: tuple[str, ...] | None = None) -> list[E
     ]
 
 
+def _append_in_tx(conn: sqlite3.Connection, session_id: str, events: list[NewEvent], now: str) -> int:
+    """Insert events with contiguous per-session seq. Must run inside an open transaction."""
+    cur = conn.execute("SELECT COALESCE(MAX(seq), 0) FROM events WHERE session_id = ?", (session_id,))
+    seq = cur.fetchone()[0]
+    for kind, payload in events:
+        seq += 1
+        conn.execute(
+            "INSERT INTO events (session_id, seq, kind, payload, created_at) VALUES (?, ?, ?, ?, ?)",
+            (session_id, seq, kind, json.dumps(payload, ensure_ascii=False), now),
+        )
+    return seq
+
+
 def append_events(session_id: str, events: list[NewEvent], hud: HudState | None = None) -> None:
     now = _now_iso()
     conn = _connect()
     try:
-        with conn:
-            cur = conn.execute("SELECT COALESCE(MAX(seq), 0) FROM events WHERE session_id = ?", (session_id,))
-            seq = cur.fetchone()[0]
-            for kind, payload in events:
-                seq += 1
-                conn.execute(
-                    "INSERT INTO events (session_id, seq, kind, payload, created_at) VALUES (?, ?, ?, ?, ?)",
-                    (session_id, seq, kind, json.dumps(payload, ensure_ascii=False), now),
-                )
-            if hud is not None:
-                conn.execute(
-                    "UPDATE sessions SET updated_at = ?, hud = ? WHERE id = ?",
-                    (now, hud.model_dump_json(), session_id),
-                )
-            else:
-                conn.execute("UPDATE sessions SET updated_at = ? WHERE id = ?", (now, session_id))
+        conn.execute("BEGIN IMMEDIATE")
+        _append_in_tx(conn, session_id, events, now)
+        if hud is not None:
+            conn.execute(
+                "UPDATE sessions SET updated_at = ?, hud = ? WHERE id = ?",
+                (now, hud.model_dump_json(), session_id),
+            )
+        else:
+            conn.execute("UPDATE sessions SET updated_at = ? WHERE id = ?", (now, session_id))
+        conn.commit()
     except sqlite3.Error as exc:
+        conn.rollback()
         emit("session_db_error", op="append_events", error=str(exc))
+        raise
+    except BaseException:
+        conn.rollback()
         raise
     finally:
         conn.close()
@@ -326,19 +337,19 @@ def set_compact(session_id: str, text: str, covered_seq: int, payload: dict) -> 
     event_payload = {"text": text, **payload}
     conn = _connect()
     try:
-        with conn:
-            cur = conn.execute("SELECT COALESCE(MAX(seq), 0) FROM events WHERE session_id = ?", (session_id,))
-            seq = cur.fetchone()[0] + 1
-            conn.execute(
-                "INSERT INTO events (session_id, seq, kind, payload, created_at) VALUES (?, ?, ?, ?, ?)",
-                (session_id, seq, "compact", json.dumps(event_payload, ensure_ascii=False), now),
-            )
-            conn.execute(
-                "UPDATE sessions SET compact = ?, compact_seq = ?, updated_at = ? WHERE id = ?",
-                (text, covered_seq, now, session_id),
-            )
+        conn.execute("BEGIN IMMEDIATE")
+        _append_in_tx(conn, session_id, [("compact", event_payload)], now)
+        conn.execute(
+            "UPDATE sessions SET compact = ?, compact_seq = ?, updated_at = ? WHERE id = ?",
+            (text, covered_seq, now, session_id),
+        )
+        conn.commit()
     except sqlite3.Error as exc:
+        conn.rollback()
         emit("session_db_error", op="set_compact", error=str(exc))
+        raise
+    except BaseException:
+        conn.rollback()
         raise
     finally:
         conn.close()
