@@ -1,0 +1,78 @@
+.hud {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--hud-bg, #14161c);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 8px 16px;
+}
+
+.hud[aria-busy='true'] {
+  opacity: 0.7;
+}
+
+.hud__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.hud__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 2.5rem;
+  min-width: 0;
+}
+
+.hud__field dt {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--hud-label, #9aa0ab);
+}
+
+.hud__field dd {
+  margin: 0;
+  overflow: hidden;
+  font-size: 0.95rem;
+  color: var(--hud-value, #f2f3f5);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.hud__field--highlight dd {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hud__field dd {
+    transition: font-weight 200ms ease;
+  }
+}
+
+.hud__stale {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  color: var(--hud-stale, #d7a13f);
+}
+
+.hud__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 479px) {
+  .hud__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
