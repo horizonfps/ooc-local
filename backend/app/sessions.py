@@ -296,8 +296,8 @@ def _append_in_tx(conn: sqlite3.Connection, session_id: str, events: list[NewEve
 def append_events(session_id: str, events: list[NewEvent], hud: HudState | None = None) -> None:
     now = _now_iso()
     conn = _connect()
-    conn.execute("BEGIN IMMEDIATE")
     try:
+        conn.execute("BEGIN IMMEDIATE")
         _append_in_tx(conn, session_id, events, now)
         if hud is not None:
             conn.execute(
@@ -336,8 +336,8 @@ def set_compact(session_id: str, text: str, covered_seq: int, payload: dict) -> 
     now = _now_iso()
     event_payload = {"text": text, **payload}
     conn = _connect()
-    conn.execute("BEGIN IMMEDIATE")
     try:
+        conn.execute("BEGIN IMMEDIATE")
         _append_in_tx(conn, session_id, [("compact", event_payload)], now)
         conn.execute(
             "UPDATE sessions SET compact = ?, compact_seq = ?, updated_at = ? WHERE id = ?",
