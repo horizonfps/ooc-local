@@ -1,7 +1,7 @@
 ---
 id: TCK-011
 title: Renderizar o HUD do engine como faixa de turno, local, hora e clima
-status: ready
+status: in_review
 points: 2
 blockedBy: [TCK-001, TCK-008]
 files:
