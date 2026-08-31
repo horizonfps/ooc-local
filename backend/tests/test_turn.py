@@ -1,0 +1,342 @@
+import json
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app import main, sessions, turn
+from app.config import Config
+from app.llm.openai_compat import OpenAICompatProvider
+
+WORLD_MD = "# Mundo\n\nUma escola.\n"
+
+SCENARIO_YAML = """\
+name: Exemplo Escola
+tagline: uma tagline
+locale: pt-br
+"""
+
+DEFAULT_START = """\
+name: Começo
+prologue: prologo default
+opening_scene: cena
+hud:
+  location: patio
+  time: "07:50"
+"""
+
+CHLOE_YAML = """\
+name: Chloe
+role: aluna
+appearance: baixa
+personality: extrovertida
+voice: animada
+mind:
+  feeling: curiosa
+  goal: descobrir segredo
+"""
+
+
+def _write_scenario(root, scenario_id="exemplo-escola"):
+    scenario_path = root / scenario_id
+    scenario_path.mkdir(parents=True)
+    (scenario_path / "scenario.yaml").write_text(SCENARIO_YAML, encoding="utf-8")
+    (scenario_path / "world.md").write_text(WORLD_MD, encoding="utf-8")
+
+    starts_dir = scenario_path / "starts"
+    starts_dir.mkdir()
+    (starts_dir / "default.yaml").write_text(DEFAULT_START, encoding="utf-8")
+
+    characters_dir = scenario_path / "characters"
+    characters_dir.mkdir()
+    (characters_dir / "chloe.yaml").write_text(CHLOE_YAML, encoding="utf-8")
+
+    return scenario_path
+
+
+def _config():
+    return Config.model_validate(
+        {
+            "providers": {"local": {"base_url": "http://x/v1"}},
+            "models": {"narrator": {"provider": "local", "model": "m"}},
+        }
+    )
+
+
+@pytest.fixture(autouse=True)
+def _isolated_db(tmp_path, monkeypatch):
+    monkeypatch.setenv("OOC_SESSIONS_DB", str(tmp_path / "sessions.db"))
+    yield
+
+
+@pytest.fixture
+def scenarios_root(tmp_path, monkeypatch):
+    root = tmp_path / "scenarios"
+    root.mkdir()
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: root)
+    return root
+
+
+def _stream_events(response) -> list[dict]:
+    events = []
+    for line in "".join(response.iter_text()).splitlines():
+        if not line.startswith("data:"):
+            continue
+        payload = line[len("data:") :].strip()
+        if payload == "[DONE]":
+            continue
+        events.append(json.loads(payload))
+    return events
+
+
+def _make_fake_stream(deltas, captured=None, raise_after=None):
+    async def fake_stream(self, messages, model):
+        if captured is not None:
+            captured.append(messages)
+        for i, delta in enumerate(deltas):
+            if raise_after is not None and i == raise_after:
+                raise RuntimeError("provider exploded")
+            yield delta
+
+    return fake_stream
+
+
+def test_turn_happy_path_emits_deltas_hud_then_done(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(
+        OpenAICompatProvider, "stream_chat", _make_fake_stream(["voce anda", " ate a Chloe."])
+    )
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "vou ate a Chloe"}
+    ) as response:
+        assert response.status_code == 200
+        events = _stream_events(response)
+
+    assert events[0] == {"delta": "voce anda"}
+    assert events[1] == {"delta": " ate a Chloe."}
+    assert events[-1]["hud"]["turn"] == 1
+
+    detail = client.get(f"/api/sessions/{session['id']}").json()
+    assert len(detail["turns"]) == 2
+    assert detail["turns"][0]["text"] == "vou ate a Chloe"
+    assert detail["turns"][1]["text"] == "voce anda ate a Chloe."
+    assert detail["hud"]["turn"] == 1
+
+
+def test_turn_records_tags_as_events(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(
+        OpenAICompatProvider,
+        "stream_chat",
+        _make_fake_stream(["voce se sente melhor [STAT:reputacao:+1]."]),
+    )
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "eu ajudo"}
+    ) as response:
+        _stream_events(response)
+
+    events = sessions.read_events(session["id"])
+    tag_events = [e for e in events if e.kind == "tag"]
+    assert len(tag_events) == 1
+    assert tag_events[0].payload == {"kind": "STAT", "args": ["reputacao", "+1"], "raw": "[STAT:reputacao:+1]", "valid": True}
+
+    narrator_event = next(e for e in events if e.kind == "narrator_turn")
+    assert narrator_event.payload["text"] == "voce se sente melhor."
+
+
+def test_turn_second_turn_includes_previous_pair_in_context(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", _make_fake_stream(["primeira resposta"]))
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "primeira mensagem"}
+    ) as response:
+        _stream_events(response)
+
+    captured: list = []
+    monkeypatch.setattr(
+        OpenAICompatProvider, "stream_chat", _make_fake_stream(["segunda resposta"], captured=captured)
+    )
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "segunda mensagem"}
+    ) as response:
+        _stream_events(response)
+
+    messages = captured[0]
+    roles_contents = [(m.role, m.content) for m in messages]
+    assert ("user", "primeira mensagem") in roles_contents
+    assert ("assistant", "primeira resposta") in roles_contents
+    assert ("user", "segunda mensagem") in roles_contents
+
+
+def test_turn_that_is_only_a_tag_is_treated_as_failure(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", _make_fake_stream(["[STAT:reputacao:+1]"]))
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "eu ajudo"}
+    ) as response:
+        events = _stream_events(response)
+
+    assert any("error" in e for e in events)
+    assert all("hud" not in e for e in events)
+    assert sessions.read_events(session["id"]) == []
+
+
+def test_turn_window_truncated_at_18_pairs(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    events = []
+    for i in range(25):
+        events.append(("player_turn", {"text": f"jogador {i}"}))
+        events.append(("narrator_turn", {"text": f"narrador {i}"}))
+    sessions.append_events(session["id"], events)
+
+    messages = turn.build_context(session["id"], "nova mensagem")
+    non_system_non_new = messages[1:-1]
+    assert len(non_system_non_new) == 36
+    assert non_system_non_new[0].content == "jogador 7"
+
+
+def test_turn_provider_error_mid_stream_does_not_persist(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(
+        OpenAICompatProvider, "stream_chat", _make_fake_stream(["ola", " mundo"], raise_after=1)
+    )
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    before = sessions.read_events(session["id"])
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "eu ajudo"}
+    ) as response:
+        events = _stream_events(response)
+
+    assert events[0] == {"delta": "ola"}
+    assert any("error" in e for e in events)
+    assert all("hud" not in e for e in events)
+
+    after = sessions.read_events(session["id"])
+    assert before == after == []
+
+
+def test_turn_append_events_failure_preserves_hud(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", _make_fake_stream(["ola mundo"]))
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("db exploded")
+
+    monkeypatch.setattr(turn, "append_events", boom)
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "eu ajudo"}
+    ) as response:
+        events = _stream_events(response)
+
+    assert any("error" in e for e in events)
+    assert all("hud" not in e for e in events)
+
+    detail = client.get(f"/api/sessions/{session['id']}").json()
+    assert detail["hud"]["turn"] == 0
+
+
+def test_turn_route_flag_disabled_is_503(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(
+        main,
+        "load_config",
+        lambda: Config.model_validate(
+            {
+                "providers": {"local": {"base_url": "http://x/v1"}},
+                "models": {"narrator": {"provider": "local", "model": "m"}},
+                "flags": {"chat": False},
+            }
+        ),
+    )
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    response = client.post(f"/api/sessions/{session['id']}/turn", json={"message": "oi"})
+    assert response.status_code == 503
+
+
+def test_turn_route_session_not_found_is_404(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    client = TestClient(main.app)
+
+    response = client.post("/api/sessions/nao-existe/turn", json={"message": "oi"})
+    assert response.status_code == 404
+    assert response.json() == {"detail": "session not found"}
+
+
+def test_turn_route_scenario_deleted_is_404(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    empty_root = scenarios_root.parent / "empty-scenarios"
+    empty_root.mkdir()
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: empty_root)
+
+    response = client.post(f"/api/sessions/{session['id']}/turn", json={"message": "oi"})
+    assert response.status_code == 404
+    assert response.json() == {"detail": "scenario not found"}
+
+
+def test_turn_route_empty_message_is_422(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    response = client.post(f"/api/sessions/{session['id']}/turn", json={"message": "   "})
+    assert response.status_code == 422
+    assert response.json() == {"detail": "message must not be empty"}
+
+
+def test_advance_increments_turn_and_time():
+    from app.hud import HudState, advance
+
+    hud = HudState(turn=0, location="patio", time="07:50", weather="clear")
+    advanced = advance(hud)
+    assert advanced.turn == 1
+    assert advanced.time == "07:52"
+
+
+def test_advance_wraps_midnight():
+    from app.hud import HudState, advance
+
+    hud = HudState(turn=5, location="patio", time="23:59", weather="clear")
+    advanced = advance(hud)
+    assert advanced.time == "00:01"
