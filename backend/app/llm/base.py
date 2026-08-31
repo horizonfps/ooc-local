@@ -13,3 +13,8 @@ class LLMProvider(ABC):
     @abstractmethod
     def stream_chat(self, messages: list[ChatMessage], model: str) -> AsyncIterator[str]:
         """Yield text deltas for a chat completion."""
+
+    async def complete(self, messages: list[ChatMessage], model: str) -> str:
+        """Non-streamed call, built on top of stream_chat."""
+        parts = [delta async for delta in self.stream_chat(messages, model)]
+        return "".join(parts)

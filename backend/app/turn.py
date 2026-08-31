@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncIterator
 
+from app.compact import CompactError, compact_block, estimate_tokens, fits
 from app.config import load_config
 from app.hud import advance
 from app.llm.base import ChatMessage
@@ -10,7 +11,14 @@ from app.llm.openai_compat import OpenAICompatProvider
 from app.observability import emit
 from app.prompt import MASTER_PROMPT_VERSION, build_master_prompt
 from app.scenario import Character, LoadedScenario, StartConfig, load_scenario
-from app.sessions import ScenarioNotFound, append_events, get_session_row, read_events
+from app.sessions import (
+    ScenarioNotFound,
+    append_events,
+    get_compact,
+    get_session_row,
+    read_events,
+    set_compact,
+)
 from app.tags import parse_tags
 
 WINDOW_TURNS = 18
@@ -44,13 +52,74 @@ def build_context(session_id: str, message: str, compact: str | None = None) -> 
     return messages
 
 
+def _shrink_to_fit(messages: list[ChatMessage]) -> tuple[list[ChatMessage], list[ChatMessage]]:
+    """Drop the oldest turn pairs from the window until the messages fit the budget."""
+    system, *history, tail = messages
+    outgoing: list[ChatMessage] = []
+    while len(history) >= 2 and not fits([system, *history, tail]):
+        outgoing.extend(history[:2])
+        history = history[2:]
+    return [system, *history, tail], outgoing
+
+
+async def _maybe_compact(
+    session_id: str, message: str, config, locale: str
+) -> tuple[list[ChatMessage], str | None]:
+    current_compact = get_compact(session_id) if config.flag("compact") else None
+    messages = build_context(session_id, message, compact=current_compact)
+
+    if not config.flag("compact") or fits(messages):
+        return messages, None
+
+    trimmed, outgoing = _shrink_to_fit(messages)
+    if not outgoing:
+        return trimmed, None
+
+    started = time.monotonic()
+    error: str | None = None
+    try:
+        new_compact = await compact_block(current_compact, outgoing, locale)
+    except CompactError as exc:
+        error = str(exc)
+        messages = trimmed
+    else:
+        set_compact(
+            session_id,
+            new_compact,
+            {"replaced_turns": len(outgoing) // 2, "from_index": 0, "to_index": len(outgoing) // 2},
+        )
+        messages = build_context(session_id, message, compact=new_compact)
+        if not fits(messages):
+            messages, _ = _shrink_to_fit(messages)
+
+    emit(
+        "compact_run",
+        session_id=session_id,
+        turns_summarized=len(outgoing) // 2,
+        in_tokens=sum(estimate_tokens(m.content) for m in outgoing),
+        out_tokens=0 if error else estimate_tokens(new_compact),
+        duration_ms=int((time.monotonic() - started) * 1000),
+        error=error,
+    )
+    return messages, error
+
+
 async def run_turn(session_id: str, message: str) -> AsyncIterator[dict]:
     config = load_config()
     role = config.models["narrator"]
     provider = OpenAICompatProvider(config.providers[role.provider])
 
-    messages = build_context(session_id, message)
-    hud = get_session_row(session_id).hud
+    row = get_session_row(session_id)
+    scenario = load_scenario(row.scenario_id)
+    messages, _compact_error = await _maybe_compact(session_id, message, config, scenario.meta.locale)
+    hud = row.hud
+
+    emit(
+        "context_budget",
+        session_id=session_id,
+        estimated_tokens=sum(estimate_tokens(m.content) for m in messages),
+        window_turns=len(messages[1:-1]) // 2,
+    )
 
     started = time.monotonic()
     raw_text = ""
