@@ -8,7 +8,9 @@ export const TAG_RE = /\[([A-Z][A-Z0-9_]*):([^\[\]\n]*)\]/g
 const SPEAKER_RE = /^\*\*(.+?)\*\*\s*\|\s*(.*)$/
 const TRAILING_WHITESPACE_RE = /[ \t]+/g
 const SPACE_BEFORE_PUNCT_RE = /[ \t]+([.,;:!?…])/g
-const WORD_CHAR_RE = /[^\W_]/u
+// \w is ASCII-only in JS even with the u flag; \p{L}\p{N} matches the
+// backend's unicode word semantics
+const WORD_CHAR_RE = /[\p{L}\p{N}]/u
 
 type Block =
   | { kind: 'narration'; text: string; raw?: boolean }

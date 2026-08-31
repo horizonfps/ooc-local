@@ -129,6 +129,11 @@ describe('TurnText', () => {
     expect(container.querySelector('em')?.textContent).toBe('palavra outra')
   })
 
+  it('inserts a separator when a tag is glued between accented words', () => {
+    const { container } = render(<TurnText text="olá[BG:sala]você" />)
+    expect(container.querySelector('em')?.textContent).toBe('olá você')
+  })
+
   it('renders a nested bracket raw without leaving an orphan closing bracket', () => {
     const { container } = render(<TurnText text="[BG:sala [interna]]" />)
     expect(container.querySelector('em')?.textContent).toBe('[BG:sala [interna]]')
