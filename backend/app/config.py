@@ -38,6 +38,11 @@ class Config(BaseModel):
     language: str = "pt-br"
     providers: dict[str, ProviderConfig]
     models: dict[str, ModelRole]
+    flags: dict[str, bool] = {}
+
+    def flag(self, name: str, default: bool = True) -> bool:
+        """Runtime kill switch, togglable by editing config.yaml without restart."""
+        return self.flags.get(name, default)
 
     @model_validator(mode="after")
     def roles_reference_known_providers(self) -> "Config":
