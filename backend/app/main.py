@@ -3,13 +3,23 @@ import time
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import load_config
 from app.llm.base import ChatMessage
 from app.llm.openai_compat import OpenAICompatProvider
 from app.observability import emit, setup_logging
 from app.scenario import list_scenarios
+from app.sessions import (
+    ScenarioNotFound,
+    SessionDetail,
+    SessionNotFound,
+    SessionSummary,
+    StartNotFound,
+    create_session,
+    get_session,
+    list_sessions,
+)
 
 SMOKE_SYSTEM_PROMPT = "You are the narrator of an interactive story. Reply briefly, in character."
 
@@ -19,6 +29,13 @@ setup_logging()
 
 class ChatRequest(BaseModel):
     message: str
+
+
+class CreateSessionRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    scenario_id: str = Field(alias="scenarioId")
+    start_id: str | None = Field(default=None, alias="startId")
 
 
 @app.get("/api/health")
@@ -37,6 +54,31 @@ async def scenarios() -> list[dict[str, str | None]]:
         }
         for scenario in list_scenarios()
     ]
+
+
+@app.post("/api/sessions", response_model=SessionDetail, status_code=201)
+async def create_session_route(req: CreateSessionRequest) -> SessionDetail:
+    try:
+        return create_session(req.scenario_id, req.start_id)
+    except ScenarioNotFound:
+        raise HTTPException(status_code=404, detail="scenario not found") from None
+    except StartNotFound:
+        raise HTTPException(status_code=404, detail="start not found") from None
+
+
+@app.get("/api/sessions", response_model=list[SessionSummary])
+async def list_sessions_route() -> list[SessionSummary]:
+    return list_sessions()
+
+
+@app.get("/api/sessions/{session_id}", response_model=SessionDetail)
+async def get_session_route(session_id: str) -> SessionDetail:
+    try:
+        return get_session(session_id)
+    except SessionNotFound:
+        raise HTTPException(status_code=404, detail="session not found") from None
+    except ScenarioNotFound:
+        raise HTTPException(status_code=404, detail="scenario not found") from None
 
 
 @app.post("/api/chat")
