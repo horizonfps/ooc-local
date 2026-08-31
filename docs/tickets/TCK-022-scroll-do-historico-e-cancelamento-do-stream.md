@@ -1,7 +1,7 @@
 ---
 id: TCK-022
 title: Tornar o autoscroll barato, flutuar o botão de "ir para o fim" e cancelar o stream
-status: ready
+status: in_review
 points: 3
 blockedBy: []
 files:

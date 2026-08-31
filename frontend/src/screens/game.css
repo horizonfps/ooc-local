@@ -1,4 +1,5 @@
 .game {
+  position: relative;
   max-width: 720px;
   margin: 0 auto;
   padding: 1rem;
@@ -6,6 +7,7 @@
   flex-direction: column;
   height: 100dvh;
   box-sizing: border-box;
+  --game-scrollLatest-bottom: 6rem;
 }
 
 @media (max-width: 480px) {
@@ -127,14 +129,21 @@
 }
 
 .game-scrollLatest {
-  align-self: center;
-  margin: 0.25rem 0;
   padding: 0.4rem 1rem;
   border-radius: 999px;
   border: none;
   background: var(--accent);
   color: inherit;
   cursor: pointer;
+}
+
+.game-scrollLatest--floating {
+  position: absolute;
+  left: 50%;
+  bottom: var(--game-scrollLatest-bottom);
+  transform: translateX(-50%);
+  z-index: 2;
+  min-height: 44px;
 }
 
 .game-footer {

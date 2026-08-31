@@ -48,6 +48,67 @@ function sseResponse(events: Array<Record<string, unknown> | '[DONE]'>, status =
   return { ok: status >= 200 && status < 300, status, body: sseStream(lines) } as unknown as Response
 }
 
+function stubRaf() {
+  let nextId = 0
+  const callbacks = new Map<number, FrameRequestCallback>()
+  const raf = vi.fn((cb: FrameRequestCallback) => {
+    nextId += 1
+    callbacks.set(nextId, cb)
+    return nextId
+  })
+  const caf = vi.fn((id: number) => {
+    callbacks.delete(id)
+  })
+  vi.stubGlobal('requestAnimationFrame', raf)
+  vi.stubGlobal('cancelAnimationFrame', caf)
+  return {
+    raf,
+    flush() {
+      const pending = [...callbacks.values()]
+      callbacks.clear()
+      for (const cb of pending) cb(0)
+    },
+  }
+}
+
+function stubScrollTo() {
+  const scrollTo = vi.fn()
+  Object.defineProperty(HTMLElement.prototype, 'scrollTo', { value: scrollTo, writable: true, configurable: true })
+  return scrollTo
+}
+
+function stubReducedMotion(matches: boolean) {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({ matches }) as MediaQueryList),
+  )
+}
+
+function hangingStreamFetch(opts: {
+  get: (url: string) => Response | Promise<Response>
+  onAbortSignal?: (signal: AbortSignal | null | undefined) => void
+}) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === 'POST') {
+      opts.onAbortSignal?.(init.signal)
+      let controller: ReadableStreamDefaultController<Uint8Array> | null = null
+      const stream = new ReadableStream<Uint8Array>({
+        start(c) {
+          controller = c
+          c.enqueue(new TextEncoder().encode('data: {"delta":"stale text "}\n\n'))
+        },
+      })
+      init.signal?.addEventListener('abort', () => {
+        controller?.error(new DOMException('The operation was aborted.', 'AbortError'))
+      })
+      return { ok: true, status: 200, body: stream } as unknown as Response
+    }
+    return opts.get(String(input))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
 function mockRoutedFetch(opts: {
   get: () => Response | Promise<Response>
   post: (message: string) => Response | Promise<Response>
@@ -458,5 +519,138 @@ describe('GameScreen turns', () => {
     await user.click(screen.getByRole('button', { name: t('common.retry') }))
     await screen.findByText('It works now.')
     expect((textarea as HTMLTextAreaElement).value).toBe('')
+  })
+
+  it('coalesces streamed scroll updates to at most one per animation frame, all in auto mode', async () => {
+    const user = userEvent.setup()
+    const scrollTo = stubScrollTo()
+    const { flush } = stubRaf()
+    const deltas = Array.from({ length: 50 }, (_, i) => ({ delta: `d${i} ` }))
+    mockRoutedFetch({
+      get: () => jsonResponse(session()),
+      post: () => sseResponse([...deltas, { hud: { turn: 1, location: 'Yard', time: 'Day', weather: 'clear' } }, '[DONE]']),
+    })
+    render(<GameScreen sessionId="sess-1" />)
+
+    await screen.findByText('Once upon a time.')
+    const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+    scrollTo.mockClear()
+    await user.type(textarea, 'go{Enter}')
+    await screen.findByText('Yard')
+
+    expect(scrollTo).not.toHaveBeenCalled()
+    flush()
+    expect(scrollTo).toHaveBeenCalledTimes(1)
+    expect(scrollTo).toHaveBeenCalledWith({ top: expect.any(Number), behavior: 'auto' })
+  })
+
+  it('pauses autoscroll on scroll-up, shows the floating jump button, and resumes with a smooth scroll on click', async () => {
+    const user = userEvent.setup()
+    const scrollTo = stubScrollTo()
+    mockFetch(() => jsonResponse(session({ turns: [{ index: 1, role: 'narrator', text: 'the hallway' }] })))
+    render(<GameScreen sessionId="sess-1" />)
+
+    await screen.findByText('Once upon a time.')
+    const history = screen.getByRole('list')
+    Object.defineProperty(history, 'scrollHeight', { value: 1000, configurable: true })
+    Object.defineProperty(history, 'clientHeight', { value: 300, configurable: true })
+    Object.defineProperty(history, 'scrollTop', { value: 100, configurable: true })
+    fireEvent.scroll(history)
+
+    const button = await screen.findByRole('button', { name: t('game.scrollToLatest') })
+    expect(button.className).toContain('game-scrollLatest--floating')
+    expect(button.closest('ol')).toBeNull()
+
+    scrollTo.mockClear()
+    await user.click(button)
+    expect(scrollTo).toHaveBeenCalledWith({ top: expect.any(Number), behavior: 'smooth' })
+    expect(screen.queryByRole('button', { name: t('game.scrollToLatest') })).not.toBeInTheDocument()
+  })
+
+  it('jumps to latest instantly when prefers-reduced-motion is set', async () => {
+    stubReducedMotion(true)
+    const user = userEvent.setup()
+    const scrollTo = stubScrollTo()
+    mockFetch(() => jsonResponse(session({ turns: [{ index: 1, role: 'narrator', text: 'the hallway' }] })))
+    render(<GameScreen sessionId="sess-1" />)
+
+    await screen.findByText('Once upon a time.')
+    const history = screen.getByRole('list')
+    Object.defineProperty(history, 'scrollHeight', { value: 1000, configurable: true })
+    Object.defineProperty(history, 'clientHeight', { value: 300, configurable: true })
+    Object.defineProperty(history, 'scrollTop', { value: 100, configurable: true })
+    fireEvent.scroll(history)
+
+    const button = await screen.findByRole('button', { name: t('game.scrollToLatest') })
+    scrollTo.mockClear()
+    await user.click(button)
+    expect(scrollTo).toHaveBeenCalledWith({ top: expect.any(Number), behavior: 'auto' })
+  })
+
+  it('aborts the fetch on unmount mid-stream without an ErrorState or a console.error', async () => {
+    const user = userEvent.setup()
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    let capturedSignal: AbortSignal | null | undefined
+    hangingStreamFetch({
+      get: () => jsonResponse(session()),
+      onAbortSignal: (signal) => {
+        capturedSignal = signal
+      },
+    })
+    const { unmount } = render(<GameScreen sessionId="sess-1" />)
+
+
+    await screen.findByText('Once upon a time.')
+    const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+    await user.type(textarea, 'go{Enter}')
+    await screen.findByText('stale text', { exact: false })
+
+    unmount()
+    await waitFor(() => expect(capturedSignal?.aborted).toBe(true))
+    expect(screen.queryByText(t('game.turn.error'))).not.toBeInTheDocument()
+    expect(errorSpy).not.toHaveBeenCalled()
+    errorSpy.mockRestore()
+  })
+
+  it('aborts the previous stream and does not mix history when sessionId changes mid-stream', async () => {
+    const user = userEvent.setup()
+    let capturedSignal: AbortSignal | null | undefined
+    hangingStreamFetch({
+      get: (url) =>
+        url === '/api/sessions/sess-1'
+          ? jsonResponse(session({ prologue: 'First session.' }))
+          : jsonResponse(session({ id: 'sess-2', prologue: 'Second session.' })),
+      onAbortSignal: (signal) => {
+        capturedSignal = signal
+      },
+    })
+
+    const { rerender } = render(<GameScreen sessionId="sess-1" />)
+    await screen.findByText('First session.')
+    const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+    await user.type(textarea, 'go{Enter}')
+    await screen.findByText('stale text', { exact: false })
+
+    rerender(<GameScreen sessionId="sess-2" />)
+    await screen.findByText('Second session.')
+    await waitFor(() => expect(capturedSignal?.aborted).toBe(true))
+    expect(screen.queryByText('stale text', { exact: false })).not.toBeInTheDocument()
+  })
+
+  it('treats an externally aborted fetch (signal not aborted) as a normal stream error', async () => {
+    const user = userEvent.setup()
+    mockRoutedFetch({
+      get: () => jsonResponse(session()),
+      post: () => {
+        throw new DOMException('The operation was aborted.', 'AbortError')
+      },
+    })
+    render(<GameScreen sessionId="sess-1" />)
+
+    await screen.findByText('Once upon a time.')
+    const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+    await user.type(textarea, 'go{Enter}')
+
+    expect(await screen.findByText(t('error.unexpected.title'))).toBeInTheDocument()
   })
 })
