@@ -1,7 +1,8 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app import main
-from app.hud import hud_from_start
+from app.hud import HudState, hud_from_start
 from app.scenario import (
     ScenarioError,
     list_scenarios,
@@ -254,3 +255,86 @@ def test_get_scenarios_route_empty_root(monkeypatch, tmp_path):
 def test_scenarios_dir_uses_env_var(monkeypatch, tmp_path):
     monkeypatch.setenv("OOC_SCENARIOS_DIR", str(tmp_path))
     assert scenarios_dir() == tmp_path
+
+
+@pytest.mark.parametrize(
+    "scenario_id",
+    ["../..", "a/b", "a\\b", "", ".oculto", ".."],
+)
+def test_load_scenario_traversal_ids_raise(monkeypatch, tmp_path, scenario_id):
+    _write_scenario(tmp_path, "exemplo-escola")
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    try:
+        load_scenario(scenario_id)
+        assert False, "expected ScenarioError"
+    except ScenarioError:
+        pass
+
+
+def test_post_sessions_route_traversal_id_is_404(monkeypatch, tmp_path):
+    _write_scenario(tmp_path, "exemplo-escola")
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    client = TestClient(main.app)
+    response = client.post("/api/sessions", json={"scenarioId": "../../etc"})
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "scenario not found"}
+
+
+def test_load_scenario_default_start_missing_raises(monkeypatch, tmp_path):
+    scenario_yaml = SCENARIO_YAML + "default_start: rota-vilao\n"
+    _write_scenario(tmp_path, "exemplo-escola", scenario_yaml=scenario_yaml)
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    try:
+        load_scenario("exemplo-escola")
+        assert False, "expected ScenarioError"
+    except ScenarioError as exc:
+        assert "rota-vilao" in exc.reason
+        assert "default" in exc.reason
+
+
+def test_load_scenario_default_start_explicit_and_existing(monkeypatch, tmp_path):
+    scenario_yaml = SCENARIO_YAML + "default_start: rota-vilao\n"
+    _write_scenario(
+        tmp_path,
+        "exemplo-escola",
+        scenario_yaml=scenario_yaml,
+        starts={"default.yaml": DEFAULT_START, "rota-vilao.yaml": VILLAIN_START},
+    )
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.start().id == "rota-vilao"
+
+
+@pytest.mark.parametrize(
+    ("time", "valid"),
+    [("00:00", True), ("23:59", True), ("24:00", False), ("8:00", False)],
+)
+def test_hud_state_time_boundaries(time, valid):
+    if valid:
+        hud = HudState(location="x", time=time, weather="clear")
+        assert hud.time == time
+    else:
+        with pytest.raises(ValueError):
+            HudState(location="x", time=time, weather="clear")
+
+
+@pytest.mark.parametrize("weather", ["clear", "cloudy", "rain", "storm", "snow", "fog", "night"])
+def test_hud_state_accepts_every_weather_code(weather):
+    hud = HudState(location="x", time="08:00", weather=weather)
+    assert hud.weather == weather
+
+
+def test_hud_state_invalid_time_raises():
+    with pytest.raises(ValueError):
+        HudState(location="x", time="99:99", weather="clear")
+
+
+def test_hud_state_invalid_weather_raises():
+    with pytest.raises(ValueError):
+        HudState(location="x", time="08:00", weather="chuvoso")

@@ -6,10 +6,8 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
-from app.hud import WEATHER_CODES
+from app.hud import validate_time, validate_weather
 from app.observability import emit
-
-TIME_PATTERN = r"^([01]\d|2[0-3]):[0-5]\d$"
 
 
 class ScenarioError(Exception):
@@ -49,19 +47,13 @@ class HudDefaults(BaseModel):
 
     @field_validator("time")
     @classmethod
-    def validate_time(cls, value: str) -> str:
-        import re
-
-        if not re.match(TIME_PATTERN, value):
-            raise ValueError(f"invalid time '{value}', expected HH:MM 24h")
-        return value
+    def _validate_time(cls, value: str) -> str:
+        return validate_time(value)
 
     @field_validator("weather")
     @classmethod
-    def validate_weather(cls, value: str) -> str:
-        if value not in WEATHER_CODES:
-            raise ValueError(f"invalid weather '{value}', expected one of {WEATHER_CODES}")
-        return value
+    def _validate_weather(cls, value: str) -> str:
+        return validate_weather(value)
 
 
 class StartConfig(BaseModel):
@@ -178,8 +170,20 @@ def _load_characters(scenario_path: Path) -> dict[str, Character]:
     return characters
 
 
+def _confine_scenario_path(scenario_id: str) -> Path:
+    root = scenarios_dir()
+    if not scenario_id or scenario_id.startswith(".") or any(
+        sep in scenario_id for sep in ("/", "\\", "\0")
+    ):
+        raise ScenarioError(root / str(scenario_id), "scenario id outside the scenarios root")
+    scenario_path = (root / scenario_id).resolve()
+    if root.resolve() not in scenario_path.parents:
+        raise ScenarioError(scenario_path, "scenario id outside the scenarios root")
+    return scenario_path
+
+
 def load_scenario(scenario_id: str) -> LoadedScenario:
-    scenario_path = scenarios_dir() / scenario_id
+    scenario_path = _confine_scenario_path(scenario_id)
     meta_path = scenario_path / "scenario.yaml"
     if not meta_path.exists():
         raise ScenarioError(meta_path, "scenario.yaml is missing")
@@ -197,6 +201,12 @@ def load_scenario(scenario_id: str) -> LoadedScenario:
                     scenario_path / "starts" / f"{start.id}.yaml",
                     f"unknown character ids: {unknown}",
                 )
+
+    if meta.default_start not in starts:
+        raise ScenarioError(
+            meta_path,
+            f"default_start '{meta.default_start}' not found; known starts: {sorted(starts)}",
+        )
 
     return LoadedScenario(
         id=scenario_id,

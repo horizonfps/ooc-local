@@ -1,7 +1,7 @@
 ---
 id: TCK-019
 title: Confinar o loader de cenário à raiz e validar HUD e default_start no load
-status: ready
+status: in_review
 points: 3
 blockedBy: []
 files:
