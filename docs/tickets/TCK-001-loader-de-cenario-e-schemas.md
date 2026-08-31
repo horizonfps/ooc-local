@@ -1,7 +1,7 @@
 ---
 id: TCK-001
 title: Ler pasta de cenário com schemas pydantic e expor GET /api/scenarios
-status: ready
+status: done
 points: 5
 blockedBy: []
 files:

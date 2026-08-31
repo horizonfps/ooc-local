@@ -1,7 +1,7 @@
 ---
 id: TCK-008
 title: Interpolar strings de i18n e instalar o runner de teste do frontend
-status: in_review
+status: done
 points: 3
 blockedBy: []
 files:
