@@ -1,21 +1,14 @@
-const strings = {
-  en: {
-    title: 'ooc-local',
-    placeholder: 'Say something...',
-    send: 'Send',
-    error: 'Error',
-  },
-  'pt-br': {
-    title: 'ooc-local',
-    placeholder: 'Diga algo...',
-    send: 'Enviar',
-    error: 'Erro',
-  },
-} as const
+import { strings } from './strings'
+import type { StringKey } from './strings'
 
+export type { StringKey } from './strings'
 export type Locale = keyof typeof strings
-export type StringKey = keyof (typeof strings)['en']
 
-const locale: Locale = navigator.language.toLowerCase().startsWith('pt') ? 'pt-br' : 'en'
+export const locale: Locale = (navigator.language ?? '').toLowerCase().startsWith('pt') ? 'pt-br' : 'en'
+export const intlLocale: string = locale === 'pt-br' ? 'pt-BR' : 'en'
 
-export const t = (key: StringKey): string => strings[locale][key]
+export function t(key: StringKey, params?: Record<string, string | number>): string {
+  const raw = strings[locale][key]
+  if (!params) return raw
+  return raw.replace(/\{(\w+)\}/g, (match, name) => (name in params ? String(params[name]) : match))
+}
