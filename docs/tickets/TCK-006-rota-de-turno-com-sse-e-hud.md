@@ -1,7 +1,7 @@
 ---
 id: TCK-006
 title: Jogar um turno por SSE com prompt-mestre, tags e HUD do engine
-status: in_review
+status: done
 points: 5
 blockedBy: [TCK-003, TCK-004, TCK-005]
 files:
