@@ -1,7 +1,7 @@
 ---
 id: TCK-017
 title: Unificar a escrita do event store num único append transacional
-status: ready
+status: in_review
 points: 2
 blockedBy: [TCK-015]
 files:
