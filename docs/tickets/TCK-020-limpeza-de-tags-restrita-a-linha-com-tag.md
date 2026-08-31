@@ -1,7 +1,7 @@
 ---
 id: TCK-020
 title: Limitar a limpeza de tags às linhas que tinham tag e corrigir o recorte
-status: ready
+status: in_review
 points: 3
 blockedBy: []
 files:

@@ -114,7 +114,33 @@ describe('TurnText', () => {
   })
 
   it('exports a TAG_RE mirroring the backend tag pattern', () => {
+    expect(TAG_RE.source).toBe('\\[([A-Z][A-Z0-9_]*):([^\\[\\]\\n]*)\\]')
     expect('[STAT:reputacao:+1]'.replace(TAG_RE, '')).toBe('')
     expect('[risos]'.replace(TAG_RE, '')).toBe('[risos]')
+  })
+
+  it('preserves deliberate indentation in the rendered narration', () => {
+    const { container } = render(<TurnText text="    Ele espera." />)
+    expect(container.querySelector('em')?.textContent).toBe('    Ele espera.')
+  })
+
+  it('inserts a separator when a tag is glued between two words', () => {
+    const { container } = render(<TurnText text="palavra[BG:sala]outra" />)
+    expect(container.querySelector('em')?.textContent).toBe('palavra outra')
+  })
+
+  it('renders a nested bracket raw without leaving an orphan closing bracket', () => {
+    const { container } = render(<TurnText text="[BG:sala [interna]]" />)
+    expect(container.querySelector('em')?.textContent).toBe('[BG:sala [interna]]')
+  })
+
+  it('does not drop the second tagged line because of the global regex lastIndex', () => {
+    const { container } = render(
+      <TurnText text={'Primeira [STAT:reputacao:+1] linha.\nSegunda [BG:sala] linha.'} />,
+    )
+    const lines = container.querySelectorAll('.turnText-line--narration')
+    expect(lines).toHaveLength(2)
+    expect(lines[0].textContent).toContain('Primeira')
+    expect(lines[1].textContent).toContain('Segunda')
   })
 })

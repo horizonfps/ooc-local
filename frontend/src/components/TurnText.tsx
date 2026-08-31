@@ -3,18 +3,27 @@ import { t } from '../i18n'
 import './turnText.css'
 
 // Mirrors TAG_RE in backend/app/tags.py (TCK-004); divergence is a contract bug.
-export const TAG_RE = /\[([A-Z][A-Z0-9_]*):([^\]\n]*)\]/g
+export const TAG_RE = /\[([A-Z][A-Z0-9_]*):([^\[\]\n]*)\]/g
 
 const SPEAKER_RE = /^\*\*(.+?)\*\*\s*\|\s*(.*)$/
 const TRAILING_WHITESPACE_RE = /[ \t]+/g
 const SPACE_BEFORE_PUNCT_RE = /[ \t]+([.,;:!?…])/g
+const WORD_CHAR_RE = /[^\W_]/u
 
 type Block =
   | { kind: 'narration'; text: string; raw?: boolean }
   | { kind: 'speech'; name: string; text: string }
 
-function cleanLine(line: string): string {
-  let out = line.replace(TAG_RE, '')
+function cleanLineIfTagged(line: string): string {
+  TAG_RE.lastIndex = 0
+  if (!TAG_RE.test(line)) return line
+
+  TAG_RE.lastIndex = 0
+  let out = line.replace(TAG_RE, (match: string, _kind: string, _args: string, offset: number) => {
+    const before = offset > 0 ? line[offset - 1] : ''
+    const after = offset + match.length < line.length ? line[offset + match.length] : ''
+    return before && after && WORD_CHAR_RE.test(before) && WORD_CHAR_RE.test(after) ? ' ' : ''
+  })
   out = out.replace(TRAILING_WHITESPACE_RE, ' ')
   out = out.replace(SPACE_BEFORE_PUNCT_RE, '$1')
   return out.trim()
@@ -29,13 +38,13 @@ function findUnclosedBracket(text: string): number {
 function buildBlocks(text: string): Block[] {
   const blocks: Block[] = []
   for (const line of text.split('\n')) {
-    const cleaned = cleanLine(line)
-    if (cleaned === '') continue
-    const match = SPEAKER_RE.exec(cleaned)
+    const treated = cleanLineIfTagged(line)
+    if (treated.trim() === '') continue
+    const match = SPEAKER_RE.exec(treated)
     if (match && match[1].trim() !== '') {
       blocks.push({ kind: 'speech', name: match[1].trim(), text: match[2] })
     } else {
-      blocks.push({ kind: 'narration', text: cleaned })
+      blocks.push({ kind: 'narration', text: treated })
     }
   }
   return blocks
@@ -56,7 +65,7 @@ function parseTurnText(text: string, streaming: boolean): Block[] {
   const brokenLine = normalized.slice(lineStart)
 
   if (streaming) {
-    const prefix = cleanLine(brokenLine.slice(0, unclosedIdx - lineStart))
+    const prefix = cleanLineIfTagged(brokenLine.slice(0, unclosedIdx - lineStart)).trim()
     if (prefix !== '') {
       const match = SPEAKER_RE.exec(prefix)
       if (match && match[1].trim() !== '') {
