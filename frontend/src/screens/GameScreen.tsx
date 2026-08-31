@@ -33,8 +33,7 @@ function isReducedMotion(): boolean {
   }
 }
 
-function scrollToBottom(el: HTMLElement) {
-  const behavior = isReducedMotion() ? 'auto' : 'smooth'
+function scrollToBottom(el: HTMLElement, behavior: ScrollBehavior) {
   if (typeof el.scrollTo === 'function') {
     el.scrollTo({ top: el.scrollHeight, behavior })
   } else {
@@ -48,6 +47,8 @@ export function GameScreen(props: { sessionId: string }) {
   const historyRef = useRef<HTMLOListElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const sendingRef = useRef(false)
+  const scrollFrameRef = useRef<number | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
   const [state, setState] = useState<GameState>({ phase: 'loading' })
 
   const [draft, setDraft] = useState('')
@@ -80,6 +81,8 @@ export function GameScreen(props: { sessionId: string }) {
   }, [sessionId])
 
   useEffect(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
     setDraft('')
     setTurnPhase('idle')
     setPending(null)
@@ -88,6 +91,14 @@ export function GameScreen(props: { sessionId: string }) {
     setLastMessage('')
     setDoneAnnouncement('')
   }, [sessionId])
+
+  useEffect(
+    () => () => {
+      abortRef.current?.abort()
+      abortRef.current = null
+    },
+    [],
+  )
 
   useEffect(() => {
     if (state.phase === 'ready') setHud(state.session.hud)
@@ -116,8 +127,18 @@ export function GameScreen(props: { sessionId: string }) {
     if (!atBottom) return
     const el = historyRef.current
     if (!el) return
-    scrollToBottom(el)
-  }, [atBottom, extraTurns.length, pending])
+    if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current)
+    scrollFrameRef.current = requestAnimationFrame(() => {
+      scrollFrameRef.current = null
+      scrollToBottom(el, 'auto')
+    })
+    return () => {
+      if (scrollFrameRef.current !== null) {
+        cancelAnimationFrame(scrollFrameRef.current)
+        scrollFrameRef.current = null
+      }
+    }
+  }, [atBottom, extraTurns.length, pending?.text.length ?? 0])
 
   useEffect(() => {
     const el = textareaRef.current
@@ -140,7 +161,7 @@ export function GameScreen(props: { sessionId: string }) {
   const jumpToLatest = () => {
     setAtBottom(true)
     const el = historyRef.current
-    if (el) scrollToBottom(el)
+    if (el) scrollToBottom(el, isReducedMotion() ? 'auto' : 'smooth')
   }
 
   const nextIndex = () => {
@@ -157,27 +178,37 @@ export function GameScreen(props: { sessionId: string }) {
     setLastMessage(message)
     setPending({ index, message, text: '', status: 'streaming' })
 
+    const controller = new AbortController()
+    abortRef.current = controller
+
     let sawError = false
     let sawHud = false
     let succeeded = false
     let narratorText = ''
     try {
-      await streamTurn(sessionId, message, {
-        onDelta: (delta) => {
-          narratorText += delta
-          setPending((p) => (p ? { ...p, text: p.text + delta } : p))
+      await streamTurn(
+        sessionId,
+        message,
+        {
+          onDelta: (delta) => {
+            narratorText += delta
+            setPending((p) => (p ? { ...p, text: p.text + delta } : p))
+          },
+          onHud: (newHud) => {
+            sawHud = true
+            setHud(newHud)
+            setHudStale(false)
+          },
+          onError: (err) => {
+            sawError = true
+            setHudStale(true)
+            setPending((p) => (p ? { index: p.index, message: p.message, text: p.text, status: 'error', kind: 'stream', cause: String(err) } : p))
+          },
         },
-        onHud: (newHud) => {
-          sawHud = true
-          setHud(newHud)
-          setHudStale(false)
-        },
-        onError: (err) => {
-          sawError = true
-          setHudStale(true)
-          setPending((p) => (p ? { index: p.index, message: p.message, text: p.text, status: 'error', kind: 'stream', cause: String(err) } : p))
-        },
-      })
+        { signal: controller.signal },
+      )
+
+      if (controller.signal.aborted) return
 
       if (!sawError) {
         succeeded = true
@@ -192,6 +223,7 @@ export function GameScreen(props: { sessionId: string }) {
         setDraft((d) => (d === message ? '' : d))
       }
     } catch (err) {
+      if (controller.signal.aborted) return
       if (err instanceof ApiError && err.status === 404) {
         setPending((p) => (p ? { index: p.index, message: p.message, text: p.text, status: 'error', kind: 'notFound' } : p))
       } else {
@@ -204,6 +236,7 @@ export function GameScreen(props: { sessionId: string }) {
       setHudStale(true)
       setDraft(message)
     } finally {
+      if (abortRef.current === controller) abortRef.current = null
       sendingRef.current = false
       setTurnPhase('idle')
       if (succeeded) {
@@ -359,7 +392,7 @@ export function GameScreen(props: { sessionId: string }) {
       </p>
 
       {state.phase === 'ready' && !atBottom ? (
-        <button type="button" className="game-scrollLatest" onClick={jumpToLatest}>
+        <button type="button" className="game-scrollLatest game-scrollLatest--floating" onClick={jumpToLatest}>
           {t('game.scrollToLatest')}
         </button>
       ) : null}

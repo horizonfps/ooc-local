@@ -64,12 +64,22 @@ export type TurnHandlers = {
 
 type TurnEvent = { delta?: string; hud?: HudState; error?: string }
 
-export async function streamTurn(sessionId: string, message: string, h: TurnHandlers): Promise<void> {
-  const response = await fetch(`/api/sessions/${sessionId}/turn`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
-  })
+export type TurnOptions = { signal?: AbortSignal }
+
+export async function streamTurn(sessionId: string, message: string, h: TurnHandlers, options?: TurnOptions): Promise<void> {
+  const signal = options?.signal
+  let response: Response
+  try {
+    response = await fetch(`/api/sessions/${sessionId}/turn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+      signal,
+    })
+  } catch (err) {
+    if (signal?.aborted) return
+    throw err
+  }
   if (!response.ok) {
     throw new ApiError(response.status, `HTTP ${response.status}`)
   }
@@ -79,32 +89,40 @@ export async function streamTurn(sessionId: string, message: string, h: TurnHand
 
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
   let buffer = ''
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += value
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += value
 
-    const parts = buffer.split('\n\n')
-    buffer = parts.pop() ?? ''
-    for (const part of parts) {
-      const line = part.trim()
-      if (!line.startsWith('data: ')) continue
-      const data = line.slice('data: '.length)
-      if (data === '[DONE]') return
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop() ?? ''
+      for (const part of parts) {
+        const line = part.trim()
+        if (!line.startsWith('data: ')) continue
+        const data = line.slice('data: '.length)
+        if (data === '[DONE]') return
 
-      let parsed: TurnEvent
-      try {
-        parsed = JSON.parse(data)
-      } catch {
-        continue
-      }
-      if (parsed.error !== undefined) {
-        h.onError(parsed.error)
-      } else if (parsed.delta !== undefined) {
-        h.onDelta(parsed.delta)
-      } else if (parsed.hud !== undefined) {
-        h.onHud(parsed.hud)
+        let parsed: TurnEvent
+        try {
+          parsed = JSON.parse(data)
+        } catch {
+          continue
+        }
+        if (parsed.error !== undefined) {
+          h.onError(parsed.error)
+        } else if (parsed.delta !== undefined) {
+          h.onDelta(parsed.delta)
+        } else if (parsed.hud !== undefined) {
+          h.onHud(parsed.hud)
+        }
       }
     }
+  } catch (err) {
+    if (signal?.aborted) {
+      await reader.cancel()
+      return
+    }
+    throw err
   }
 }
