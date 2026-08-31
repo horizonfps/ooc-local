@@ -1,7 +1,7 @@
 ---
 id: TCK-007
 title: Resumir o bloco que sai da janela com o modelo utility (compact v0)
-status: ready
+status: in_review
 points: 3
 blockedBy: [TCK-006]
 files:
