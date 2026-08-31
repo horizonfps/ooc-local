@@ -1,1 +1,6 @@
 dev/
+__pycache__/
+.venv/
+node_modules/
+dist/
+.pytest_cache/
