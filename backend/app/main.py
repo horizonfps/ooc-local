@@ -21,7 +21,7 @@ from app.sessions import (
     init_db,
     list_sessions,
 )
-from app.turn import run_turn
+from app.turn import TURN_ERROR_CODE, load_turn_context, run_turn
 
 SMOKE_SYSTEM_PROMPT = "You are the narrator of an interactive story. Reply briefly, in character."
 
@@ -125,21 +125,28 @@ async def turn_route(session_id: str, req: ChatRequest) -> StreamingResponse:
     if not config.flag("chat"):
         emit("turn_rejected", session_id=session_id, reason="chat disabled by flag")
         raise HTTPException(status_code=503, detail="chat disabled by flag")
-    if not req.message.strip():
-        emit("turn_rejected", session_id=session_id, reason="message must not be empty")
-        raise HTTPException(status_code=422, detail="message must not be empty")
     try:
-        get_session(session_id)
+        ctx = load_turn_context(session_id)
     except SessionNotFound:
         emit("turn_rejected", session_id=session_id, reason="session not found")
         raise HTTPException(status_code=404, detail="session not found") from None
     except ScenarioNotFound:
         emit("turn_rejected", session_id=session_id, reason="scenario not found")
         raise HTTPException(status_code=404, detail="scenario not found") from None
+    if not req.message.strip():
+        emit("turn_rejected", session_id=session_id, reason="message must not be empty")
+        raise HTTPException(status_code=422, detail="message must not be empty")
 
     async def event_stream():
-        async for event in run_turn(session_id, req.message):
-            yield f"data: {json.dumps(event)}\n\n"
+        failed = False
+        try:
+            async for event in run_turn(session_id, req.message, ctx=ctx, config=config):
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as exc:
+            failed = True
+            emit("turn_stream_failed", session_id=session_id, error=str(exc))
+        if failed:
+            yield f"data: {json.dumps({'error': TURN_ERROR_CODE})}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
