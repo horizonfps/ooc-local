@@ -1,7 +1,7 @@
 ---
 id: TCK-004
 title: Extrair e remover tags inline do texto do narrador
-status: ready
+status: in_review
 points: 3
 blockedBy: []
 files:
