@@ -55,3 +55,56 @@ export function createSession(scenarioId: string): Promise<SessionDetail> {
 export function fetchSession(id: string): Promise<SessionDetail> {
   return request(`/api/sessions/${id}`)
 }
+
+export type TurnHandlers = {
+  onDelta: (delta: string) => void
+  onHud: (hud: HudState) => void
+  onError: (err: unknown) => void
+}
+
+type TurnEvent = { delta?: string; hud?: HudState; error?: string }
+
+export async function streamTurn(sessionId: string, message: string, h: TurnHandlers): Promise<void> {
+  const response = await fetch(`/api/sessions/${sessionId}/turn`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  })
+  if (!response.ok) {
+    throw new ApiError(response.status, `HTTP ${response.status}`)
+  }
+  if (!response.body) {
+    throw new Error('missing response body')
+  }
+
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += value
+
+    const parts = buffer.split('\n\n')
+    buffer = parts.pop() ?? ''
+    for (const part of parts) {
+      const line = part.trim()
+      if (!line.startsWith('data: ')) continue
+      const data = line.slice('data: '.length)
+      if (data === '[DONE]') return
+
+      let parsed: TurnEvent
+      try {
+        parsed = JSON.parse(data)
+      } catch {
+        continue
+      }
+      if (parsed.error !== undefined) {
+        h.onError(parsed.error)
+      } else if (parsed.delta !== undefined) {
+        h.onDelta(parsed.delta)
+      } else if (parsed.hud !== undefined) {
+        h.onHud(parsed.hud)
+      }
+    }
+  }
+}

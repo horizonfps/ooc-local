@@ -114,8 +114,75 @@
   padding-top: 0.5rem;
 }
 
+.game-turn-partial {
+  margin-bottom: 0.5rem;
+  opacity: 0.8;
+}
+
+.game-turn-partial-label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  margin-bottom: 0.25rem;
+}
+
+.game-scrollLatest {
+  align-self: center;
+  margin: 0.25rem 0;
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: inherit;
+  cursor: pointer;
+}
+
 .game-footer {
-  min-height: 3.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+}
+
+.game-input-textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  min-height: 2.75rem;
+  max-height: calc(1.4em * 5 + 1rem);
+  overflow-y: auto;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #33363f;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  line-height: 1.4;
+  box-sizing: border-box;
+}
+
+.game-footer button[type='submit'] {
+  flex: none;
+  min-height: 44px;
+  padding: 0 1.25rem;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: inherit;
+  cursor: pointer;
+}
+
+.game-footer button[type='submit']:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.game-input-hint {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
 }
 
 @media (max-width: 480px) {
