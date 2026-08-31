@@ -2,13 +2,14 @@ import asyncio
 import json
 import sqlite3
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from app import compact, main, sessions, turn
-from app.compact import CompactError, estimate_tokens, fits
+from app.compact import COMPACT_OPTIONS, COMPACT_RESERVE_TOKENS, CompactError, estimate_tokens, fits
 from app.config import Config
-from app.llm.base import ChatMessage
+from app.llm.base import ChatMessage, GenerationOptions
 from app.llm.openai_compat import OpenAICompatProvider
 
 WORLD_MD = "# Mundo\n\nUma escola.\n"
@@ -199,6 +200,158 @@ def test_complete_joins_stream_chat_deltas(monkeypatch):
 
     text = asyncio.run(provider.complete([ChatMessage(role="user", content="oi")], "m"))
     assert text == "ola mundo"
+
+
+# ---------------------------------------------------------------------------
+# GenerationOptions / OpenAICompatProvider.build_payload / timeout budget
+# ---------------------------------------------------------------------------
+
+
+def test_build_payload_without_options_omits_max_tokens_and_temperature():
+    provider = OpenAICompatProvider(_config().providers["local"])
+    payload = provider.build_payload([ChatMessage(role="user", content="oi")], "m")
+
+    assert "max_tokens" not in payload
+    assert "temperature" not in payload
+    assert payload["stream"] is True
+
+
+def test_build_payload_with_compact_options_includes_max_tokens_and_temperature():
+    provider = OpenAICompatProvider(_config().providers["local"], COMPACT_OPTIONS)
+    payload = provider.build_payload([ChatMessage(role="user", content="oi")], "m")
+
+    assert payload["max_tokens"] == 400
+    assert payload["temperature"] == 0.2
+    assert payload["stream"] is True
+
+
+def test_compact_max_tokens_is_below_compact_reserve_tokens():
+    assert COMPACT_OPTIONS.max_tokens < COMPACT_RESERVE_TOKENS
+
+
+def test_generation_options_defaults_have_no_max_tokens_or_temperature():
+    options = GenerationOptions()
+    assert options.timeout_s == 120.0
+    assert options.max_tokens is None
+    assert options.temperature is None
+
+    provider = OpenAICompatProvider(_config().providers["local"], options)
+    payload = provider.build_payload([ChatMessage(role="user", content="oi")], "m")
+    assert "max_tokens" not in payload
+    assert "temperature" not in payload
+
+
+def test_generation_options_zero_temperature_is_kept_in_payload():
+    options = GenerationOptions(temperature=0.0)
+    provider = OpenAICompatProvider(_config().providers["local"], options)
+    payload = provider.build_payload([ChatMessage(role="user", content="oi")], "m")
+
+    assert payload["temperature"] == 0.0
+
+
+def test_provider_options_timeout_s_matches_construction():
+    with_options = OpenAICompatProvider(_config().providers["local"], COMPACT_OPTIONS)
+    without_options = OpenAICompatProvider(_config().providers["local"])
+
+    assert with_options.options.timeout_s == 25.0
+    assert without_options.options.timeout_s == 120.0
+
+
+def test_compact_block_builds_provider_with_compact_options(monkeypatch):
+    captured_self = []
+
+    async def fake_stream(self, messages, model):
+        captured_self.append(self)
+        yield "resumo novo"
+
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    asyncio.run(compact.compact_block(None, [], "pt-br"))
+
+    assert captured_self[0].options == COMPACT_OPTIONS
+
+
+def test_timeout_reaches_httpx_client_from_provider_options(monkeypatch):
+    captured_timeouts = []
+
+    class _FakeResponse:
+        def raise_for_status(self):
+            pass
+
+        async def aiter_lines(self):
+            yield "data: [DONE]"
+
+    class _FakeStreamCtx:
+        async def __aenter__(self):
+            return _FakeResponse()
+
+        async def __aexit__(self, *args):
+            return False
+
+    class _FakeClient:
+        def __init__(self, timeout=None):
+            captured_timeouts.append(timeout)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        def stream(self, *args, **kwargs):
+            return _FakeStreamCtx()
+
+    monkeypatch.setattr("app.llm.openai_compat.httpx.AsyncClient", _FakeClient)
+
+    provider_with_options = OpenAICompatProvider(_config().providers["local"], COMPACT_OPTIONS)
+    asyncio.run(
+        provider_with_options.complete([ChatMessage(role="user", content="oi")], "m")
+    )
+
+    provider_without_options = OpenAICompatProvider(_config().providers["local"])
+    asyncio.run(
+        provider_without_options.complete([ChatMessage(role="user", content="oi")], "m")
+    )
+
+    assert captured_timeouts[0].read == 25.0
+    assert captured_timeouts[1].read == 120.0
+
+
+def test_compact_block_en_locale_uses_english_template(monkeypatch):
+    captured = []
+
+    async def fake_stream(self, messages, model):
+        captured.append(messages)
+        yield "summary"
+
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    outgoing = [
+        ChatMessage(role="user", content="player walked to the room"),
+        ChatMessage(role="assistant", content="narrator described the room"),
+    ]
+
+    asyncio.run(compact.compact_block("previous summary", outgoing, "en"))
+
+    prompt_text = "\n".join(m.content for m in captured[0])
+    assert "PREVIOUS SUMMARY" in prompt_text
+    assert "TURNS LEAVING THE WINDOW" in prompt_text
+    assert "RESUMO ANTERIOR" not in prompt_text
+    assert "TURNOS QUE SAEM DA JANELA" not in prompt_text
+
+
+def test_compact_block_raises_compact_error_on_timeout(monkeypatch):
+    async def fake_stream(self, messages, model):
+        raise httpx.TimeoutException("utility travou")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    with pytest.raises(CompactError):
+        asyncio.run(compact.compact_block(None, [], "pt-br"))
 
 
 # ---------------------------------------------------------------------------
@@ -536,6 +689,45 @@ def test_utility_failure_falls_back_to_truncated_window(scenarios_root, monkeypa
     async def fake_stream(self, messages, model):
         if model == "utility-model":
             raise RuntimeError("utility offline")
+            yield  # pragma: no cover
+        yield "voce continua andando mesmo assim."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "proximo turno"}
+    ) as response:
+        events = _stream_events(response)
+
+    assert events[-1]["hud"]["turn"] == 1
+    assert sessions.get_compact(session["id"])[0] is None
+    compact_events = [e for e in sessions.read_events(session["id"]) if e.kind == "compact"]
+    assert compact_events == []
+
+    compact_run = next(props for name, props in emitted if name == "compact_run")
+    assert compact_run["error"] is not None
+
+
+def test_utility_timeout_falls_back_to_truncated_window(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    long_pairs = []
+    for i in range(18):
+        long_pairs.append(("player_turn", {"text": f"jogador {i} " + "lorem " * 500}))
+        long_pairs.append(("narrator_turn", {"text": f"narrador {i} " + "ipsum " * 500}))
+    sessions.append_events(session["id"], long_pairs)
+
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            raise httpx.TimeoutException("utility travou")
             yield  # pragma: no cover
         yield "voce continua andando mesmo assim."
 
