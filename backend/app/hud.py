@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 if TYPE_CHECKING:
     from app.scenario import StartConfig
@@ -11,12 +12,37 @@ WEATHER_CODES = ("clear", "cloudy", "rain", "storm", "snow", "fog", "night")
 
 TURN_MINUTES = 2
 
+TIME_PATTERN = r"^([01]\d|2[0-3]):[0-5]\d$"
+_TIME_RE = re.compile(TIME_PATTERN)
+
+
+def validate_time(value: str) -> str:
+    if not _TIME_RE.match(value):
+        raise ValueError(f"invalid time '{value}', expected HH:MM 24h")
+    return value
+
+
+def validate_weather(value: str) -> str:
+    if value not in WEATHER_CODES:
+        raise ValueError(f"invalid weather '{value}', expected one of {WEATHER_CODES}")
+    return value
+
 
 class HudState(BaseModel):
     turn: int = 0
     location: str
     time: str
     weather: str
+
+    @field_validator("time")
+    @classmethod
+    def _validate_time(cls, value: str) -> str:
+        return validate_time(value)
+
+    @field_validator("weather")
+    @classmethod
+    def _validate_weather(cls, value: str) -> str:
+        return validate_weather(value)
 
 
 def hud_from_start(start: "StartConfig") -> HudState:
