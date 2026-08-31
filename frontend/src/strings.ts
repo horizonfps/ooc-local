@@ -1,10 +1,4 @@
 const en = {
-  // Legacy Phase 0 keys, used by App.tsx until TCK-009
-  title: 'ooc-local',
-  placeholder: 'Say something...',
-  send: 'Send',
-  error: 'Error',
-
   // Shell and common
   'app.title': 'ooc-local',
   'app.skipToContent': 'Skip to content',
@@ -88,12 +82,6 @@ const en = {
 export type StringKey = keyof typeof en
 
 const ptBr: Record<StringKey, string> = {
-  // Legacy Phase 0 keys, used by App.tsx until TCK-009
-  title: 'ooc-local',
-  placeholder: 'Diga algo...',
-  send: 'Enviar',
-  error: 'Erro',
-
   // Shell and common
   'app.title': 'ooc-local',
   'app.skipToContent': 'Pular para o conteúdo',

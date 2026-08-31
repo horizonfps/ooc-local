@@ -1,0 +1,145 @@
+.sessions {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.sessions h1 {
+  font-size: 1.25rem;
+  margin: 0 0 1.5rem;
+}
+
+.sessions h2 {
+  font-size: 1rem;
+  color: var(--fg-muted);
+  margin: 0 0 0.75rem;
+}
+
+.sessions-new {
+  margin-bottom: 2rem;
+}
+
+.sessions-new form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+}
+
+.sessions-new label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sessions-new select {
+  flex: 1;
+  min-height: 44px;
+  background: var(--surface);
+  border: 1px solid #33363f;
+  border-radius: 8px;
+  color: inherit;
+  padding: 0 0.75rem;
+}
+
+.sessions-new button {
+  min-height: 44px;
+  padding: 0 1.2rem;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: inherit;
+  cursor: pointer;
+}
+
+.sessions-new button:disabled,
+.sessions-new select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sessions-new-tagline {
+  color: var(--fg-muted);
+  margin: 0.5rem 0 0;
+}
+
+.sessions-new-scenarios-error {
+  color: var(--fg-muted);
+  margin: 0.5rem 0 0;
+}
+
+.sessions-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sessions-list li {
+  min-height: 44px;
+}
+
+.sessions-item {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid #33363f;
+  background: var(--surface);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: break-word;
+}
+
+.sessions-item-name {
+  font-weight: 600;
+}
+
+.sessions-item-meta {
+  color: var(--fg-muted);
+  font-size: 0.875rem;
+}
+
+.sessions-skeleton {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sessions-skeleton li {
+  height: 56px;
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+@media (max-width: 480px) {
+  .sessions-new form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sessions-new select,
+  .sessions-new button {
+    width: 100%;
+  }
+
+  .sessions-item-meta {
+    white-space: normal;
+  }
+}

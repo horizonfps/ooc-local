@@ -1,7 +1,7 @@
 ---
 id: TCK-009
 title: Trocar o chat de fumaça pela tela de sessões com criação de sessão
-status: ready
+status: in_review
 points: 5
 blockedBy: [TCK-001, TCK-005, TCK-008, TCK-013]
 files:
