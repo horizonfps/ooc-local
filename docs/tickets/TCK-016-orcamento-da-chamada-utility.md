@@ -1,7 +1,7 @@
 ---
 id: TCK-016
 title: Dar orçamento próprio à chamada de compactação (max_tokens, temperatura, timeout)
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-024]
 files:

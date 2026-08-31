@@ -1,7 +1,7 @@
 ---
 id: TCK-018
 title: Fechar o SSE do turno em todo caminho de erro e corrigir a precedência da rota
-status: in_review
+status: done
 points: 5
 blockedBy: [TCK-015, TCK-024]
 files:
