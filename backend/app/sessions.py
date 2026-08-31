@@ -112,7 +112,15 @@ def _connect() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA_SQL)
+    _migrate_compact_column(conn)
     return conn
+
+
+def _migrate_compact_column(conn: sqlite3.Connection) -> None:
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
+    if "compact" not in columns:
+        conn.execute("ALTER TABLE sessions ADD COLUMN compact TEXT")
+        conn.commit()
 
 
 def init_db() -> None:
@@ -288,6 +296,42 @@ def append_events(session_id: str, events: list[NewEvent], hud: HudState | None 
                 conn.execute("UPDATE sessions SET updated_at = ? WHERE id = ?", (now, session_id))
     except sqlite3.Error as exc:
         emit("session_db_error", op="append_events", error=str(exc))
+        raise
+    finally:
+        conn.close()
+
+
+def get_compact(session_id: str) -> str | None:
+    conn = _connect()
+    try:
+        cur = conn.execute("SELECT compact FROM sessions WHERE id = ?", (session_id,))
+        row = cur.fetchone()
+    finally:
+        conn.close()
+
+    if row is None:
+        raise SessionNotFound(session_id)
+
+    return row[0]
+
+
+def set_compact(session_id: str, text: str, payload: dict) -> None:
+    now = _now_iso()
+    event_payload = {"text": text, **payload}
+    conn = _connect()
+    try:
+        with conn:
+            cur = conn.execute("SELECT COALESCE(MAX(seq), 0) FROM events WHERE session_id = ?", (session_id,))
+            seq = cur.fetchone()[0] + 1
+            conn.execute(
+                "INSERT INTO events (session_id, seq, kind, payload, created_at) VALUES (?, ?, ?, ?, ?)",
+                (session_id, seq, "compact", json.dumps(event_payload, ensure_ascii=False), now),
+            )
+            conn.execute(
+                "UPDATE sessions SET compact = ?, updated_at = ? WHERE id = ?", (text, now, session_id)
+            )
+    except sqlite3.Error as exc:
+        emit("session_db_error", op="set_compact", error=str(exc))
         raise
     finally:
         conn.close()
