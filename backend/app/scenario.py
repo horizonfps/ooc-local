@@ -11,10 +11,20 @@ from app.observability import emit
 
 
 class ScenarioError(Exception):
-    def __init__(self, path: Path, reason: str) -> None:
+    def __init__(self, path: Path, reason: str, details: str | None = None) -> None:
         self.path = path
         self.reason = reason
+        self.details = details
         super().__init__(f"{path}: {reason}")
+
+
+def _summarize(exc: ValidationError) -> str:
+    parts = [f"{'.'.join(str(loc) for loc in error['loc'])}: {error['msg']}" for error in exc.errors()]
+    summary = f"{len(parts)} erro(s): " + "; ".join(parts)
+    summary = summary.replace("\n", " ")
+    if len(summary) > 300:
+        summary = summary[:300]
+    return summary
 
 
 class CharacterMind(BaseModel):
@@ -116,7 +126,7 @@ def _load_yaml(path: Path, model: type[BaseModel]) -> BaseModel:
     try:
         return model.model_validate(data)
     except ValidationError as exc:
-        raise ScenarioError(path, str(exc)) from exc
+        raise ScenarioError(path, _summarize(exc), details=str(exc)) from exc
 
 
 def _load_world(scenario_path: Path) -> str:
@@ -134,8 +144,12 @@ def _load_starts(scenario_path: Path) -> dict[str, StartConfig]:
     if not starts_dir.is_dir():
         raise ScenarioError(starts_dir, "starts/ directory is missing")
     starts: dict[str, StartConfig] = {}
-    for start_path in sorted(starts_dir.glob("*.yaml")):
+    seen_stems: set[str] = set()
+    for start_path in sorted([*starts_dir.glob("*.yaml"), *starts_dir.glob("*.yml")]):
         start_id = start_path.stem
+        if start_id in seen_stems:
+            raise ScenarioError(starts_dir, f"duplicate id '{start_id}' in .yaml and .yml")
+        seen_stems.add(start_id)
         try:
             raw = start_path.read_text(encoding="utf-8")
         except FileNotFoundError:
@@ -150,7 +164,7 @@ def _load_starts(scenario_path: Path) -> dict[str, StartConfig]:
         try:
             starts[start_id] = StartConfig.model_validate(data)
         except ValidationError as exc:
-            raise ScenarioError(start_path, str(exc)) from exc
+            raise ScenarioError(start_path, _summarize(exc), details=str(exc)) from exc
     if not starts:
         raise ScenarioError(starts_dir, "no start files found")
     return starts
@@ -161,8 +175,12 @@ def _load_characters(scenario_path: Path) -> dict[str, Character]:
     if not characters_dir.is_dir():
         raise ScenarioError(characters_dir, "characters/ directory is missing")
     characters: dict[str, Character] = {}
-    for char_path in sorted(characters_dir.glob("*.yaml")):
+    seen_stems: set[str] = set()
+    for char_path in sorted([*characters_dir.glob("*.yaml"), *characters_dir.glob("*.yml")]):
         char_id = char_path.stem
+        if char_id in seen_stems:
+            raise ScenarioError(characters_dir, f"duplicate id '{char_id}' in .yaml and .yml")
+        seen_stems.add(char_id)
         character = _load_yaml(char_path, Character)
         characters[char_id] = character
     if not characters:
@@ -232,6 +250,14 @@ def list_scenarios() -> list[LoadedScenario]:
             scenarios.append(load_scenario(entry.name))
         except ScenarioError as exc:
             emit("scenario_invalid", path=str(exc.path), error=exc.reason)
+        except Exception as exc:  # noqa: BLE001 - listing must survive any single bad scenario
+            error = str(exc).replace("\n", " ")[:300]
+            emit(
+                "scenario_invalid",
+                path=str(entry),
+                error=error,
+                error_type=type(exc).__name__,
+            )
 
     scenarios.sort(key=lambda scenario: scenario.meta.name.casefold())
     return scenarios

@@ -1,4 +1,5 @@
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 
 from app import main
@@ -338,3 +339,118 @@ def test_hud_state_invalid_time_raises():
 def test_hud_state_invalid_weather_raises():
     with pytest.raises(ValueError):
         HudState(location="x", time="08:00", weather="chuvoso")
+
+
+def test_load_scenario_yml_start_and_character(monkeypatch, tmp_path):
+    _write_scenario(
+        tmp_path,
+        "exemplo-escola",
+        starts={"default.yml": DEFAULT_START},
+        characters={"chloe.yml": CHLOE_YAML},
+    )
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.starts["default"].id == "default"
+    assert scenario.characters["chloe"].mind.feeling == "curiosa"
+
+
+def test_load_scenario_mixed_yaml_and_yml_starts(monkeypatch, tmp_path):
+    _write_scenario(
+        tmp_path,
+        "exemplo-escola",
+        starts={"default.yaml": DEFAULT_START, "rota-vilao.yml": VILLAIN_START},
+    )
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert set(scenario.starts) == {"default", "rota-vilao"}
+
+
+def test_load_scenario_duplicate_start_stem_raises(monkeypatch, tmp_path):
+    _write_scenario(
+        tmp_path,
+        "exemplo-escola",
+        starts={"default.yaml": DEFAULT_START, "default.yml": DEFAULT_START},
+    )
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    try:
+        load_scenario("exemplo-escola")
+        assert False, "expected ScenarioError"
+    except ScenarioError as exc:
+        assert "default" in exc.reason
+
+
+def test_load_scenario_duplicate_character_stem_raises(monkeypatch, tmp_path):
+    _write_scenario(
+        tmp_path,
+        "exemplo-escola",
+        characters={"chloe.yaml": CHLOE_YAML, "chloe.yml": CHLOE_YAML},
+    )
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    try:
+        load_scenario("exemplo-escola")
+        assert False, "expected ScenarioError"
+    except ScenarioError as exc:
+        assert "chloe" in exc.reason
+
+
+def test_list_scenarios_skips_non_scenario_error_and_emits_error_type(monkeypatch, tmp_path):
+    _write_scenario(tmp_path, "aa-valido")
+    _write_scenario(tmp_path, "bb-quebrado", scenario_yaml="name: Bb Quebrado\n")
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    broken_scenario_yaml_path = tmp_path / "bb-quebrado" / "scenario.yaml"
+
+    original_safe_load = yaml.safe_load
+
+    def _flaky_safe_load(raw):
+        if raw == broken_scenario_yaml_path.read_text(encoding="utf-8"):
+            raise RuntimeError("boom")
+        return original_safe_load(raw)
+
+    monkeypatch.setattr("app.scenario.yaml.safe_load", _flaky_safe_load)
+
+    events = []
+    monkeypatch.setattr("app.scenario.emit", lambda event, **props: events.append((event, props)))
+
+    result = list_scenarios()
+
+    assert [s.id for s in result] == ["aa-valido"]
+    assert events
+    event, props = events[0]
+    assert event == "scenario_invalid"
+    assert props["error_type"] == "RuntimeError"
+
+
+def test_list_scenarios_keyboard_interrupt_propagates(monkeypatch, tmp_path):
+    _write_scenario(tmp_path, "aa-valido")
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    def _raise_keyboard_interrupt(scenario_id):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("app.scenario.load_scenario", _raise_keyboard_interrupt)
+
+    with pytest.raises(KeyboardInterrupt):
+        list_scenarios()
+
+
+def test_scenario_error_reason_is_single_line_and_truncated(monkeypatch, tmp_path):
+    bad_character = "role: aluna\n"
+    scenario_path = _write_scenario(tmp_path, "exemplo-escola", characters={"chloe.yaml": bad_character})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    try:
+        load_scenario("exemplo-escola")
+        assert False, "expected ScenarioError"
+    except ScenarioError as exc:
+        assert "\n" not in exc.reason
+        assert len(exc.reason) <= 300
+        assert "erro(s)" in exc.reason
+        assert exc.details is not None
+        assert "\n" in exc.details

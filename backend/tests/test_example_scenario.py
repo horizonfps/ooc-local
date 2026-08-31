@@ -1,3 +1,6 @@
+from pathlib import Path
+
+import pytest
 from fastapi.testclient import TestClient
 
 from app import main
@@ -5,6 +8,14 @@ from app.hud import WEATHER_CODES
 from app.scenario import load_scenario
 
 EXPECTED_CHARACTER_IDS = {"chloe", "ashlee", "mika"}
+
+REPO_SCENARIOS = Path(__file__).resolve().parents[2] / "scenarios"
+
+
+@pytest.fixture(autouse=True)
+def _repo_scenarios(monkeypatch):
+    monkeypatch.delenv("OOC_SCENARIOS_DIR", raising=False)
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: REPO_SCENARIOS)
 
 
 def test_example_scenario_loads_without_exception():
@@ -66,6 +77,14 @@ def test_example_scenario_files_are_utf8_and_accented():
     for path in files:
         text = path.read_text(encoding="utf-8")
         assert any(char in accented_chars for char in text), f"{path} has no accented characters"
+
+
+def test_example_scenario_ignores_env_var_override(monkeypatch, tmp_path):
+    monkeypatch.setenv("OOC_SCENARIOS_DIR", str(tmp_path))
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert set(scenario.characters.keys()) == EXPECTED_CHARACTER_IDS
 
 
 def test_get_scenarios_route_includes_exemplo_escola():

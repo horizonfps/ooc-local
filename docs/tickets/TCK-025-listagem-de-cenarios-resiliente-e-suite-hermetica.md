@@ -1,7 +1,7 @@
 ---
 id: TCK-025
 title: Tornar a listagem de cenários resiliente e a suíte do cenário exemplo hermética
-status: ready
+status: in_review
 points: 3
 blockedBy: [TCK-019]
 files:
