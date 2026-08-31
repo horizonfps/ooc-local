@@ -120,7 +120,9 @@ export async function streamTurn(sessionId: string, message: string, h: TurnHand
     }
   } catch (err) {
     if (signal?.aborted) {
-      await reader.cancel()
+      // cancel() on an errored stream rejects with the stored error;
+      // an abort must resolve silently for every consumer
+      await reader.cancel().catch(() => {})
       return
     }
     throw err
