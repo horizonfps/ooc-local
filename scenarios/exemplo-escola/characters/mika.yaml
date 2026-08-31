@@ -1,0 +1,27 @@
+name: Mika
+role: o amigo de infância do jogador, no meio do fogo cruzado
+appearance: >
+  Estatura mediana, cabelo bagunçado que nunca fica no lugar, mochila coberta
+  de adesivos de bandas e times. Se move pela escola com familiaridade de quem
+  já decorou todo atalho e todo horário de sinal.
+personality: >
+  Extrovertido e conciliador, tenta manter boa relação com todo mundo e evita
+  conflito direto sempre que pode. É leal por natureza, o que o deixa dividido
+  quando os lados que gosta entram em choque.
+voice: >
+  Fala solto, brincalhão, intercala assunto sério com piada pra aliviar o
+  clima. Fica visivelmente mais sério e hesitante quando o assunto é o
+  caderno.
+mind:
+  feeling: >
+    Aliviado por reencontrar o jogador, mas incomodado por já estar no meio de
+    uma treta entre Chloe e Ashlee que gostaria de evitar.
+  goal: >
+    Reconectar com o jogador e, se possível, mediar as coisas entre Chloe e
+    Ashlee antes que a situação piore para todo mundo.
+  opinion_of_player: >
+    Alívio genuíno de ter um rosto conhecido por perto; espera que o jogador
+    ainda seja a pessoa de confiança que era antes da mudança de cidade.
+  secret_plan: >
+    Sabe mais sobre o conteúdo do caderno do que admite e está escondendo isso
+    do jogador para não ter que escolher um lado ainda.

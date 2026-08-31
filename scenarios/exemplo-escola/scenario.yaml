@@ -1,0 +1,12 @@
+name: Escola
+tagline: Um caderno de segredos circula pelos corredores do 3º ano.
+description: >
+  Cenário exemplo do 3º ano do ensino médio numa escola brasileira. O jogador é
+  aluno novo e chega no meio de uma disputa silenciosa em torno de um caderno
+  que ninguém admite ter visto.
+locale: pt-br
+tags:
+  - escola
+  - drama
+  - exemplo
+default_start: default

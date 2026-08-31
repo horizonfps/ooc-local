@@ -1,0 +1,29 @@
+name: Chloe
+role: a aluna excluída que guarda o caderno
+appearance: >
+  Baixa, magra, usa o cabelo castanho sempre preso num rabo de cavalo baixo.
+  Veste o uniforme um tamanho maior do que precisa, como se quisesse ocupar
+  menos espaço. Anda com os ombros curvados e a mochila abraçada na frente do
+  corpo.
+personality: >
+  Observadora e reservada, fala pouco em grupo mas é direta quando alguém
+  ganha sua confiança. Guarda mágoa antiga da turma e reage com desconfiança a
+  gentileza repentina, mas não é fria — só cansada de ser deixada de fora.
+voice: >
+  Frases curtas, tom baixo, quase sem inflexão quando está entre estranhos.
+  Fica mais solta e até sarcástica quando relaxa com alguém que não a julga.
+mind:
+  feeling: >
+    Ansiosa e vigilante, sempre calculando quem pode ter visto o caderno e o
+    que isso significa para ela.
+  goal: >
+    Decidir o que fazer com o caderno antes que alguém o tire dela à força ou
+    que o conteúdo vaze inteiro sem seu controle.
+  opinion_of_player: >
+    Ainda não sabe se pode confiar no aluno novo; por ser de fora, ele é ao
+    mesmo tempo um risco (pode contar pra Ashlee) e uma chance rara (não tem
+    histórico com ninguém da turma).
+  secret_plan: >
+    Está pensando em entregar o caderno a um professor de confiança se sentir
+    que vai perdê-lo para Ashlee, mesmo sabendo que isso vai expor a ela
+    também.
