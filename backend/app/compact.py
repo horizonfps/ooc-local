@@ -16,7 +16,7 @@ COMPACT_KEEP_TURNS = 9
 COMPACT_RESERVE_TOKENS = 700
 
 COMPACT_MAX_TOKENS = 400
-COMPACT_OPTIONS = GenerationOptions(max_tokens=COMPACT_MAX_TOKENS, temperature=0.2, timeout_s=25.0)
+COMPACT_OPTIONS = GenerationOptions(max_tokens=COMPACT_MAX_TOKENS, temperature=0.2, timeout_s=180.0)
 
 _PROMPT_TEMPLATES = {
     "pt-br": {

@@ -253,7 +253,7 @@ def test_provider_options_timeout_s_matches_construction():
     with_options = OpenAICompatProvider(_config().providers["local"], COMPACT_OPTIONS)
     without_options = OpenAICompatProvider(_config().providers["local"])
 
-    assert with_options.options.timeout_s == 25.0
+    assert with_options.options.timeout_s == 180.0
     assert without_options.options.timeout_s == 120.0
 
 
@@ -314,7 +314,7 @@ def test_timeout_reaches_httpx_client_from_provider_options(monkeypatch):
         provider_without_options.complete([ChatMessage(role="user", content="oi")], "m")
     )
 
-    assert captured_timeouts[0].read == 25.0
+    assert captured_timeouts[0].read == 180.0
     assert captured_timeouts[1].read == 120.0
 
 
