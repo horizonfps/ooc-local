@@ -1,7 +1,7 @@
 ---
 id: TCK-014
 title: Enviar o turno pelo input e receber a narração em streaming
-status: in_review
+status: done
 points: 5
 blockedBy: [TCK-006, TCK-012]
 files:
