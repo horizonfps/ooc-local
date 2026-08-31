@@ -10,5 +10,5 @@
   "contentGates": [],
   "isolation": { "strategy": "port", "portBase": 4000 },
   "integrationCheck": "node scripts/integration-check.mjs",
-  "notInstalled": ["merge-queue", "feature-flags", "observability"]
+  "notInstalled": ["merge-queue (indisponivel em repo pessoal; substituto: scripts/integration-check.mjs)"]
 }
