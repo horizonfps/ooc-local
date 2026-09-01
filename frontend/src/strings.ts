@@ -268,6 +268,7 @@ const en = {
   'builder.starts.delete.body': 'starts/{id}.yaml is removed when you save.',
   'builder.starts.delete.lastDisabled': 'A scenario needs at least one start.',
   'builder.starts.delete.defaultMoved': '{name} is the default start now.',
+  'builder.starts.itemInvalid': 'has a field to fix',
 
   // Game screen
   'game.documentTitle': '{scenario} — ooc-local',
@@ -586,6 +587,7 @@ const ptBr: Record<StringKey, string> = {
   'builder.starts.delete.body': 'starts/{id}.yaml é removido quando você salvar.',
   'builder.starts.delete.lastDisabled': 'Um cenário precisa de pelo menos um start.',
   'builder.starts.delete.defaultMoved': '{name} agora é o start padrão.',
+  'builder.starts.itemInvalid': 'tem campo para consertar',
 
   // Game screen
   'game.documentTitle': '{scenario} — ooc-local',

@@ -67,43 +67,45 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
   }
 
   for (const startId of startIds) {
+    const start = draft.starts[startId]
+    const startLabel = start.name.trim() || startId
+    const withStart = (label: string) => `${startLabel} — ${label}`
+
     if (!ID_RE.test(startId)) {
-      errors.push(error('starts', `starts.${startId}`, t('builder.field.label.startId'), t('builder.field.slugInvalid')))
+      errors.push(error('starts', `starts.${startId}`, withStart(t('builder.field.label.startId')), t('builder.field.slugInvalid')))
     }
 
-    const start = draft.starts[startId]
-
     if (!start.name.trim()) {
-      errors.push(error('starts', `starts.${startId}.name`, t('builder.starts.name'), t('builder.field.required')))
+      errors.push(error('starts', `starts.${startId}.name`, withStart(t('builder.starts.name')), t('builder.field.required')))
     } else if (start.name.length > 80) {
-      errors.push(error('starts', `starts.${startId}.name`, t('builder.starts.name'), t('builder.field.tooLong', { max: 80 })))
+      errors.push(error('starts', `starts.${startId}.name`, withStart(t('builder.starts.name')), t('builder.field.tooLong', { max: 80 })))
     }
 
     if (!start.prologue.trim()) {
-      errors.push(error('starts', `starts.${startId}.prologue`, t('builder.starts.prologue'), t('builder.field.required')))
+      errors.push(error('starts', `starts.${startId}.prologue`, withStart(t('builder.starts.prologue')), t('builder.field.required')))
     }
 
     if (!start.opening_scene.trim()) {
       errors.push(
-        error('starts', `starts.${startId}.opening_scene`, t('builder.starts.openingScene'), t('builder.field.required')),
+        error('starts', `starts.${startId}.opening_scene`, withStart(t('builder.starts.openingScene')), t('builder.field.required')),
       )
     }
 
     if (!start.hud.location.trim()) {
       errors.push(
-        error('starts', `starts.${startId}.hud.location`, t('builder.starts.hud.location'), t('builder.field.required')),
+        error('starts', `starts.${startId}.hud.location`, withStart(t('builder.starts.hud.location')), t('builder.field.required')),
       )
     }
 
     if (!TIME_RE.test(start.hud.time)) {
       errors.push(
-        error('starts', `starts.${startId}.hud.time`, t('builder.starts.hud.time'), t('builder.field.time.invalid')),
+        error('starts', `starts.${startId}.hud.time`, withStart(t('builder.starts.hud.time')), t('builder.field.time.invalid')),
       )
     }
 
     if (!WEATHER_CODES.includes(start.hud.weather)) {
       errors.push(
-        error('starts', `starts.${startId}.hud.weather`, t('builder.starts.hud.weather'), t('builder.field.weather.invalid')),
+        error('starts', `starts.${startId}.hud.weather`, withStart(t('builder.starts.hud.weather')), t('builder.field.weather.invalid')),
       )
     }
 
@@ -113,7 +115,7 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
           error(
             'starts',
             `starts.${startId}.suggestions.${index}`,
-            t('builder.starts.suggestions.item', { index: index + 1 }),
+            withStart(t('builder.starts.suggestions.item', { index: index + 1 })),
             t('builder.field.tooLong', { max: 120 }),
           ),
         )
@@ -127,7 +129,7 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
           error(
             'starts',
             `starts.${startId}.characters`,
-            t('builder.field.label.startCharacters'),
+            withStart(t('builder.field.label.startCharacters')),
             t('builder.validate.startUnknownCharacter', { start: startId, character: charId }),
           ),
         )

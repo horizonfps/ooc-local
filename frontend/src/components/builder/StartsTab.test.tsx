@@ -103,7 +103,7 @@ describe('StartsTab', () => {
     expect(starts['start-2']).toBeTruthy()
     expect(starts['start-2'].hud).toEqual(starts.default.hud)
     expect(starts['start-2'].prologue).toBe('')
-    const nameInput = document.getElementById('builder-field-starts.name') as HTMLInputElement
+    const nameInput = document.getElementById('builder-field-starts.start-2.name') as HTMLInputElement
     expect(nameInput.value).toBe('Second start')
   })
 
@@ -125,10 +125,10 @@ describe('StartsTab', () => {
     await user.click(screen.getByRole('button', { name: 'Second start0/3' }))
 
     await waitFor(() => {
-      const nameInput = document.getElementById('builder-field-starts.name')
+      const nameInput = document.getElementById('builder-field-starts.start-2.name')
       expect(nameInput).toHaveFocus()
     })
-    const nameInput = document.getElementById('builder-field-starts.name') as HTMLInputElement
+    const nameInput = document.getElementById('builder-field-starts.start-2.name') as HTMLInputElement
     expect(nameInput.value).toBe('Second start')
     expect(screen.getByText(t('builder.detail.selected', { name: 'Second start' }))).toBeInTheDocument()
 
@@ -168,6 +168,40 @@ describe('StartsTab', () => {
     expect(
       errors.some((e) => e.tab === 'starts' && e.field === 'starts.default.hud.time' && e.message === t('builder.field.time.invalid')),
     ).toBe(true)
+  })
+
+  it('marks a non-selected start with an error as invalid in the master list', () => {
+    const draft = baseDraft()
+    draft.starts['start-2'] = {
+      id: 'start-2',
+      name: '',
+      prologue: 'x',
+      opening_scene: 'y',
+      play_guide: null,
+      suggestions: [],
+      hud: { location: 'Yard', time: '09:00', weather: 'clear' },
+      characters: null,
+    }
+    render(<Harness initial={draft} />)
+
+    const item = screen.getByText(t('builder.starts.itemInvalid')).closest('li')
+    expect(item).toHaveClass('is-invalid')
+    expect(within(item as HTMLElement).getByText('start-2')).toBeInTheDocument()
+
+    const defaultItem = screen.getByText('Default start').closest('li')
+    expect(defaultItem).not.toHaveClass('is-invalid')
+  })
+
+  it('blanking play_guide down to whitespace saves it as null', () => {
+    const draft = baseDraft()
+    draft.starts.default.play_guide = 'A note.'
+    render(<Harness initial={draft} />)
+
+    const playGuide = screen.getByLabelText(new RegExp(t('builder.starts.playGuide')))
+    fireEvent.change(playGuide, { target: { value: '   ' } })
+
+    const starts = JSON.parse(screen.getByTestId('starts-debug').textContent ?? '{}')
+    expect(starts.default.play_guide).toBeNull()
   })
 
   it('a scenario without characters shows the cast empty hint that calls goToTab', async () => {

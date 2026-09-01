@@ -194,11 +194,18 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
   }
 
   function documentOf(): ScenarioDocument | null {
-    return state.status === 'ready' ? { revision: state.revision, ...state.draft } : null
+    if (state.status !== 'ready') return null
+    const starts = Object.fromEntries(
+      Object.entries(state.draft.starts).map(([id, start]) => [
+        id,
+        { ...start, suggestions: start.suggestions.filter((s) => s.trim() !== '') },
+      ]),
+    )
+    return { revision: state.revision, ...state.draft, starts }
   }
 
   function applySaveSuccess(sent: BuilderDraft, revision: string) {
-    setState((prev) => (prev.status === 'ready' ? { ...prev, loaded: sent, revision } : prev))
+    setState((prev) => (prev.status === 'ready' ? { ...prev, draft: sent, loaded: sent, revision } : prev))
     setSaveStatus('idle')
     setSaveErrorKind(null)
     setValidationAttempted(false)

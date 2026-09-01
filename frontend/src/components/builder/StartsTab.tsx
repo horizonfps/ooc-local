@@ -91,6 +91,10 @@ export function StartsTab(props: TabProps) {
     return errors.find((e) => e.tab === 'starts' && e.field === field)?.message ?? null
   }
 
+  function startHasError(id: string): boolean {
+    return errors.some((e) => e.tab === 'starts' && (e.field === `starts.${id}` || e.field.startsWith(`starts.${id}.`)))
+  }
+
   function selectStart(id: string) {
     if (id === selectedId) return
     setSelectedId(id)
@@ -242,8 +246,9 @@ export function StartsTab(props: TabProps) {
             <ul aria-labelledby="builder-starts-listLabel">
               {startIds.map((id) => {
                 const start = draft.starts[id]
+                const hasError = startHasError(id)
                 return (
-                  <li key={id} className={id === selectedId ? 'is-selected' : ''}>
+                  <li key={id} className={[id === selectedId ? 'is-selected' : '', hasError ? 'is-invalid' : ''].filter(Boolean).join(' ')}>
                     <button
                       type="button"
                       className="builder-starts-listItem"
@@ -255,6 +260,7 @@ export function StartsTab(props: TabProps) {
                         <span className="builder-starts-badge">{t('builder.starts.defaultBadge')}</span>
                       ) : null}
                       <span className="field-hint">{t('builder.field.counter', { count: start.suggestions.length, max: MAX_SUGGESTIONS })}</span>
+                      {hasError ? <span className="visually-hidden">{t('builder.starts.itemInvalid')}</span> : null}
                     </button>
                     <button
                       type="button"
@@ -278,17 +284,17 @@ export function StartsTab(props: TabProps) {
         {selectedStart ? (
           <div className="builder-starts-detail">
             <div className="builder-field">
-              <label htmlFor="builder-field-starts.name">{t('builder.starts.name')}</label>
+              <label htmlFor={`builder-field-starts.${selectedId}.name`}>{t('builder.starts.name')}</label>
               <input
-                id="builder-field-starts.name"
+                id={`builder-field-starts.${selectedId}.name`}
                 ref={nameFieldRef}
                 value={selectedStart.name}
                 onChange={(e) => updateStart(selectedId, { name: e.target.value })}
                 aria-invalid={fieldError(`starts.${selectedId}.name`) ? 'true' : undefined}
-                aria-describedby={fieldError(`starts.${selectedId}.name`) ? 'builder-field-starts.name-error' : undefined}
+                aria-describedby={fieldError(`starts.${selectedId}.name`) ? `builder-field-starts.${selectedId}.name-error` : undefined}
               />
               {fieldError(`starts.${selectedId}.name`) ? (
-                <p role="alert" id="builder-field-starts.name-error" className="field-error">
+                <p role="alert" id={`builder-field-starts.${selectedId}.name-error`} className="field-error">
                   {fieldError(`starts.${selectedId}.name`)}
                 </p>
               ) : null}
@@ -307,9 +313,9 @@ export function StartsTab(props: TabProps) {
             </div>
 
             <div className="builder-field">
-              <label htmlFor="builder-field-starts.prologue">{t('builder.starts.prologue')}</label>
+              <label htmlFor={`builder-field-starts.${selectedId}.prologue`}>{t('builder.starts.prologue')}</label>
               <textarea
-                id="builder-field-starts.prologue"
+                id={`builder-field-starts.${selectedId}.prologue`}
                 className="builder-field-textarea"
                 rows={8}
                 value={selectedStart.prologue}
@@ -317,27 +323,27 @@ export function StartsTab(props: TabProps) {
                 aria-invalid={fieldError(`starts.${selectedId}.prologue`) ? 'true' : undefined}
                 aria-describedby={
                   [
-                    fieldError(`starts.${selectedId}.prologue`) ? 'builder-field-starts.prologue-error' : null,
-                    'builder-field-starts.prologue-hint',
+                    fieldError(`starts.${selectedId}.prologue`) ? `builder-field-starts.${selectedId}.prologue-error` : null,
+                    `builder-field-starts.${selectedId}.prologue-hint`,
                   ]
                     .filter(Boolean)
                     .join(' ') || undefined
                 }
               />
-              <p className="field-hint" id="builder-field-starts.prologue-hint">
+              <p className="field-hint" id={`builder-field-starts.${selectedId}.prologue-hint`}>
                 {t('builder.starts.prologue.hint')}
               </p>
               {fieldError(`starts.${selectedId}.prologue`) ? (
-                <p role="alert" id="builder-field-starts.prologue-error" className="field-error">
+                <p role="alert" id={`builder-field-starts.${selectedId}.prologue-error`} className="field-error">
                   {fieldError(`starts.${selectedId}.prologue`)}
                 </p>
               ) : null}
             </div>
 
             <div className="builder-field">
-              <label htmlFor="builder-field-starts.opening_scene">{t('builder.starts.openingScene')}</label>
+              <label htmlFor={`builder-field-starts.${selectedId}.opening_scene`}>{t('builder.starts.openingScene')}</label>
               <textarea
-                id="builder-field-starts.opening_scene"
+                id={`builder-field-starts.${selectedId}.opening_scene`}
                 className="builder-field-textarea"
                 rows={6}
                 value={selectedStart.opening_scene}
@@ -345,36 +351,36 @@ export function StartsTab(props: TabProps) {
                 aria-invalid={fieldError(`starts.${selectedId}.opening_scene`) ? 'true' : undefined}
                 aria-describedby={
                   [
-                    fieldError(`starts.${selectedId}.opening_scene`) ? 'builder-field-starts.opening_scene-error' : null,
-                    'builder-field-starts.opening_scene-hint',
+                    fieldError(`starts.${selectedId}.opening_scene`) ? `builder-field-starts.${selectedId}.opening_scene-error` : null,
+                    `builder-field-starts.${selectedId}.opening_scene-hint`,
                   ]
                     .filter(Boolean)
                     .join(' ') || undefined
                 }
               />
-              <p className="field-hint" id="builder-field-starts.opening_scene-hint">
+              <p className="field-hint" id={`builder-field-starts.${selectedId}.opening_scene-hint`}>
                 {t('builder.starts.openingScene.hint')}
               </p>
               {fieldError(`starts.${selectedId}.opening_scene`) ? (
-                <p role="alert" id="builder-field-starts.opening_scene-error" className="field-error">
+                <p role="alert" id={`builder-field-starts.${selectedId}.opening_scene-error`} className="field-error">
                   {fieldError(`starts.${selectedId}.opening_scene`)}
                 </p>
               ) : null}
             </div>
 
             <div className="builder-field">
-              <label htmlFor="builder-field-starts.play_guide">
+              <label htmlFor={`builder-field-starts.${selectedId}.play_guide`}>
                 {t('builder.starts.playGuide')} <span className="field-hint">({t('common.optional')})</span>
               </label>
               <textarea
-                id="builder-field-starts.play_guide"
+                id={`builder-field-starts.${selectedId}.play_guide`}
                 className="builder-field-textarea"
                 rows={4}
                 value={selectedStart.play_guide ?? ''}
-                onChange={(e) => updateStart(selectedId, { play_guide: e.target.value === '' ? null : e.target.value })}
-                aria-describedby="builder-field-starts.play_guide-hint"
+                onChange={(e) => updateStart(selectedId, { play_guide: e.target.value.trim() === '' ? null : e.target.value })}
+                aria-describedby={`builder-field-starts.${selectedId}.play_guide-hint`}
               />
-              <p className="field-hint" id="builder-field-starts.play_guide-hint">
+              <p className="field-hint" id={`builder-field-starts.${selectedId}.play_guide-hint`}>
                 {t('builder.starts.playGuide.hint')}
               </p>
             </div>
@@ -424,44 +430,50 @@ export function StartsTab(props: TabProps) {
             <fieldset className="builder-field builder-starts-hud">
               <legend>{t('builder.starts.hud.legend')}</legend>
               <div className="builder-field">
-                <label htmlFor="builder-field-starts.hud.location">{t('builder.starts.hud.location')}</label>
+                <label htmlFor={`builder-field-starts.${selectedId}.hud.location`}>{t('builder.starts.hud.location')}</label>
                 <input
-                  id="builder-field-starts.hud.location"
+                  id={`builder-field-starts.${selectedId}.hud.location`}
                   value={selectedStart.hud.location}
                   onChange={(e) => updateHud(selectedId, { location: e.target.value })}
                   aria-invalid={fieldError(`starts.${selectedId}.hud.location`) ? 'true' : undefined}
-                  aria-describedby={fieldError(`starts.${selectedId}.hud.location`) ? 'builder-field-starts.hud.location-error' : undefined}
+                  aria-describedby={
+                    fieldError(`starts.${selectedId}.hud.location`) ? `builder-field-starts.${selectedId}.hud.location-error` : undefined
+                  }
                 />
                 {fieldError(`starts.${selectedId}.hud.location`) ? (
-                  <p role="alert" id="builder-field-starts.hud.location-error" className="field-error">
+                  <p role="alert" id={`builder-field-starts.${selectedId}.hud.location-error`} className="field-error">
                     {fieldError(`starts.${selectedId}.hud.location`)}
                   </p>
                 ) : null}
               </div>
               <div className="builder-field">
-                <label htmlFor="builder-field-starts.hud.time">{t('builder.starts.hud.time')}</label>
+                <label htmlFor={`builder-field-starts.${selectedId}.hud.time`}>{t('builder.starts.hud.time')}</label>
                 <input
-                  id="builder-field-starts.hud.time"
+                  id={`builder-field-starts.${selectedId}.hud.time`}
                   type="time"
                   value={selectedStart.hud.time}
                   onChange={(e) => updateHud(selectedId, { time: e.target.value })}
                   aria-invalid={fieldError(`starts.${selectedId}.hud.time`) ? 'true' : undefined}
-                  aria-describedby={fieldError(`starts.${selectedId}.hud.time`) ? 'builder-field-starts.hud.time-error' : undefined}
+                  aria-describedby={
+                    fieldError(`starts.${selectedId}.hud.time`) ? `builder-field-starts.${selectedId}.hud.time-error` : undefined
+                  }
                 />
                 {fieldError(`starts.${selectedId}.hud.time`) ? (
-                  <p role="alert" id="builder-field-starts.hud.time-error" className="field-error">
+                  <p role="alert" id={`builder-field-starts.${selectedId}.hud.time-error`} className="field-error">
                     {fieldError(`starts.${selectedId}.hud.time`)}
                   </p>
                 ) : null}
               </div>
               <div className="builder-field">
-                <label htmlFor="builder-field-starts.hud.weather">{t('builder.starts.hud.weather')}</label>
+                <label htmlFor={`builder-field-starts.${selectedId}.hud.weather`}>{t('builder.starts.hud.weather')}</label>
                 <select
-                  id="builder-field-starts.hud.weather"
+                  id={`builder-field-starts.${selectedId}.hud.weather`}
                   value={selectedStart.hud.weather}
                   onChange={(e) => updateHud(selectedId, { weather: e.target.value })}
                   aria-invalid={fieldError(`starts.${selectedId}.hud.weather`) ? 'true' : undefined}
-                  aria-describedby={fieldError(`starts.${selectedId}.hud.weather`) ? 'builder-field-starts.hud.weather-error' : undefined}
+                  aria-describedby={
+                    fieldError(`starts.${selectedId}.hud.weather`) ? `builder-field-starts.${selectedId}.hud.weather-error` : undefined
+                  }
                 >
                   {WEATHER_CODES.map((code) => (
                     <option key={code} value={code}>
@@ -470,7 +482,7 @@ export function StartsTab(props: TabProps) {
                   ))}
                 </select>
                 {fieldError(`starts.${selectedId}.hud.weather`) ? (
-                  <p role="alert" id="builder-field-starts.hud.weather-error" className="field-error">
+                  <p role="alert" id={`builder-field-starts.${selectedId}.hud.weather-error`} className="field-error">
                     {fieldError(`starts.${selectedId}.hud.weather`)}
                   </p>
                 ) : null}
