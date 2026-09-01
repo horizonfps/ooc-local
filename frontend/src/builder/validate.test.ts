@@ -13,7 +13,7 @@ function draft(overrides: Partial<BuilderDraft> = {}): BuilderDraft {
       default_start: 'default',
       world_mode: 'guided',
     },
-    world: '',
+    world: '## Universe\n\nA quiet town.',
     starts: {
       default: {
         id: 'default',

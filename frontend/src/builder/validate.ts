@@ -1,7 +1,16 @@
 import { t } from '../i18n'
 import type { BuilderDraft, BuilderTab, ValidationError } from '../screens/BuilderEditorScreen'
+import { parseGuidedWorld } from './worldMarkdown'
 
 const ID_RE = /^[a-z0-9-]+$/
+
+function hasUnbalancedVariable(text: string): boolean {
+  return text.split('\n').some((line) => {
+    const opens = (line.match(/\{\{/g) ?? []).length
+    const closes = (line.match(/\}\}/g) ?? []).length
+    return opens > closes
+  })
+}
 
 export function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true
@@ -91,6 +100,19 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
   }
   if (draft.meta.tags.length > 12) {
     errors.push(error('identity', 'tags', t('builder.identity.tags'), t('builder.identity.tags.max')))
+  }
+
+  if (!draft.world.trim()) {
+    errors.push(error('world', 'world', t('builder.world.custom.label'), t('builder.field.required')))
+  } else if (draft.meta.world_mode === 'guided') {
+    const guided = parseGuidedWorld(draft.world)
+    if (!guided || !guided.universe.trim()) {
+      errors.push(error('world', 'universe', t('builder.world.universe'), t('builder.field.required')))
+    }
+  }
+
+  if (hasUnbalancedVariable(draft.world)) {
+    errors.push(error('world', 'world', t('builder.world.custom.label'), t('builder.world.variables.unbalanced')))
   }
 
   return errors
