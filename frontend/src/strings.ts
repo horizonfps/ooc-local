@@ -339,6 +339,20 @@ const en = {
   'builder.media.removed': '{name} removed',
   'builder.media.remove.title': 'Remove this image?',
   'builder.media.remove.body': "{path} is deleted from disk. There's no undo.",
+  'builder.media.sprites.orphans.title': 'Files with no matching emotion',
+  'builder.media.sprites.orphans.body':
+    "These images are in the folder but the character doesn't declare the emotion. The game never shows them.",
+  'builder.media.sprites.orphans.declare': 'Declare {emotion}',
+  'builder.media.sprites.orphans.folderTitle': 'Folders with no character',
+  'builder.media.backgrounds.heading': 'Backgrounds',
+  'builder.media.backgrounds.add': 'Add a location',
+  'builder.media.backgrounds.addLabel': 'Location key',
+  'builder.media.backgrounds.addHint': 'Becomes media/backgrounds/{slug}.png and matches [BG:{slug}].',
+  'builder.media.backgrounds.removeSlot': 'Remove the empty slot {location}',
+  'builder.media.bg.alt': 'Background of {location}',
+  'builder.media.bg.upload': 'Upload the background for {location}',
+  'builder.media.bg.remove': 'Remove the background of {location}',
+  'builder.media.bg.fromStart': 'Location of the start {start}',
 
   // Game screen
   'game.documentTitle': '{scenario} — ooc-local',
@@ -728,6 +742,20 @@ const ptBr: Record<StringKey, string> = {
   'builder.media.removed': '{name} removido',
   'builder.media.remove.title': 'Remover esta imagem?',
   'builder.media.remove.body': '{path} é apagado do disco. Não tem como desfazer.',
+  'builder.media.sprites.orphans.title': 'Arquivos sem emoção correspondente',
+  'builder.media.sprites.orphans.body':
+    'Estas imagens estão na pasta mas o personagem não declara a emoção. O jogo nunca as mostra.',
+  'builder.media.sprites.orphans.declare': 'Declarar {emotion}',
+  'builder.media.sprites.orphans.folderTitle': 'Pastas sem personagem',
+  'builder.media.backgrounds.heading': 'Backgrounds',
+  'builder.media.backgrounds.add': 'Adicionar um local',
+  'builder.media.backgrounds.addLabel': 'Chave do local',
+  'builder.media.backgrounds.addHint': 'Vira media/backgrounds/{slug}.png e casa com [BG:{slug}].',
+  'builder.media.backgrounds.removeSlot': 'Remover o espaço vazio {location}',
+  'builder.media.bg.alt': 'Background de {location}',
+  'builder.media.bg.upload': 'Enviar o background de {location}',
+  'builder.media.bg.remove': 'Remover o background de {location}',
+  'builder.media.bg.fromStart': 'Local do start {start}',
 
   // Game screen
   'game.documentTitle': '{scenario} — ooc-local',
