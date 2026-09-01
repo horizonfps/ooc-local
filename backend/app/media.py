@@ -203,8 +203,9 @@ def _relative_path(kind: str, key: str, character: str | None, ext: str) -> str:
     return f"cover.{ext}"
 
 
-def _validate_media_target(kind: str, key: str, character: str | None) -> str:
+def _validate_media_target(scenario_id: str, kind: str, key: str, character: str | None) -> str:
     """Validates kind/character shape and the resolved key, returns the effective key."""
+    character = character or None
     if kind not in MEDIA_KINDS:
         raise HTTPException(status_code=422, detail="invalid kind")
     if kind == "sprite" and not character:
@@ -214,6 +215,7 @@ def _validate_media_target(kind: str, key: str, character: str | None) -> str:
 
     effective_key = "cover" if kind == "cover" else key
     if not KEY_RE.match(effective_key) or (character is not None and not KEY_RE.match(character)):
+        emit("media_rejected", scenario_id=scenario_id, kind=kind, reason="key")
         raise HTTPException(status_code=422, detail="invalid key")
     return effective_key
 
@@ -232,7 +234,7 @@ async def post_media_route(
         raise HTTPException(status_code=503, detail="builder disabled by flag")
 
     _require_scenario(scenario_id)
-    effective_key = _validate_media_target(kind, key, character)
+    effective_key = _validate_media_target(scenario_id, kind, key, character)
 
     data = bytearray()
     while True:
@@ -290,7 +292,7 @@ async def delete_media_route(
         raise HTTPException(status_code=503, detail="builder disabled by flag")
 
     _require_scenario(scenario_id)
-    effective_key = _validate_media_target(kind, key, character)
+    effective_key = _validate_media_target(scenario_id, kind, key, character)
 
     space_dir = _space_dir(scenario_id, kind, character)
     removed = False

@@ -223,3 +223,17 @@ def test_builder_disabled_by_flag_returns_503_and_disk_untouched(client, scenari
 def test_scenario_id_with_traversal_is_404_or_422(client, scenarios_root):
     response = _upload(client, "..%2F..%2Fetc", kind="cover")
     assert response.status_code in (404, 422)
+
+
+def test_delete_background_with_empty_character_query_is_204(client, scenarios_root):
+    scenario_dir = _write_scenario(scenarios_root, 'escola')
+    backgrounds_dir = scenario_dir / 'media' / 'backgrounds'
+    backgrounds_dir.mkdir(parents=True)
+    (backgrounds_dir / 'patio.png').write_bytes(PNG_BYTES)
+
+    response = client.delete(
+        '/api/builder/scenarios/escola/media',
+        params={'kind': 'background', 'key': 'patio', 'character': ''},
+    )
+    assert response.status_code == 204
+    assert not (backgrounds_dir / 'patio.png').exists()
