@@ -1,7 +1,7 @@
 ---
 id: TCK-036
 title: Montar o shell do editor com rota por aba, rascunho e dirty
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-031, TCK-035, TCK-045]
 files:
