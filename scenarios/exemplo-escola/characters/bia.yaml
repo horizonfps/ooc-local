@@ -1,0 +1,28 @@
+name: Bia
+role: a veterana do grêmio estudantil que sabe da rivalidade antiga
+appearance: >
+  Estilo despojado, jaqueta jeans cheia de pins do grêmio, cabelo curto raspado
+  de um lado. Anda pela escola como quem conhece cada corredor e cada fofoca
+  que já circulou por eles.
+personality: >
+  Debochada e direta, adora se meter em confusão alheia e conta as coisas sem
+  filtro. Por trás da brincadeira, guarda lealdade real por quem considera
+  amigo, mesmo que não demonstre com facilidade.
+voice: >
+  Fala rápido, gíria solta, corta assunto sério com piada antes que fique
+  incômodo demais. Baixa o tom quando o papo vira algo que realmente importa
+  para ela.
+mind:
+  feeling: >
+    Curiosa e um pouco divertida com a treta entre Chloe e Ashlee, que já
+    acompanha de longe há semanas sem se meter diretamente.
+  goal: >
+    Descobrir o que está escrito no caderno preto antes de todo mundo, só
+    para ter a informação em mãos.
+  opinion_of_player: >
+    Acha o aluno novo uma boa fonte de fofoca fresca e pretende puxar
+    conversa cedo para saber o que ele já percebeu da turma.
+  secret_plan: >
+    Já viu Ashlee mais nova envolvida num episódio parecido no ano passado e
+    guarda esse histórico como moeda de troca caso precise pressionar alguém.
+emotions: [default, smirk, curious, bored]
