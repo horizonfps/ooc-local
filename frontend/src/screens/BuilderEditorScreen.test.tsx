@@ -15,7 +15,7 @@ const DOCUMENT = {
     default_start: 'default',
     world_mode: 'guided',
   },
-  world: 'A dusty old school.',
+  world: '## Universe\n\nA dusty old school.',
   starts: {
     default: {
       id: 'default',
@@ -98,9 +98,9 @@ describe('BuilderEditorScreen', () => {
   it('marks dirty on onChange from a tab placeholder and clears it when undone', async () => {
     const user = userEvent.setup()
     mockFetch(() => jsonResponse(DOCUMENT))
-    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
     await user.click(editButton)
     expect(screen.getByText(t('builder.editor.dirty'))).toBeInTheDocument()
 
@@ -141,13 +141,13 @@ describe('BuilderEditorScreen', () => {
   it('keeps the draft when the tab prop changes', async () => {
     const user = userEvent.setup()
     mockFetch(() => jsonResponse(DOCUMENT))
-    const { rerender } = render(<BuilderEditorScreen scenarioId="school" tab="world" />)
+    const { rerender } = render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
     await user.click(editButton)
     expect(screen.getByText(t('builder.editor.dirty'))).toBeInTheDocument()
 
-    rerender(<BuilderEditorScreen scenarioId="school" tab="characters" />)
+    rerender(<BuilderEditorScreen scenarioId="school" tab="starts" />)
     expect(await screen.findByText(t('builder.editor.dirty'))).toBeInTheDocument()
   })
 
@@ -201,9 +201,9 @@ describe('BuilderEditorScreen', () => {
       return jsonResponse(DOCUMENT)
     })
     vi.stubGlobal('fetch', fetchMock)
-    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
     await user.click(editButton)
     expect(screen.getByText(t('builder.editor.dirty'))).toBeInTheDocument()
 
@@ -221,9 +221,9 @@ describe('BuilderEditorScreen', () => {
       () => jsonResponse(DOCUMENT),
       () => jsonResponse({ revision: 'rev-2' }),
     )
-    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
     await user.click(editButton)
     expect(screen.getByText(t('builder.editor.dirty'))).toBeInTheDocument()
 
@@ -250,9 +250,9 @@ describe('BuilderEditorScreen', () => {
       return jsonResponse(DOCUMENT)
     })
     vi.stubGlobal('fetch', fetchMock)
-    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
     await user.click(editButton)
     await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
 
@@ -271,9 +271,9 @@ describe('BuilderEditorScreen', () => {
       () => jsonResponse({ detail: 'builder disabled by flag' }, 503),
     )
     vi.stubGlobal('fetch', fetchMock)
-    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
     await user.click(editButton)
     await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
 
@@ -289,9 +289,9 @@ describe('BuilderEditorScreen', () => {
       () => jsonResponse({ detail: 'boom' }, 500),
     )
     vi.stubGlobal('fetch', fetchMock)
-    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
     await user.click(editButton)
     await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
 
@@ -303,9 +303,9 @@ describe('BuilderEditorScreen', () => {
     const user = userEvent.setup()
     const invalidDocument = { ...DOCUMENT, starts: {} }
     mockFetch(() => jsonResponse(invalidDocument))
-    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
     await user.click(editButton)
     await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
 
@@ -320,9 +320,9 @@ describe('BuilderEditorScreen', () => {
   it('asks for confirmation before reloading a dirty draft, and reloads on confirm', async () => {
     const user = userEvent.setup()
     const fetchMock = mockFetch(() => jsonResponse(DOCUMENT))
-    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
     await user.click(editButton)
     await user.click(screen.getByRole('button', { name: t('builder.editor.reload') }))
 

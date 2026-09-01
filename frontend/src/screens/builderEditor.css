@@ -442,3 +442,70 @@
     justify-content: center;
   }
 }
+
+.builder-world-tab {
+  display: flex;
+  flex-direction: column;
+}
+
+.builder-world-mode-toggle {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.builder-world-mode-toggle button {
+  min-height: 44px;
+  padding: 0 1rem;
+  border-radius: 8px;
+  border: 1px solid #33363f;
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+.builder-world-mode-toggle button[aria-checked='true'] {
+  border-color: var(--fg);
+  font-weight: 600;
+}
+
+.builder-world-fallback {
+  border: 1px solid #33363f;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.builder-world-fallback-title {
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+}
+
+.builder-world-custom-textarea {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+}
+
+.builder-world-variables-warning {
+  margin-bottom: 0.75rem;
+}
+
+.builder-world-variables {
+  border: 1px solid #33363f;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+
+.builder-world-variables ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.builder-world-variables li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
