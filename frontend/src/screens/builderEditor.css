@@ -850,3 +850,34 @@
     align-items: stretch;
   }
 }
+
+.builder-powerTiers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.builder-powerTiers-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.5rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px dashed var(--border, #444);
+  border-radius: 6px;
+}
+
+.builder-powerTiers-rowLabel {
+  min-width: 5.5rem;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.builder-powerTiers-chip {
+  cursor: grab;
+  user-select: none;
+}
+
+.builder-powerTiers button {
+  align-self: flex-start;
+}

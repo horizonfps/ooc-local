@@ -50,7 +50,7 @@ class Character(BaseModel):
     voice: str
     mind: CharacterMind
     sprite: str | None = None
-    anchor: bool = False
+    power_tier: int | None = Field(default=None, ge=1)
     emotions: list[str] = Field(default_factory=lambda: ["default"])
 
     @field_validator("emotions")

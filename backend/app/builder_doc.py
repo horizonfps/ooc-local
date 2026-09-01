@@ -234,7 +234,8 @@ def _serialize_character(character: Character) -> bytes:
     data["mind"] = mind
     if character.sprite is not None:
         data["sprite"] = character.sprite
-    data["anchor"] = character.anchor
+    if character.power_tier is not None:
+        data["power_tier"] = character.power_tier
     data["emotions"] = character.emotions
     return _dump_yaml(data)
 

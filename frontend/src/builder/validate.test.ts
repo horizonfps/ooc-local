@@ -36,7 +36,7 @@ function draft(overrides: Partial<BuilderDraft> = {}): BuilderDraft {
         voice: 'Warm, chatty.',
         mind: { feeling: 'Content', goal: 'Help the player settle in', opinion_of_player: null, secret_plan: null },
         sprite: null,
-        anchor: false,
+        power_tier: null,
         emotions: ['default'],
       },
     },

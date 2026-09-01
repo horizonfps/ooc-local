@@ -457,24 +457,24 @@ def test_scenario_error_reason_is_single_line_and_truncated(monkeypatch, tmp_pat
         assert "\n" in exc.details
 
 
-def test_character_emotions_and_anchor_load(monkeypatch, tmp_path):
-    character = CHLOE_YAML + "anchor: true\nemotions: [default, sad, angry, smile]\n"
+def test_character_emotions_and_power_tier_load(monkeypatch, tmp_path):
+    character = CHLOE_YAML + "power_tier: 2\nemotions: [default, sad, angry, smile]\n"
     _write_scenario(tmp_path, "exemplo-escola", characters={"chloe.yaml": character})
     monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
 
     scenario = load_scenario("exemplo-escola")
 
-    assert scenario.characters["chloe"].anchor is True
+    assert scenario.characters["chloe"].power_tier == 2
     assert scenario.characters["chloe"].emotions == ["default", "sad", "angry", "smile"]
 
 
-def test_character_emotions_and_anchor_default(monkeypatch, tmp_path):
+def test_character_emotions_and_power_tier_default(monkeypatch, tmp_path):
     _write_scenario(tmp_path, "exemplo-escola")
     monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
 
     scenario = load_scenario("exemplo-escola")
 
-    assert scenario.characters["chloe"].anchor is False
+    assert scenario.characters["chloe"].power_tier is None
     assert scenario.characters["chloe"].emotions == ["default"]
 
 

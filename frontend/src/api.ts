@@ -137,7 +137,7 @@ export type CharacterDoc = {
   voice: string
   mind: CharacterMind
   sprite: string | null
-  anchor: boolean
+  power_tier: number | null
   emotions: string[]
 }
 

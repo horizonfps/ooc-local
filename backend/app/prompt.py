@@ -6,7 +6,7 @@ from app.hud import HudState
 from app.media import scan_media
 from app.scenario import Character, LoadedScenario, StartConfig
 
-MASTER_PROMPT_VERSION = 5
+MASTER_PROMPT_VERSION = 6
 
 WEATHER_LABELS: dict[str, dict[str, str]] = {
     "pt-br": {
@@ -55,6 +55,7 @@ _TEMPLATES = {
         "characters_header": "## PERSONAGENS EM CENA",
         "no_characters": "Nenhum NPC em cena no momento.",
         "role_label": "Papel",
+        "tier_label": "Tier de poder (1 é o mais forte)",
         "personality_label": "Personalidade",
         "voice_label": "Voz",
         "appearance_label": "Aparência",
@@ -110,6 +111,7 @@ _TEMPLATES = {
         "characters_header": "## CHARACTERS IN SCENE",
         "no_characters": "No NPC is in scene right now.",
         "role_label": "Role",
+        "tier_label": "Power tier (1 is the strongest)",
         "personality_label": "Personality",
         "voice_label": "Voice",
         "appearance_label": "Appearance",
@@ -161,6 +163,10 @@ def _format_character(character: Character, template: dict[str, str]) -> str:
     lines = [
         f"### {character.name}",
         f"{template['role_label']}: {character.role}",
+    ]
+    if character.power_tier is not None:
+        lines.append(f"{template['tier_label']}: {character.power_tier}")
+    lines += [
         f"{template['appearance_label']}: {character.appearance}",
         f"{template['personality_label']}: {character.personality}",
         f"{template['voice_label']}: {character.voice}",

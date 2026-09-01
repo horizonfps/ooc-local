@@ -40,7 +40,7 @@ function baseDraft(): BuilderDraft {
         voice: '',
         mind: { feeling: '', goal: '', opinion_of_player: null, secret_plan: null },
         sprite: null,
-        anchor: false,
+        power_tier: null,
         emotions: [],
       },
     },

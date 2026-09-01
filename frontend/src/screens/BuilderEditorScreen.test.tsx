@@ -37,7 +37,7 @@ const DOCUMENT = {
       voice: 'Slow, deliberate.',
       mind: { feeling: 'Calm', goal: 'Guide the player', opinion_of_player: null, secret_plan: null },
       sprite: null,
-      anchor: false,
+      power_tier: null,
       emotions: ['default'],
     },
   },

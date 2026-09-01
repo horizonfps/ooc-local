@@ -28,7 +28,7 @@ function baseDraft(): BuilderDraft {
         voice: 'Short sentences.',
         mind: { feeling: 'Bored', goal: 'Finish the round', opinion_of_player: null, secret_plan: null },
         sprite: null,
-        anchor: false,
+        power_tier: null,
         emotions: ['default', 'happy'],
       },
     },
@@ -312,7 +312,7 @@ describe('MediaTab', () => {
       voice: 'Formal.',
       mind: { feeling: 'Tired', goal: 'Grade papers', opinion_of_player: null, secret_plan: null },
       sprite: 'luca',
-      anchor: false,
+      power_tier: null,
       emotions: ['default', 'happy'],
     }
     draft.characters.luca.sprite = 'luca'

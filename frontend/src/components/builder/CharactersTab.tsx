@@ -35,7 +35,7 @@ function newCharacter(): CharacterDoc {
     voice: '',
     mind: { feeling: '', goal: '', opinion_of_player: null, secret_plan: null },
     sprite: null,
-    anchor: false,
+    power_tier: null,
     emotions: ['default'],
   }
 }
@@ -58,6 +58,11 @@ export function CharactersTab(props: TabProps) {
   const [emotionInput, setEmotionInput] = useState('')
   const [emotionError, setEmotionError] = useState<string | null>(null)
   const [emotionNotice, setEmotionNotice] = useState('')
+
+  const maxAssignedTier = characterIds.reduce((max, id) => Math.max(max, draft.characters[id].power_tier ?? 0), 0)
+  const [tierFloor, setTierFloor] = useState(0)
+  const tierCount = Math.max(maxAssignedTier, tierFloor)
+  const [dragId, setDragId] = useState<string | null>(null)
 
   const nameFieldRef = useRef<HTMLInputElement>(null)
   const createDialogRef = useRef<HTMLDialogElement>(null)
@@ -217,6 +222,41 @@ export function CharactersTab(props: TabProps) {
     }
   }
 
+  function handleTierDrop(event: React.DragEvent, tier: number | null) {
+    event.preventDefault()
+    const id = event.dataTransfer.getData('text/plain') || dragId
+    setDragId(null)
+    if (!id || !(id in draft.characters)) return
+    if (draft.characters[id].power_tier === tier) return
+    updateCharacter(id, { power_tier: tier })
+    const name = draft.characters[id].name || id
+    setAnnouncement(
+      tier === null
+        ? t('builder.characters.powerTiers.movedOut', { name })
+        : t('builder.characters.powerTiers.moved', { name, tier }),
+    )
+  }
+
+  function tierChip(id: string) {
+    const character = draft.characters[id]
+    return (
+      <span
+        role="listitem"
+        key={id}
+        className="builder-tag-chip builder-powerTiers-chip"
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData('text/plain', id)
+          e.dataTransfer.effectAllowed = 'move'
+          setDragId(id)
+        }}
+        onDragEnd={() => setDragId(null)}
+      >
+        {character.name || id}
+      </span>
+    )
+  }
+
   function removeEmotion(id: string, emotion: string) {
     if (emotion === 'default') return
     const character = draft.characters[id]
@@ -304,7 +344,9 @@ export function CharactersTab(props: TabProps) {
                         <span className="builder-characters-listItemName">{character.name || id}</span>
                         <span className="builder-characters-listItemRole">{character.role}</span>
                       </span>
-                      {character.anchor ? <span className="builder-starts-badge">{t('builder.characters.anchorBadge')}</span> : null}
+                      {character.power_tier !== null ? (
+                        <span className="builder-starts-badge">{t('builder.characters.tierBadge', { tier: character.power_tier })}</span>
+                      ) : null}
                       {hasError ? <span className="visually-hidden">{t('builder.starts.itemInvalid')}</span> : null}
                     </button>
                     <button
@@ -547,17 +589,26 @@ export function CharactersTab(props: TabProps) {
             </div>
 
             <div className="builder-field">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={selectedCharacter.anchor}
-                  onChange={(e) => updateCharacter(selectedId, { anchor: e.target.checked })}
-                  aria-describedby={`builder-field-characters.${selectedId}.anchor-hint`}
-                />
-                {t('builder.characters.anchor')}
+              <label htmlFor={`builder-field-characters.${selectedId}.power_tier`}>
+                {t('builder.characters.tier')} <span className="field-hint">({t('common.optional')})</span>
               </label>
-              <p className="field-hint" id={`builder-field-characters.${selectedId}.anchor-hint`}>
-                {t('builder.characters.anchor.hint')}
+              <select
+                id={`builder-field-characters.${selectedId}.power_tier`}
+                value={selectedCharacter.power_tier ?? ''}
+                onChange={(e) =>
+                  updateCharacter(selectedId, { power_tier: e.target.value === '' ? null : Number(e.target.value) })
+                }
+                aria-describedby={`builder-field-characters.${selectedId}.power_tier-hint`}
+              >
+                <option value="">{t('builder.characters.tier.none')}</option>
+                {Array.from({ length: tierCount + 1 }, (_, i) => i + 1).map((tier) => (
+                  <option key={tier} value={tier}>
+                    {t('builder.characters.powerTiers.tier', { tier })}
+                  </option>
+                ))}
+              </select>
+              <p className="field-hint" id={`builder-field-characters.${selectedId}.power_tier-hint`}>
+                {t('builder.characters.tier.hint')}
               </p>
             </div>
 
@@ -627,6 +678,42 @@ export function CharactersTab(props: TabProps) {
         ) : null}
       </div>
       )}
+
+      {characterIds.length > 0 ? (
+        <fieldset className="builder-field builder-powerTiers">
+          <legend>{t('builder.characters.powerTiers.legend')}</legend>
+          <p className="field-hint">{t('builder.characters.powerTiers.hint')}</p>
+
+          <div
+            className="builder-powerTiers-row builder-powerTiers-unranked"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => handleTierDrop(e, null)}
+          >
+            <span className="builder-powerTiers-rowLabel">{t('builder.characters.powerTiers.unranked')}</span>
+            <div role="list" className="builder-tags-list">
+              {characterIds.filter((id) => draft.characters[id].power_tier === null).map(tierChip)}
+            </div>
+          </div>
+
+          {Array.from({ length: tierCount }, (_, i) => i + 1).map((tier) => (
+            <div
+              key={tier}
+              className="builder-powerTiers-row"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => handleTierDrop(e, tier)}
+            >
+              <span className="builder-powerTiers-rowLabel">{t('builder.characters.powerTiers.tier', { tier })}</span>
+              <div role="list" className="builder-tags-list">
+                {characterIds.filter((id) => draft.characters[id].power_tier === tier).map(tierChip)}
+              </div>
+            </div>
+          ))}
+
+          <button type="button" onClick={() => setTierFloor(tierCount + 1)}>
+            {t('builder.characters.powerTiers.add')}
+          </button>
+        </fieldset>
+      ) : null}
 
       <dialog
         ref={createDialogRef}

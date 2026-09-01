@@ -40,7 +40,7 @@ function baseDraft(): BuilderDraft {
         voice: 'Short sentences.',
         mind: { feeling: 'Bored', goal: 'Finish the round', opinion_of_player: null, secret_plan: null },
         sprite: null,
-        anchor: false,
+        power_tier: null,
         emotions: ['default'],
       },
     },
@@ -89,7 +89,7 @@ describe('CharactersTab', () => {
       voice: 'Fast talker.',
       mind: { feeling: 'Nervous', goal: 'Pass the exam', opinion_of_player: 'Curious about them', secret_plan: 'Skip class' },
       sprite: 'mira',
-      anchor: false,
+      power_tier: null,
       emotions: ['default'],
     })
   })
@@ -110,12 +110,16 @@ describe('CharactersTab', () => {
     expect(within(defaultChip).queryByRole('button')).toBeNull()
   })
 
-  it('marking anchor shows the badge in the list', async () => {
+  it('setting a power tier shows the badge in the list', async () => {
     const user = userEvent.setup()
     render(<Harness initial={baseDraft()} />)
 
-    await user.click(screen.getByLabelText(t('builder.characters.anchor')))
-    expect(screen.getByText(t('builder.characters.anchorBadge'))).toBeInTheDocument()
+    const tierSelect = screen.getByLabelText(new RegExp(t('builder.characters.tier')))
+    await user.selectOptions(tierSelect, '1')
+
+    expect(screen.getByText(t('builder.characters.tierBadge', { tier: 1 }))).toBeInTheDocument()
+    const characters = JSON.parse(screen.getByTestId('characters-debug').textContent ?? '{}')
+    expect(characters.luca.power_tier).toBe(1)
   })
 
   it('a duplicate emotion is ignored and an invalid one is rejected', async () => {
@@ -194,7 +198,7 @@ describe('CharactersTab', () => {
       voice: '',
       mind: { feeling: '', goal: '', opinion_of_player: null, secret_plan: null },
       sprite: null,
-      anchor: false,
+      power_tier: null,
       emotions: ['default'],
     }
     const errors = validateDraft(draft)
@@ -228,7 +232,7 @@ describe('CharactersTab', () => {
       voice: 'z',
       mind: { feeling: 'x', goal: 'y', opinion_of_player: null, secret_plan: null },
       sprite: null,
-      anchor: false,
+      power_tier: null,
       emotions: ['default', 'smile'],
     }
     render(<Harness initial={draft} />)
@@ -280,7 +284,7 @@ describe('CharactersTab', () => {
       voice: 'z',
       mind: { feeling: 'x', goal: 'y', opinion_of_player: null, secret_plan: null },
       sprite: null,
-      anchor: false,
+      power_tier: null,
       emotions: ['default'],
     }
     render(<Harness initial={draft} />)

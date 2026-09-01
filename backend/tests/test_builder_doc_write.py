@@ -38,7 +38,6 @@ voice: animada
 mind:
   feeling: curiosa
   goal: descobrir segredo
-anchor: false
 emotions:
 - default
 """
@@ -120,7 +119,7 @@ def test_put_adding_character_writes_file_with_canonical_order_and_accents(clien
         "voice": "baixinha",
         "mind": {"feeling": "ansiosa", "goal": "se encaixar"},
         "sprite": None,
-        "anchor": False,
+        "power_tier": 1,
         "emotions": ["default"],
     }
 
