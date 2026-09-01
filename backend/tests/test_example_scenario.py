@@ -59,13 +59,33 @@ def test_example_scenario_characters_have_complete_mind():
 def test_example_scenario_world_word_count_within_budget():
     scenario = load_scenario("exemplo-escola")
     word_count = len(scenario.world.split())
-    assert 300 <= word_count <= 600
+    assert 250 <= word_count <= 600
 
 
 def test_example_scenario_prologue_word_count_within_budget():
     scenario = load_scenario("exemplo-escola")
     word_count = len(scenario.starts["default"].prologue.split())
     assert 150 <= word_count <= 300
+
+
+def test_example_scenario_default_start_conflict_and_mission_word_count_within_budget():
+    scenario = load_scenario("exemplo-escola")
+    start = scenario.starts["default"]
+    word_count = len(start.conflict.split()) + len(start.mission.split())
+    assert 100 <= word_count <= 300
+
+
+def test_example_scenario_default_start_conflict_and_mission_present():
+    scenario = load_scenario("exemplo-escola")
+    start = scenario.starts["default"]
+    assert start.conflict is not None
+    assert start.mission is not None
+    assert len(start.conflict.split()) > 40
+    assert len(start.mission.split()) > 40
+    assert "Conflito central" not in scenario.world
+    assert "Papel do jogador" not in scenario.world
+    assert "Tom de narração" in scenario.world
+    assert "Regras do mundo" in scenario.world
 
 
 def test_example_scenario_files_are_utf8_and_accented():

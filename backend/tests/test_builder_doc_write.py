@@ -134,6 +134,52 @@ def test_put_adding_character_writes_file_with_canonical_order_and_accents(clien
     assert "óculos" in nova_path.read_text(encoding="utf-8")
 
 
+def test_put_writes_conflict_and_mission_in_canonical_order(client, scenarios_root):
+    scenario_dir = _write_scenario(
+        scenarios_root,
+        "exemplo-escola",
+        starts={"default.yaml": DEFAULT_START + "play_guide: guia do start\n"},
+    )
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+
+    doc["starts"]["default"]["conflict"] = "um caderno circula"
+    doc["starts"]["default"]["mission"] = "descobrir de quem é"
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 200
+    lines = (scenario_dir / "starts" / "default.yaml").read_text(encoding="utf-8").splitlines()
+    opening_scene_index = next(i for i, line in enumerate(lines) if line.startswith("opening_scene:"))
+    conflict_index = next(i for i, line in enumerate(lines) if line.startswith("conflict:"))
+    mission_index = next(i for i, line in enumerate(lines) if line.startswith("mission:"))
+    play_guide_index = next(i for i, line in enumerate(lines) if line.startswith("play_guide:"))
+    assert opening_scene_index < conflict_index < mission_index < play_guide_index
+
+
+def test_put_with_blank_conflict_and_mission_omits_keys_and_get_returns_null(client, scenarios_root):
+    scenario_dir = _write_scenario(
+        scenarios_root,
+        "exemplo-escola",
+        starts={"default.yaml": DEFAULT_START + "play_guide: guia do start\n"},
+    )
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+
+    doc["starts"]["default"]["conflict"] = ""
+    doc["starts"]["default"]["mission"] = ""
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 200
+    text = (scenario_dir / "starts" / "default.yaml").read_text(encoding="utf-8")
+    lines = text.splitlines()
+    assert not any(line.startswith("conflict:") for line in lines)
+    assert not any(line.startswith("mission:") for line in lines)
+
+    reread = client.get("/api/builder/scenarios/exemplo-escola").json()
+    assert reread["starts"]["default"]["conflict"] is None
+    assert reread["starts"]["default"]["mission"] is None
+
+
 def test_put_identical_document_does_not_change_revision_or_mtime(client, scenarios_root):
     scenario_dir = _write_scenario(scenarios_root, "exemplo-escola")
     doc = client.get("/api/builder/scenarios/exemplo-escola").json()

@@ -202,6 +202,10 @@ def _serialize_start(start: StartConfig) -> bytes:
         "prologue": start.prologue,
         "opening_scene": start.opening_scene,
     }
+    if start.conflict is not None:
+        data["conflict"] = start.conflict
+    if start.mission is not None:
+        data["mission"] = start.mission
     if start.play_guide is not None:
         data["play_guide"] = start.play_guide
     data["suggestions"] = start.suggestions

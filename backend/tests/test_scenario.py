@@ -121,6 +121,48 @@ def test_start_characters_unknown_id_raises(monkeypatch, tmp_path):
         assert "ghost" in exc.reason
 
 
+def test_start_conflict_and_mission_load_when_present(monkeypatch, tmp_path):
+    start_with_fields = DEFAULT_START + "conflict: um caderno circula\nmission: descobrir de quem é\n"
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start_with_fields})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.starts["default"].conflict == "um caderno circula"
+    assert scenario.starts["default"].mission == "descobrir de quem é"
+
+
+def test_start_conflict_and_mission_blank_becomes_none(monkeypatch, tmp_path):
+    start_with_blank_fields = DEFAULT_START + 'conflict: "  "\nmission: ""\n'
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start_with_blank_fields})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.starts["default"].conflict is None
+    assert scenario.starts["default"].mission is None
+
+
+def test_start_conflict_strips_surrounding_whitespace(monkeypatch, tmp_path):
+    start_with_padded_conflict = DEFAULT_START + "conflict: '  texto  '\n"
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start_with_padded_conflict})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.starts["default"].conflict == "texto"
+
+
+def test_start_conflict_and_mission_absent_by_default(monkeypatch, tmp_path):
+    _write_scenario(tmp_path, "exemplo-escola")
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.starts["default"].conflict is None
+    assert scenario.starts["default"].mission is None
+
+
 def test_list_scenarios_ignores_file_and_folder_without_scenario_yaml(monkeypatch, tmp_path):
     _write_scenario(tmp_path, "exemplo-escola")
     (tmp_path / "README.md").write_text("not a scenario", encoding="utf-8")

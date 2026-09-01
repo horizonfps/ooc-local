@@ -6,7 +6,7 @@ from app.hud import HudState
 from app.media import scan_media
 from app.scenario import Character, LoadedScenario, StartConfig
 
-MASTER_PROMPT_VERSION = 7
+MASTER_PROMPT_VERSION = 8
 
 WEATHER_LABELS: dict[str, dict[str, str]] = {
     "pt-br": {
@@ -78,6 +78,8 @@ _TEMPLATES = {
         "hud_time": "Hora",
         "hud_weather": "Clima",
         "opening_header": "## CENA DE ABERTURA",
+        "conflict_label": "Conflito deste início",
+        "mission_label": "Missão do jogador",
         "summary_header": "## RESUMO DA CAMPANHA",
         "tags_header": "## VOCABULÁRIO DE TAGS",
         "tags_intro": (
@@ -143,6 +145,8 @@ _TEMPLATES = {
         "hud_time": "Time",
         "hud_weather": "Weather",
         "opening_header": "## OPENING SCENE",
+        "conflict_label": "Conflict of this start",
+        "mission_label": "Player mission",
         "summary_header": "## CAMPAIGN SUMMARY",
         "tags_header": "## TAG VOCABULARY",
         "tags_intro": (
@@ -290,9 +294,16 @@ def build_master_prompt(
     )
     sections.append(f"{template['hud_header']}\n{hud_body}")
 
-    sections.append(
-        f"{template['opening_header']}\n{_neutralize_headings(start.opening_scene)}"
-    )
+    opening_parts = [_neutralize_headings(start.opening_scene)]
+    if start.conflict is not None:
+        opening_parts.append(
+            f"{template['conflict_label']}: {_neutralize_headings(start.conflict)}"
+        )
+    if start.mission is not None:
+        opening_parts.append(
+            f"{template['mission_label']}: {_neutralize_headings(start.mission)}"
+        )
+    sections.append(f"{template['opening_header']}\n" + "\n\n".join(opening_parts))
 
     if compact is not None:
         sections.append(f"{template['summary_header']}\n{compact}")

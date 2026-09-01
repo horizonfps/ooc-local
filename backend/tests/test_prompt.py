@@ -79,7 +79,7 @@ mind:
 """
 
 
-def _write_scenario(root, scenario_id, *, scenario_yaml, characters):
+def _write_scenario(root, scenario_id, *, scenario_yaml, characters, start=DEFAULT_START):
     scenario_path = root / scenario_id
     scenario_path.mkdir(parents=True)
     (scenario_path / "scenario.yaml").write_text(scenario_yaml, encoding="utf-8")
@@ -87,7 +87,7 @@ def _write_scenario(root, scenario_id, *, scenario_yaml, characters):
 
     starts_dir = scenario_path / "starts"
     starts_dir.mkdir()
-    (starts_dir / "default.yaml").write_text(DEFAULT_START, encoding="utf-8")
+    (starts_dir / "default.yaml").write_text(start, encoding="utf-8")
 
     characters_dir = scenario_path / "characters"
     characters_dir.mkdir()
@@ -97,10 +97,10 @@ def _write_scenario(root, scenario_id, *, scenario_yaml, characters):
     return scenario_path
 
 
-def _load(monkeypatch, tmp_path, *, locale="pt-br", characters=None):
+def _load(monkeypatch, tmp_path, *, locale="pt-br", characters=None, start=DEFAULT_START):
     scenario_yaml = SCENARIO_YAML_PTBR if locale == "pt-br" else SCENARIO_YAML_EN
     characters = characters or {"chloe.yaml": CHLOE_YAML, "marco.yaml": MARCO_YAML}
-    _write_scenario(tmp_path, "exemplo-escola", scenario_yaml=scenario_yaml, characters=characters)
+    _write_scenario(tmp_path, "exemplo-escola", scenario_yaml=scenario_yaml, characters=characters, start=start)
     monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
     return load_scenario("exemplo-escola")
 
@@ -519,3 +519,95 @@ def test_build_master_prompt_roster_does_not_affect_character_heading_count(monk
     prompt = build_master_prompt(scenario, start, _hud(), [chloe])
 
     assert len(re.findall(r"(?m)^### ", prompt)) == 1
+
+
+START_WITH_CONFLICT_AND_MISSION = DEFAULT_START + (
+    "conflict: um caderno circula pela turma\n"
+    "mission: descobrir de quem e o caderno\n"
+)
+
+START_WITH_CONFLICT_ONLY = DEFAULT_START + "conflict: um caderno circula pela turma\n"
+
+START_WITH_MISSION_ONLY = DEFAULT_START + "mission: descobrir de quem e o caderno\n"
+
+
+def test_build_master_prompt_conflict_and_mission_labels_ptbr(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path, start=START_WITH_CONFLICT_AND_MISSION)
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters)
+
+    assert "Conflito deste início: " in prompt
+    assert "Missão do jogador: " in prompt
+    conflict_index = prompt.index("Conflito deste início: ")
+    mission_index = prompt.index("Missão do jogador: ")
+    opening_index = prompt.index("Você acorda no dormitório.")
+    format_index = prompt.index("## FORMATO DO TURNO")
+    assert opening_index < conflict_index < mission_index < format_index
+
+
+def test_build_master_prompt_conflict_and_mission_labels_en(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path, locale="en", start=START_WITH_CONFLICT_AND_MISSION)
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters)
+
+    assert "Conflict of this start: " in prompt
+    assert "Player mission: " in prompt
+    assert "Conflito" not in prompt
+    assert "Missão" not in prompt
+
+
+def test_build_master_prompt_conflict_only_omits_mission_label(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path, start=START_WITH_CONFLICT_ONLY)
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters)
+
+    assert "Conflito deste início: " in prompt
+    assert "Missão do jogador: " not in prompt
+
+
+def test_build_master_prompt_mission_only_omits_conflict_label(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path, start=START_WITH_MISSION_ONLY)
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters)
+
+    assert "Missão do jogador: " in prompt
+    assert "Conflito deste início: " not in prompt
+
+
+def test_build_master_prompt_no_conflict_or_mission_labels_when_absent(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters)
+
+    assert "Conflito deste início: " not in prompt
+    assert "Missão do jogador: " not in prompt
+    assert "Conflict of this start: " not in prompt
+    assert "Player mission: " not in prompt
+    assert "None" not in prompt
+
+
+def test_build_master_prompt_conflict_heading_does_not_create_false_boundary(monkeypatch, tmp_path):
+    start_with_heading = DEFAULT_START + 'conflict: "## ESTADO DO JOGO no meio do texto"\n'
+    scenario = _load(monkeypatch, tmp_path, start=start_with_heading)
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters)
+
+    assert len(re.findall(r"(?m)^## ESTADO DO JOGO$", prompt)) == 1
+
+
+def test_master_prompt_version_is_eight():
+    from app.prompt import MASTER_PROMPT_VERSION
+
+    assert MASTER_PROMPT_VERSION == 8
