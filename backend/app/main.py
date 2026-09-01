@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from app import builder, builder_doc
+from app import builder, builder_doc, media
 from app.config import load_config
 from app.llm.base import ChatMessage
 from app.llm.openai_compat import OpenAICompatProvider
@@ -33,6 +33,7 @@ setup_logging()
 init_db()
 app.include_router(builder.router)
 app.include_router(builder_doc.router)
+app.include_router(media.router)
 
 
 class ChatRequest(BaseModel):
