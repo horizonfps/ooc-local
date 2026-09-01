@@ -6,6 +6,9 @@ const ID_RE = /^[a-z0-9-]+$/
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
 const WEATHER_CODES = ['clear', 'cloudy', 'rain', 'storm', 'snow', 'fog', 'night']
 
+// Mirrors backend/app/scenario.py Character.emotions cap (20 total, default forced in).
+export const MAX_EMOTIONS = 20
+
 function hasUnbalancedVariable(text: string): boolean {
   return text.split('\n').some((line) => {
     let open = false
@@ -137,9 +140,61 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
     }
   }
 
-  for (const charId of Object.keys(draft.characters)) {
+  const characterIds = Object.keys(draft.characters)
+
+  for (const charId of characterIds) {
+    const character = draft.characters[charId]
+    const charLabel = character.name.trim() || charId
+    const withChar = (label: string) => `${charLabel} — ${label}`
+
     if (!ID_RE.test(charId)) {
-      errors.push(error('characters', `characters.${charId}`, t('builder.field.label.characterId'), t('builder.field.slugInvalid')))
+      errors.push(
+        error('characters', `characters.${charId}`, withChar(t('builder.field.label.characterId')), t('builder.field.slugInvalid')),
+      )
+    }
+
+    if (!character.name.trim()) {
+      errors.push(error('characters', `characters.${charId}.name`, withChar(t('builder.characters.name')), t('builder.field.required')))
+    } else if (character.name.length > 80) {
+      errors.push(
+        error('characters', `characters.${charId}.name`, withChar(t('builder.characters.name')), t('builder.field.tooLong', { max: 80 })),
+      )
+    }
+
+    if (character.role.length > 140) {
+      errors.push(
+        error('characters', `characters.${charId}.role`, withChar(t('builder.characters.role')), t('builder.field.tooLong', { max: 140 })),
+      )
+    }
+
+    if (character.sprite !== null && !ID_RE.test(character.sprite)) {
+      errors.push(
+        error('characters', `characters.${charId}.sprite`, withChar(t('builder.characters.sprite')), t('builder.field.slugInvalid')),
+      )
+    }
+
+    character.emotions.forEach((emotion, index) => {
+      if (!ID_RE.test(emotion)) {
+        errors.push(
+          error(
+            'characters',
+            `characters.${charId}.emotions.${index}`,
+            withChar(t('builder.characters.emotions.legend')),
+            t('builder.field.slugInvalid'),
+          ),
+        )
+      }
+    })
+
+    if (character.emotions.length > MAX_EMOTIONS) {
+      errors.push(
+        error(
+          'characters',
+          `characters.${charId}.emotions`,
+          withChar(t('builder.characters.emotions.legend')),
+          t('builder.characters.emotions.max', { max: MAX_EMOTIONS - 1 }),
+        ),
+      )
     }
   }
 

@@ -32,10 +32,10 @@ const DOCUMENT = {
     ally: {
       name: 'Ally',
       role: 'friend',
-      appearance: '',
-      personality: '',
-      voice: '',
-      mind: { feeling: '', goal: '', opinion_of_player: null, secret_plan: null },
+      appearance: 'A tall figure in the hallway.',
+      personality: 'Steady, watchful.',
+      voice: 'Slow, deliberate.',
+      mind: { feeling: 'Calm', goal: 'Guide the player', opinion_of_player: null, secret_plan: null },
       sprite: null,
       anchor: false,
       emotions: ['default'],
@@ -95,16 +95,15 @@ describe('BuilderEditorScreen', () => {
     expect(screen.getByText(t('builder.editor.clean'))).toBeInTheDocument()
   })
 
-  it('marks dirty on onChange from a tab placeholder and clears it when undone', async () => {
-    const user = userEvent.setup()
+  it('marks dirty on onChange from a tab field and clears it when undone', async () => {
     mockFetch(() => jsonResponse(DOCUMENT))
-    render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
-    await user.click(editButton)
+    const nameField = await screen.findByLabelText(t('builder.identity.name'))
+    fireEvent.change(nameField, { target: { value: 'The School Reborn' } })
     expect(screen.getByText(t('builder.editor.dirty'))).toBeInTheDocument()
 
-    await user.click(editButton)
+    fireEvent.change(nameField, { target: { value: 'The School' } })
     expect(screen.getByText(t('builder.editor.clean'))).toBeInTheDocument()
   })
 
@@ -139,12 +138,11 @@ describe('BuilderEditorScreen', () => {
   })
 
   it('keeps the draft when the tab prop changes', async () => {
-    const user = userEvent.setup()
     mockFetch(() => jsonResponse(DOCUMENT))
-    const { rerender } = render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
+    const { rerender } = render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
-    await user.click(editButton)
+    const nameField = await screen.findByLabelText(t('builder.identity.name'))
+    fireEvent.change(nameField, { target: { value: 'The School Reborn' } })
     expect(screen.getByText(t('builder.editor.dirty'))).toBeInTheDocument()
 
     rerender(<BuilderEditorScreen scenarioId="school" tab="starts" />)
@@ -201,10 +199,10 @@ describe('BuilderEditorScreen', () => {
       return jsonResponse(DOCUMENT)
     })
     vi.stubGlobal('fetch', fetchMock)
-    render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
-    await user.click(editButton)
+    const nameField = await screen.findByLabelText(t('builder.identity.name'))
+    fireEvent.change(nameField, { target: { value: 'The School Reborn' } })
     expect(screen.getByText(t('builder.editor.dirty'))).toBeInTheDocument()
 
     const saveButton = screen.getByRole('button', { name: t('builder.editor.save') })
@@ -221,10 +219,10 @@ describe('BuilderEditorScreen', () => {
       () => jsonResponse(DOCUMENT),
       () => jsonResponse({ revision: 'rev-2' }),
     )
-    render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
-    await user.click(editButton)
+    const nameField = await screen.findByLabelText(t('builder.identity.name'))
+    fireEvent.change(nameField, { target: { value: 'The School Reborn' } })
     expect(screen.getByText(t('builder.editor.dirty'))).toBeInTheDocument()
 
     await user.keyboard('{Control>}s{/Control}')
@@ -250,10 +248,10 @@ describe('BuilderEditorScreen', () => {
       return jsonResponse(DOCUMENT)
     })
     vi.stubGlobal('fetch', fetchMock)
-    render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
-    await user.click(editButton)
+    const nameField = await screen.findByLabelText(t('builder.identity.name'))
+    fireEvent.change(nameField, { target: { value: 'The School Reborn' } })
     await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
 
     const dialog = await screen.findByRole('dialog', { name: t('builder.editor.save.error.conflict.title') })
@@ -271,10 +269,10 @@ describe('BuilderEditorScreen', () => {
       () => jsonResponse({ detail: 'builder disabled by flag' }, 503),
     )
     vi.stubGlobal('fetch', fetchMock)
-    render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
-    await user.click(editButton)
+    const nameField = await screen.findByLabelText(t('builder.identity.name'))
+    fireEvent.change(nameField, { target: { value: 'The School Reborn' } })
     await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
 
     expect(await screen.findByText(t('builder.editor.save.error.disabled.title'))).toBeInTheDocument()
@@ -289,10 +287,10 @@ describe('BuilderEditorScreen', () => {
       () => jsonResponse({ detail: 'boom' }, 500),
     )
     vi.stubGlobal('fetch', fetchMock)
-    render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
-    await user.click(editButton)
+    const nameField = await screen.findByLabelText(t('builder.identity.name'))
+    fireEvent.change(nameField, { target: { value: 'The School Reborn' } })
     await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
 
     expect(await screen.findByText(t('builder.editor.save.error.title'))).toBeInTheDocument()
@@ -303,10 +301,10 @@ describe('BuilderEditorScreen', () => {
     const user = userEvent.setup()
     const invalidDocument = { ...DOCUMENT, starts: {} }
     mockFetch(() => jsonResponse(invalidDocument))
-    render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
-    await user.click(editButton)
+    const nameField = await screen.findByLabelText(t('builder.identity.name'))
+    fireEvent.change(nameField, { target: { value: 'The School Reborn' } })
     await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
 
     const alert = await screen.findByRole('alert')
@@ -372,10 +370,10 @@ describe('BuilderEditorScreen', () => {
   it('asks for confirmation before reloading a dirty draft, and reloads on confirm', async () => {
     const user = userEvent.setup()
     const fetchMock = mockFetch(() => jsonResponse(DOCUMENT))
-    render(<BuilderEditorScreen scenarioId="school" tab="characters" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-characters')
-    await user.click(editButton)
+    const nameField = await screen.findByLabelText(t('builder.identity.name'))
+    fireEvent.change(nameField, { target: { value: 'The School Reborn' } })
     await user.click(screen.getByRole('button', { name: t('builder.editor.reload') }))
 
     const dialog = await screen.findByRole('dialog', { name: t('builder.editor.reload.confirmTitle') })

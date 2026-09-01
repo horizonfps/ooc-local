@@ -1,7 +1,7 @@
 ---
 id: TCK-048
 title: Editar os personagens do cenario na aba Personagens
-status: ready
+status: in_review
 points: 3
 blockedBy: [TCK-029, TCK-036, TCK-038]
 files:
