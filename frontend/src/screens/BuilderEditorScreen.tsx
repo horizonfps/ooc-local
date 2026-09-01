@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ApiError, fetchScenarioDocument, saveScenarioDocument, type ScenarioDocument } from '../api'
 import { deepEqual, validateDraft } from '../builder/validate'
 import { IdentityTab } from '../components/builder/IdentityTab'
+import { StartsTab } from '../components/builder/StartsTab'
 import { WorldTab } from '../components/builder/WorldTab'
 import { ErrorState } from '../components/ErrorState'
 import { Loading } from '../components/Loading'
@@ -568,6 +569,8 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
                   <IdentityTab {...tabProps} />
                 ) : activeTab === 'world' ? (
                   <WorldTab {...tabProps} />
+                ) : activeTab === 'starts' ? (
+                  <StartsTab {...tabProps} />
                 ) : (
                   <TabPlaceholder tab={activeTab} {...tabProps} />
                 ))

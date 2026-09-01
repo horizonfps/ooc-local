@@ -20,8 +20,8 @@ const DOCUMENT = {
     default: {
       id: 'default',
       name: 'Default start',
-      prologue: '',
-      opening_scene: '',
+      prologue: 'It begins.',
+      opening_scene: 'A hallway at night.',
       play_guide: null,
       suggestions: [],
       hud: { location: 'Hallway', time: '08:00', weather: 'clear' },
