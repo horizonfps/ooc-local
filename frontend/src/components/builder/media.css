@@ -160,4 +160,10 @@
     align-self: stretch;
     min-height: 44px;
   }
+
+  .builder-media-orphan-action,
+  .builder-media-bg-slot-remove {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }

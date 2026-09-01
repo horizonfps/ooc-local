@@ -407,6 +407,7 @@ export function MediaTab(props: TabProps) {
 
     const { slug, path } = removeTarget
     const key = bgCellKey(slug)
+    const seededByStart = slots.some((slot) => slot.slug === slug && slot.fromStart)
     setRemoveTarget(null)
     setCellStatus((prev) => ({ ...prev, [key]: { kind: 'removing' } }))
     deleteMedia(scenarioId, { kind: 'background', key: slug })
@@ -417,6 +418,9 @@ export function MediaTab(props: TabProps) {
           delete nextBackgrounds[slug]
           return { ...prev, index: { ...prev.index, backgrounds: nextBackgrounds } }
         })
+        if (!seededByStart) {
+          setExtraSlots((prev) => (prev.includes(slug) ? prev : [...prev, slug]))
+        }
         setCellStatus((prev) => {
           const next = { ...prev }
           delete next[key]
@@ -511,7 +515,11 @@ export function MediaTab(props: TabProps) {
   const total = spriteCount.total + bgCount.total
   const usedFolders = characterFolders(draft.characters)
   const orphanFolders =
-    state.status === 'ready' ? Object.keys(state.index.sprites).filter((folder) => !usedFolders.has(folder)) : []
+    state.status === 'ready'
+      ? Object.keys(state.index.sprites).filter(
+          (folder) => !usedFolders.has(folder) && Object.keys(state.index.sprites[folder] ?? {}).length > 0,
+        )
+      : []
 
   function preventStrayDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault()
@@ -625,10 +633,19 @@ export function MediaTab(props: TabProps) {
                                 />
                               ) : null}
                               <span className="builder-media-orphan-name">{url ? basename(url.split('?')[0]) : emotion}</span>
-                              <button type="button" onClick={() => declareOrphan(id, emotion)}>
+                              <button
+                                type="button"
+                                className="builder-media-orphan-action"
+                                onClick={() => declareOrphan(id, emotion)}
+                              >
                                 {t('builder.media.sprites.orphans.declare', { emotion })}
                               </button>
-                              <button type="button" onClick={() => openRemove(folder, characterName, emotion)}>
+                              <button
+                                type="button"
+                                className="builder-media-orphan-action"
+                                aria-label={t('builder.media.sprite.remove', { character: characterName, emotion })}
+                                onClick={() => openRemove(folder, characterName, emotion)}
+                              >
                                 {t('common.remove')}
                               </button>
                             </li>
@@ -655,7 +672,12 @@ export function MediaTab(props: TabProps) {
                             <img className="builder-media-orphan-thumb" src={url} alt={t('builder.media.sprite.alt', { character: folder, emotion })} />
                           ) : null}
                           <span className="builder-media-orphan-name">{url ? basename(url.split('?')[0]) : emotion}</span>
-                          <button type="button" onClick={() => openRemove(folder, folder, emotion)}>
+                          <button
+                            type="button"
+                            className="builder-media-orphan-action"
+                            aria-label={t('builder.media.sprites.orphans.removeFile', { folder, emotion })}
+                            onClick={() => openRemove(folder, folder, emotion)}
+                          >
                             {t('common.remove')}
                           </button>
                         </li>
@@ -666,58 +688,65 @@ export function MediaTab(props: TabProps) {
               </div>
             ) : null}
 
-            <h3>{t('builder.media.backgrounds.heading')}</h3>
-            <ul role="list" className="builder-media-grid builder-media-bg-grid">
-              {slots.map((slot) => (
-                <MediaBackgroundCell
-                  key={slot.slug}
-                  slot={slot}
-                  url={state.index.backgrounds[slot.slug]}
-                  status={cellStatus[bgCellKey(slot.slug)]}
-                  onFile={(file) => submitBgUpload(slot.slug, file)}
-                  onOpenRemove={() => openBgRemove(slot.slug)}
-                />
-              ))}
-            </ul>
-            <ul className="builder-media-bg-slots">
-              {slots
-                .filter((slot) => !slot.fromStart && !state.index.backgrounds[slot.slug])
-                .map((slot) => (
-                  <li key={slot.slug}>
-                    <button type="button" onClick={() => removeSlot(slot.slug)}>
-                      {t('builder.media.backgrounds.removeSlot', { location: slot.slug })}
-                    </button>
-                  </li>
+            <section aria-labelledby="builder-media-backgrounds-heading">
+              <h3 id="builder-media-backgrounds-heading">{t('builder.media.backgrounds.heading')}</h3>
+              <ul role="list" className="builder-media-grid builder-media-bg-grid">
+                {slots.map((slot) => (
+                  <MediaBackgroundCell
+                    key={slot.slug}
+                    slot={slot}
+                    url={state.index.backgrounds[slot.slug]}
+                    status={cellStatus[bgCellKey(slot.slug)]}
+                    onFile={(file) => submitBgUpload(slot.slug, file)}
+                    onOpenRemove={() => openBgRemove(slot.slug)}
+                  />
                 ))}
-            </ul>
+              </ul>
+              <ul className="builder-media-bg-slots">
+                {slots
+                  .filter((slot) => !slot.fromStart && !state.index.backgrounds[slot.slug])
+                  .map((slot) => (
+                    <li key={slot.slug}>
+                      <button
+                        type="button"
+                        className="builder-media-bg-slot-remove"
+                        aria-label={t('builder.media.backgrounds.removeSlot', { location: slot.slug })}
+                        onClick={() => removeSlot(slot.slug)}
+                      >
+                        {t('builder.media.backgrounds.removeSlot', { location: slot.slug })}
+                      </button>
+                    </li>
+                  ))}
+              </ul>
 
-            {addOpen ? (
-              <div className="builder-field">
-                <label htmlFor="builder-media-backgrounds-add-input">{t('builder.media.backgrounds.addLabel')}</label>
-                <input
-                  id="builder-media-backgrounds-add-input"
-                  value={addValue}
-                  onChange={(e) => {
-                    setAddValue(e.target.value)
-                    setAddError(null)
-                  }}
-                  aria-invalid={addError ? 'true' : undefined}
-                />
-                <p className="field-hint">{t('builder.media.backgrounds.addHint')}</p>
-                <button type="button" onClick={addLocation}>
+              {addOpen ? (
+                <div className="builder-field">
+                  <label htmlFor="builder-media-backgrounds-add-input">{t('builder.media.backgrounds.addLabel')}</label>
+                  <input
+                    id="builder-media-backgrounds-add-input"
+                    value={addValue}
+                    onChange={(e) => {
+                      setAddValue(e.target.value)
+                      setAddError(null)
+                    }}
+                    aria-invalid={addError ? 'true' : undefined}
+                  />
+                  <p className="field-hint">{t('builder.media.backgrounds.addHint')}</p>
+                  <button type="button" onClick={addLocation}>
+                    {t('builder.media.backgrounds.add')}
+                  </button>
+                  {addError ? (
+                    <p role="alert" className="field-error">
+                      {addError}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <button type="button" onClick={() => setAddOpen(true)}>
                   {t('builder.media.backgrounds.add')}
                 </button>
-                {addError ? (
-                  <p role="alert" className="field-error">
-                    {addError}
-                  </p>
-                ) : null}
-              </div>
-            ) : (
-              <button type="button" onClick={() => setAddOpen(true)}>
-                {t('builder.media.backgrounds.add')}
-              </button>
-            )}
+              )}
+            </section>
           </>
         )
       ) : null}

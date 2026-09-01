@@ -505,4 +505,110 @@ describe('MediaTab', () => {
 
     expect(await screen.findByText(t('builder.media.error.write'))).toBeInTheDocument()
   })
+
+  it('a background present only on disk (no start) appears in the grid', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ cover: null, sprites: {}, backgrounds: { attic: '/api/scenarios/school/media/backgrounds/attic.png' } }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<MediaTab scenarioId="school" draft={baseDraft()} onChange={() => {}} errors={[]} goToTab={() => {}} />)
+
+    expect(await screen.findByTestId('media-bg-cell-attic')).toBeInTheDocument()
+    expect(screen.getByAltText(t('builder.media.bg.alt', { location: 'attic' }))).toBeInTheDocument()
+  })
+
+  it('removing a disk-only background (no start) keeps the cell visible and empty', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/builder/scenarios/school/media' && (!init || init.method === undefined)) {
+        return jsonResponse({ cover: null, sprites: {}, backgrounds: { attic: '/api/scenarios/school/media/backgrounds/attic.png' } })
+      }
+      if (url.startsWith('/api/builder/scenarios/school/media?') && init?.method === 'DELETE') {
+        return jsonResponse(null, 204)
+      }
+      throw new Error(`unexpected fetch ${url} ${init?.method}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<MediaTab scenarioId="school" draft={baseDraft()} onChange={() => {}} errors={[]} goToTab={() => {}} />)
+
+    const removeButton = await screen.findByLabelText(t('builder.media.bg.remove', { location: 'attic' }))
+    const user = userEvent.setup()
+    await user.click(removeButton)
+    await user.click(screen.getByRole('button', { name: t('common.remove') }))
+
+    expect(await screen.findByText(t('builder.media.removed', { name: 'attic.png' }))).toBeInTheDocument()
+    expect(screen.getByTestId('media-bg-cell-attic')).toBeInTheDocument()
+    expect(screen.queryByAltText(t('builder.media.bg.alt', { location: 'attic' }))).not.toBeInTheDocument()
+  })
+
+  it('an orphan folder that loses its last file disappears from the folders-with-no-character block', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/builder/scenarios/school/media' && (!init || init.method === undefined)) {
+        return jsonResponse({
+          cover: null,
+          sprites: {
+            luca: { default: '/api/scenarios/school/media/sprites/luca/default.png' },
+            ghost: { default: '/api/scenarios/school/media/sprites/ghost/default.png' },
+          },
+          backgrounds: {},
+        })
+      }
+      if (url.startsWith('/api/builder/scenarios/school/media?') && init?.method === 'DELETE') {
+        return jsonResponse(null, 204)
+      }
+      throw new Error(`unexpected fetch ${url} ${init?.method}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<MediaTab scenarioId="school" draft={baseDraft()} onChange={() => {}} errors={[]} goToTab={() => {}} />)
+
+    expect(await screen.findByText(t('builder.media.sprites.orphans.folderTitle'))).toBeInTheDocument()
+
+    const removeButton = await screen.findByLabelText(t('builder.media.sprites.orphans.removeFile', { folder: 'ghost', emotion: 'default' }))
+    const user = userEvent.setup()
+    await user.click(removeButton)
+    await user.click(screen.getByRole('button', { name: t('common.remove') }))
+
+    expect(screen.queryByText(t('builder.media.sprites.orphans.folderTitle'))).not.toBeInTheDocument()
+  })
+
+  it('removing a manually added empty slot deletes the cell without calling fetch', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(emptyIndex()))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<MediaTab scenarioId="school" draft={baseDraft()} onChange={() => {}} errors={[]} goToTab={() => {}} />)
+    await screen.findByText(t('builder.media.cell.emptyDefault'))
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: t('builder.media.backgrounds.add') }))
+    await user.type(screen.getByLabelText(t('builder.media.backgrounds.addLabel')), 'attic')
+    await user.click(screen.getByRole('button', { name: t('builder.media.backgrounds.add') }))
+
+    expect(await screen.findByTestId('media-bg-cell-attic')).toBeInTheDocument()
+    const callsBeforeRemove = fetchMock.mock.calls.length
+
+    await user.click(screen.getByRole('button', { name: t('builder.media.backgrounds.removeSlot', { location: 'attic' }) }))
+
+    expect(screen.queryByTestId('media-bg-cell-attic')).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(callsBeforeRemove)
+  })
+
+  it('adding an invalid slug shows slugInvalid and does not create a slot', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(emptyIndex()))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<MediaTab scenarioId="school" draft={baseDraft()} onChange={() => {}} errors={[]} goToTab={() => {}} />)
+    await screen.findByText(t('builder.media.cell.emptyDefault'))
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: t('builder.media.backgrounds.add') }))
+    await user.type(screen.getByLabelText(t('builder.media.backgrounds.addLabel')), 'Not A Slug!')
+    await user.click(screen.getByRole('button', { name: t('builder.media.backgrounds.add') }))
+
+    expect(await screen.findByText(t('builder.field.slugInvalid'))).toBeInTheDocument()
+    expect(screen.queryByTestId('media-bg-cell-Not A Slug!')).not.toBeInTheDocument()
+  })
 })
