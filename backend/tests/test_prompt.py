@@ -54,6 +54,18 @@ mind:
   goal: manter a ordem
 """
 
+CHLOE_WITH_EMOTIONS_YAML = """\
+name: Chloe
+role: aluna
+appearance: baixa, cabelo curto
+personality: extrovertida
+voice: animada
+emotions: [sad, angry, smile]
+mind:
+  feeling: curiosa
+  goal: descobrir segredo
+"""
+
 
 def _write_scenario(root, scenario_id, *, scenario_yaml, characters):
     scenario_path = root / scenario_id
@@ -277,6 +289,92 @@ def test_build_master_prompt_opening_scene_without_heading_untouched(monkeypatch
     prompt = build_master_prompt(scenario, start, _hud(), characters)
 
     assert "Você acorda no dormitório." in prompt
+
+
+def test_build_master_prompt_tag_vocabulary_ptbr(monkeypatch, tmp_path):
+    scenario = _load(
+        monkeypatch,
+        tmp_path,
+        characters={"chloe.yaml": CHLOE_WITH_EMOTIONS_YAML, "marco.yaml": MARCO_YAML},
+    )
+    backgrounds_dir = tmp_path / "exemplo-escola" / "media" / "backgrounds"
+    backgrounds_dir.mkdir(parents=True)
+    (backgrounds_dir / "patio-da-escola.png").write_bytes(b"fake")
+    (backgrounds_dir / "sala-de-aula.png").write_bytes(b"fake")
+
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters)
+
+    assert "## VOCABULÁRIO DE TAGS" in prompt
+    assert "chloe: default, sad, angry, smile" in prompt
+    assert "marco:" not in prompt
+    assert "Backgrounds disponíveis: patio-da-escola, sala-de-aula" in prompt
+    assert "Use somente estas chaves" in prompt
+
+
+def test_build_master_prompt_tag_vocabulary_en(monkeypatch, tmp_path):
+    scenario = _load(
+        monkeypatch,
+        tmp_path,
+        locale="en",
+        characters={"chloe.yaml": CHLOE_WITH_EMOTIONS_YAML, "marco.yaml": MARCO_YAML},
+    )
+    backgrounds_dir = tmp_path / "exemplo-escola" / "media" / "backgrounds"
+    backgrounds_dir.mkdir(parents=True)
+    (backgrounds_dir / "patio-da-escola.png").write_bytes(b"fake")
+
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters)
+
+    assert "## TAG VOCABULARY" in prompt
+    assert "chloe: default, sad, angry, smile" in prompt
+    assert "Available backgrounds: patio-da-escola" in prompt
+
+
+def test_build_master_prompt_tag_vocabulary_omitted_when_empty(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters)
+
+    assert "## VOCABULÁRIO DE TAGS" not in prompt
+
+
+def test_build_master_prompt_tag_vocabulary_sprites_only(monkeypatch, tmp_path):
+    scenario = _load(
+        monkeypatch,
+        tmp_path,
+        characters={"chloe.yaml": CHLOE_WITH_EMOTIONS_YAML, "marco.yaml": MARCO_YAML},
+    )
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters)
+
+    assert "## VOCABULÁRIO DE TAGS" in prompt
+    assert "chloe: default, sad, angry, smile" in prompt
+    assert "Backgrounds disponíveis" not in prompt
+
+
+def test_build_master_prompt_tag_vocabulary_backgrounds_only(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+    backgrounds_dir = tmp_path / "exemplo-escola" / "media" / "backgrounds"
+    backgrounds_dir.mkdir(parents=True)
+    (backgrounds_dir / "patio-da-escola.png").write_bytes(b"fake")
+
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters)
+
+    assert "## VOCABULÁRIO DE TAGS" in prompt
+    assert "Backgrounds disponíveis: patio-da-escola" in prompt
+    assert "Emoções por personagem" not in prompt
 
 
 def test_build_master_prompt_no_neutralized_output_produces_reserved_headings():

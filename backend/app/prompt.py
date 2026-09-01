@@ -3,9 +3,10 @@ from __future__ import annotations
 import re
 
 from app.hud import HudState
+from app.media import scan_media
 from app.scenario import Character, LoadedScenario, StartConfig
 
-MASTER_PROMPT_VERSION = 4
+MASTER_PROMPT_VERSION = 5
 
 WEATHER_LABELS: dict[str, dict[str, str]] = {
     "pt-br": {
@@ -68,6 +69,16 @@ _TEMPLATES = {
         "hud_weather": "Clima",
         "opening_header": "## CENA DE ABERTURA",
         "summary_header": "## RESUMO DA CAMPANHA",
+        "tags_header": "## VOCABULÁRIO DE TAGS",
+        "tags_intro": (
+            "Use somente estas chaves nas tags [SPRITE:...] e [BG:...], "
+            "exatamente como estão escritas: são identificadores, não texto "
+            "livre. Emita [SPRITE:personagem:emoção] quando a emoção de um "
+            "personagem em cena mudar, e [BG:local] quando o local da cena "
+            "mudar."
+        ),
+        "tags_sprites_label": "Emoções por personagem",
+        "tags_backgrounds_label": "Backgrounds disponíveis",
         "format_header": "## FORMATO DO TURNO",
         "format_body": (
             "Escreva a fala de personagem como `**Nome** | fala`, uma por linha.\n"
@@ -113,6 +124,15 @@ _TEMPLATES = {
         "hud_weather": "Weather",
         "opening_header": "## OPENING SCENE",
         "summary_header": "## CAMPAIGN SUMMARY",
+        "tags_header": "## TAG VOCABULARY",
+        "tags_intro": (
+            "Use only these keys in the [SPRITE:...] and [BG:...] tags, "
+            "exactly as written: they are identifiers, not free text. Emit "
+            "[SPRITE:character:emotion] when a character's emotion in scene "
+            "changes, and [BG:place] when the scene's location changes."
+        ),
+        "tags_sprites_label": "Emotions per character",
+        "tags_backgrounds_label": "Available backgrounds",
         "format_header": "## TURN FORMAT",
         "format_body": (
             "Write character speech as `**Name** | line`, one per line.\n"
@@ -154,6 +174,39 @@ def _format_character(character: Character, template: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
+def _character_id(scenario: LoadedScenario, character: Character) -> str | None:
+    for char_id, candidate in scenario.characters.items():
+        if candidate is character:
+            return char_id
+    return None
+
+
+def _tag_vocabulary(
+    scenario: LoadedScenario, characters: list[Character], template: dict[str, str]
+) -> str | None:
+    """Deterministic list of the only valid [SPRITE:...]/[BG:...] keys for this turn."""
+    sprite_lines = []
+    for character in characters:
+        if len(character.emotions) <= 1:
+            continue
+        char_id = _character_id(scenario, character)
+        if char_id is None:
+            continue
+        sprite_lines.append(f"{char_id}: {', '.join(character.emotions)}")
+
+    backgrounds = sorted(scan_media(scenario.id).backgrounds)
+
+    if not sprite_lines and not backgrounds:
+        return None
+
+    parts = [template["tags_intro"]]
+    if sprite_lines:
+        parts.append(f"{template['tags_sprites_label']}:\n" + "\n".join(sprite_lines))
+    if backgrounds:
+        parts.append(f"{template['tags_backgrounds_label']}: {', '.join(backgrounds)}")
+    return "\n".join(parts)
+
+
 def build_master_prompt(
     scenario: LoadedScenario,
     start: StartConfig,
@@ -192,6 +245,10 @@ def build_master_prompt(
 
     if compact is not None:
         sections.append(f"{template['summary_header']}\n{compact}")
+
+    tag_vocabulary = _tag_vocabulary(scenario, characters, template)
+    if tag_vocabulary is not None:
+        sections.append(f"{template['tags_header']}\n{tag_vocabulary}")
 
     sections.append(f"{template['format_header']}\n{template['format_body']}")
 
