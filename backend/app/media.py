@@ -1,19 +1,25 @@
 from __future__ import annotations
 
+import os
 import re
+import tempfile
+from contextlib import suppress
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from app.config import load_config
 from app.observability import emit
 from app.scenario import LoadedScenario, ScenarioError, scenario_path
 
 router = APIRouter()
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+UPLOAD_CHUNK_BYTES = 64 * 1024
 ALLOWED_EXTENSIONS: tuple[str, ...] = ("png", "jpg", "webp")
+MEDIA_KINDS: tuple[str, ...] = ("cover", "sprite", "background")
 KEY_RE = re.compile(r"^[a-z0-9-]+$")
 _FILE_RE = re.compile(r"^([a-z0-9-]+)\.(png|jpg|webp)$")
 
@@ -168,3 +174,138 @@ async def get_media_file_route(scenario_id: str, path: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="not found")
 
     return FileResponse(candidate, headers={"Cache-Control": "no-cache"})
+
+
+def _detect_extension(header: bytes) -> str | None:
+    if header.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if header.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if header[0:4] == b"RIFF" and header[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
+def _space_dir(scenario_id: str, kind: str, character: str | None) -> Path:
+    root = media_root(scenario_id)
+    if kind == "sprite":
+        return root / "sprites" / (character or "")
+    if kind == "background":
+        return root / "backgrounds"
+    return root
+
+
+def _relative_path(kind: str, key: str, character: str | None, ext: str) -> str:
+    if kind == "sprite":
+        return f"sprites/{character}/{key}.{ext}"
+    if kind == "background":
+        return f"backgrounds/{key}.{ext}"
+    return f"cover.{ext}"
+
+
+def _validate_media_target(kind: str, key: str, character: str | None) -> str:
+    """Validates kind/character shape and the resolved key, returns the effective key."""
+    if kind not in MEDIA_KINDS:
+        raise HTTPException(status_code=422, detail="invalid kind")
+    if kind == "sprite" and not character:
+        raise HTTPException(status_code=422, detail="character required for sprite")
+    if kind == "background" and character:
+        raise HTTPException(status_code=422, detail="character forbidden for background")
+
+    effective_key = "cover" if kind == "cover" else key
+    if not KEY_RE.match(effective_key) or (character is not None and not KEY_RE.match(character)):
+        raise HTTPException(status_code=422, detail="invalid key")
+    return effective_key
+
+
+@router.post("/api/builder/scenarios/{scenario_id}/media", status_code=201)
+async def post_media_route(
+    scenario_id: str,
+    kind: str = Form(...),
+    key: str = Form(""),
+    character: str | None = Form(None),
+    file: UploadFile = File(...),
+) -> dict[str, str]:
+    config = load_config()
+    if not config.flag("builder"):
+        emit("builder_rejected", scenario_id=scenario_id, reason="builder disabled by flag")
+        raise HTTPException(status_code=503, detail="builder disabled by flag")
+
+    _require_scenario(scenario_id)
+    effective_key = _validate_media_target(kind, key, character)
+
+    data = bytearray()
+    while True:
+        chunk = await file.read(UPLOAD_CHUNK_BYTES)
+        if not chunk:
+            break
+        data.extend(chunk)
+        if len(data) > MAX_UPLOAD_BYTES:
+            emit("media_rejected", scenario_id=scenario_id, kind=kind, reason="size")
+            raise HTTPException(status_code=413, detail="file too large")
+
+    ext = _detect_extension(bytes(data[:16]))
+    if ext is None:
+        emit("media_rejected", scenario_id=scenario_id, kind=kind, reason="type")
+        raise HTTPException(status_code=415, detail="unsupported media type")
+
+    space_dir = _space_dir(scenario_id, kind, character)
+    target = space_dir / f"{effective_key}.{ext}"
+    try:
+        space_dir.mkdir(parents=True, exist_ok=True)
+        fd, tmp_name = tempfile.mkstemp(dir=space_dir)
+        try:
+            with os.fdopen(fd, "wb") as tmp_file:
+                tmp_file.write(data)
+            os.replace(tmp_name, target)
+        except OSError:
+            with suppress(OSError):
+                os.remove(tmp_name)
+            raise
+        for other_ext in ALLOWED_EXTENSIONS:
+            if other_ext == ext:
+                continue
+            sibling = space_dir / f"{effective_key}.{other_ext}"
+            if sibling.exists():
+                sibling.unlink()
+    except OSError as exc:
+        emit("media_write_failed", scenario_id=scenario_id, path=str(target), error=str(exc))
+        raise HTTPException(status_code=500, detail="write failed") from None
+
+    relative = _relative_path(kind, effective_key, character, ext)
+    emit("media_uploaded", scenario_id=scenario_id, kind=kind, key=effective_key, bytes=len(data), ext=ext)
+    return {"path": relative, "url": media_url(scenario_id, relative)}
+
+
+@router.delete("/api/builder/scenarios/{scenario_id}/media", status_code=204)
+async def delete_media_route(
+    scenario_id: str,
+    kind: str,
+    key: str = "",
+    character: str | None = None,
+) -> Response:
+    config = load_config()
+    if not config.flag("builder"):
+        emit("builder_rejected", scenario_id=scenario_id, reason="builder disabled by flag")
+        raise HTTPException(status_code=503, detail="builder disabled by flag")
+
+    _require_scenario(scenario_id)
+    effective_key = _validate_media_target(kind, key, character)
+
+    space_dir = _space_dir(scenario_id, kind, character)
+    removed = False
+    try:
+        for ext in ALLOWED_EXTENSIONS:
+            candidate = space_dir / f"{effective_key}.{ext}"
+            if candidate.exists():
+                candidate.unlink()
+                removed = True
+    except OSError as exc:
+        emit("media_write_failed", scenario_id=scenario_id, path=str(space_dir), error=str(exc))
+        raise HTTPException(status_code=500, detail="delete failed") from None
+
+    if not removed:
+        raise HTTPException(status_code=404, detail="asset not found")
+
+    emit("media_removed", scenario_id=scenario_id, kind=kind, key=effective_key)
+    return Response(status_code=204)
