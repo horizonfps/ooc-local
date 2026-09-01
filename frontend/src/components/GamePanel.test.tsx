@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GamePanel } from './GamePanel'
@@ -22,6 +22,7 @@ function session(overrides: Partial<SessionDetail> = {}): SessionDetail {
     playGuide: null,
     turns: [],
     hud: { turn: 0, location: 'Hallway', time: 'Night', weather: 'clear' },
+    assets: { sprites: {}, backgrounds: {} },
     ...overrides,
   }
 }
@@ -151,5 +152,121 @@ describe('GamePanel', () => {
     await screen.findByText(t('game.notFound.title'))
     expect(onNotFound).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('button', { name: t('common.back') })).not.toBeInTheDocument()
+  })
+
+  describe('scene', () => {
+    const assets = {
+      sprites: { chloe: { default: '/media/chloe/default.png', sad: '/media/chloe/sad.png' } },
+      backgrounds: { patio: '/media/backgrounds/patio.png' },
+    }
+
+    afterEach(() => {
+      localStorage.clear()
+    })
+
+    it('renders the background layer and a sprite with an interpolated alt when a turn carries tags', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ assets })),
+        post: () => sseResponse([{ delta: '[BG:patio] [SPRITE:chloe:sad] She looks up.' }, '[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      const sprite = await screen.findByAltText(t('game.sprite.alt', { character: 'chloe', emotion: 'sad' }))
+      expect(sprite).toBeInTheDocument()
+      expect(document.querySelector('.game-stage-bg')).not.toBeNull()
+    })
+
+    it('renders no background layer and no sprite band when the session has no assets', async () => {
+      mockRoutedFetch({ get: () => jsonResponse(session()), post: () => sseResponse(['[DONE]']) })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      expect(document.querySelector('.game-stage-bg')).toBeNull()
+      expect(document.querySelector('.game-stage-sprites')).toBeNull()
+      expect(document.querySelector('.game-stage-toggle')).toBeNull()
+    })
+
+    it('drops a sprite that fails to load without showing an error', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ assets })),
+        post: () => sseResponse([{ delta: '[SPRITE:chloe:sad] She looks up.' }, '[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      const sprite = await screen.findByAltText(t('game.sprite.alt', { character: 'chloe', emotion: 'sad' }))
+      fireEvent.error(sprite)
+
+      await waitFor(() => expect(document.querySelector('.game-stage-sprites')).toBeNull())
+    })
+
+    it('the toggle hides the artwork and persists the preference', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ assets })),
+        post: () => sseResponse([{ delta: '[BG:patio] She looks up.' }, '[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+      await screen.findByText('She looks up.')
+
+      const toggle = screen.getByRole('button', { name: t('game.stage.hide') })
+      expect(toggle).toHaveAttribute('aria-pressed', 'true')
+      await user.click(toggle)
+
+      expect(document.querySelector('.game-stage-bg')).toBeNull()
+      expect(screen.getByRole('button', { name: t('game.stage.show') })).toHaveAttribute('aria-pressed', 'false')
+      expect(localStorage.getItem('ooc-local:stage')).toBe('0')
+    })
+
+    it('does not break when localStorage throws', async () => {
+      const original = window.localStorage
+      Object.defineProperty(window, 'localStorage', {
+        configurable: true,
+        get() {
+          throw new Error('blocked')
+        },
+      })
+
+      mockRoutedFetch({ get: () => jsonResponse(session({ assets })), post: () => sseResponse(['[DONE]']) })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      expect(screen.getByRole('button', { name: t('game.stage.hide') })).toBeInTheDocument()
+
+      Object.defineProperty(window, 'localStorage', { configurable: true, value: original })
+    })
+
+    it('announces the scene change in the existing live region', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ assets })),
+        post: () => sseResponse([{ delta: '[BG:patio][SPRITE:chloe:sad] She looks up.' }, '[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      await screen.findByText(
+        t('game.scene.announce', {
+          background: 'patio',
+          characters: t('game.scene.characterEmotion', { character: 'chloe', emotion: 'sad' }),
+        }),
+      )
+    })
   })
 })

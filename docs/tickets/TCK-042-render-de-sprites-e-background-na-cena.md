@@ -1,7 +1,7 @@
 ---
 id: TCK-042
 title: Renderizar sprites e background a partir das tags do turno
-status: ready
+status: in_review
 points: 5
 blockedBy: [TCK-028, TCK-034, TCK-040, TCK-041]
 files:
