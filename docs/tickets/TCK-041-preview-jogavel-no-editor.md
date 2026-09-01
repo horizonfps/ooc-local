@@ -1,7 +1,7 @@
 ---
 id: TCK-041
 title: Jogar o cenario no painel de preview do editor
-status: in_review
+status: done
 points: 5
 blockedBy: [TCK-033, TCK-036, TCK-038, TCK-040, TCK-046, TCK-049]
 files:
