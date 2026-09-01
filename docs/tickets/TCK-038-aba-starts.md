@@ -1,7 +1,7 @@
 ---
 id: TCK-038
 title: Editar os starts do cenario na aba Starts
-status: ready
+status: in_review
 points: 3
 blockedBy: [TCK-029, TCK-036, TCK-047]
 files:

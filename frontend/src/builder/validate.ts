@@ -3,6 +3,8 @@ import type { BuilderDraft, BuilderTab, ValidationError } from '../screens/Build
 import { parseGuidedWorld } from './worldMarkdown'
 
 const ID_RE = /^[a-z0-9-]+$/
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
+const WEATHER_CODES = ['clear', 'cloudy', 'rain', 'storm', 'snow', 'fog', 'night']
 
 function hasUnbalancedVariable(text: string): boolean {
   return text.split('\n').some((line) => {
@@ -65,17 +67,69 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
   }
 
   for (const startId of startIds) {
+    const start = draft.starts[startId]
+    const startLabel = start.name.trim() || startId
+    const withStart = (label: string) => `${startLabel} — ${label}`
+
     if (!ID_RE.test(startId)) {
-      errors.push(error('starts', `starts.${startId}`, t('builder.field.label.startId'), t('builder.field.slugInvalid')))
+      errors.push(error('starts', `starts.${startId}`, withStart(t('builder.field.label.startId')), t('builder.field.slugInvalid')))
     }
-    const characters = draft.starts[startId].characters ?? []
+
+    if (!start.name.trim()) {
+      errors.push(error('starts', `starts.${startId}.name`, withStart(t('builder.starts.name')), t('builder.field.required')))
+    } else if (start.name.length > 80) {
+      errors.push(error('starts', `starts.${startId}.name`, withStart(t('builder.starts.name')), t('builder.field.tooLong', { max: 80 })))
+    }
+
+    if (!start.prologue.trim()) {
+      errors.push(error('starts', `starts.${startId}.prologue`, withStart(t('builder.starts.prologue')), t('builder.field.required')))
+    }
+
+    if (!start.opening_scene.trim()) {
+      errors.push(
+        error('starts', `starts.${startId}.opening_scene`, withStart(t('builder.starts.openingScene')), t('builder.field.required')),
+      )
+    }
+
+    if (!start.hud.location.trim()) {
+      errors.push(
+        error('starts', `starts.${startId}.hud.location`, withStart(t('builder.starts.hud.location')), t('builder.field.required')),
+      )
+    }
+
+    if (!TIME_RE.test(start.hud.time)) {
+      errors.push(
+        error('starts', `starts.${startId}.hud.time`, withStart(t('builder.starts.hud.time')), t('builder.field.time.invalid')),
+      )
+    }
+
+    if (!WEATHER_CODES.includes(start.hud.weather)) {
+      errors.push(
+        error('starts', `starts.${startId}.hud.weather`, withStart(t('builder.starts.hud.weather')), t('builder.field.weather.invalid')),
+      )
+    }
+
+    start.suggestions.forEach((suggestion, index) => {
+      if (suggestion.length > 120) {
+        errors.push(
+          error(
+            'starts',
+            `starts.${startId}.suggestions.${index}`,
+            withStart(t('builder.starts.suggestions.item', { index: index + 1 })),
+            t('builder.field.tooLong', { max: 120 }),
+          ),
+        )
+      }
+    })
+
+    const characters = start.characters ?? []
     for (const charId of characters) {
       if (!(charId in draft.characters)) {
         errors.push(
           error(
             'starts',
             `starts.${startId}.characters`,
-            t('builder.field.label.startCharacters'),
+            withStart(t('builder.field.label.startCharacters')),
             t('builder.validate.startUnknownCharacter', { start: startId, character: charId }),
           ),
         )

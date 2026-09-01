@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BuilderEditorScreen } from './BuilderEditorScreen'
@@ -20,8 +20,8 @@ const DOCUMENT = {
     default: {
       id: 'default',
       name: 'Default start',
-      prologue: '',
-      opening_scene: '',
+      prologue: 'It begins.',
+      opening_scene: 'A hallway at night.',
       play_guide: null,
       suggestions: [],
       hud: { location: 'Hallway', time: '08:00', weather: 'clear' },
@@ -315,6 +315,58 @@ describe('BuilderEditorScreen', () => {
     await user.click(jumpLink)
 
     expect(location.hash).toBe('#/builder/school/starts')
+  })
+
+  it('starts tab: clicking the validation summary jump link focuses the field with the error', async () => {
+    const user = userEvent.setup()
+    const invalidDocument = { ...DOCUMENT, starts: { default: { ...DOCUMENT.starts.default, name: '' } } }
+    mockFetch(() => jsonResponse(invalidDocument))
+    render(<BuilderEditorScreen scenarioId="school" tab="starts" />)
+
+    const prologue = await screen.findByLabelText(t('builder.starts.prologue'))
+    fireEvent.change(prologue, { target: { value: 'Updated prologue.' } })
+
+    await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
+
+    const summary = await screen.findByText(t('builder.editor.validation.summaryTitle'))
+    const panel = summary.closest('.builder-editor-validation') as HTMLElement
+    const nameJump = within(panel)
+      .getAllByRole('button')
+      .find((btn) => btn.textContent?.includes(t('builder.starts.name')))
+    expect(nameJump).toBeTruthy()
+    await user.click(nameJump as HTMLElement)
+
+    const nameInput = document.getElementById('builder-field-starts.default.name')
+    expect(document.activeElement).toBe(nameInput)
+  })
+
+  it('filters empty and whitespace-only suggestions out of the saved document', async () => {
+    const user = userEvent.setup()
+    const draftWithSuggestions = {
+      ...DOCUMENT,
+      starts: { default: { ...DOCUMENT.starts.default, suggestions: ['ok', '', '   '] } },
+    }
+    let putBody: unknown = null
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url !== '/api/builder/scenarios/school') throw new Error(`unexpected fetch ${url}`)
+      if (init?.method === 'PUT') {
+        putBody = JSON.parse(String(init.body))
+        return jsonResponse({ revision: 'rev-2' })
+      }
+      return jsonResponse(draftWithSuggestions)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<BuilderEditorScreen scenarioId="school" tab="starts" />)
+
+    const prologue = await screen.findByLabelText(t('builder.starts.prologue'))
+    fireEvent.change(prologue, { target: { value: 'Updated prologue.' } })
+
+    await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
+
+    await screen.findByText(t('builder.editor.clean'))
+    const savedStarts = (putBody as { starts: { default: { suggestions: string[] } } }).starts
+    expect(savedStarts.default.suggestions).toEqual(['ok'])
   })
 
   it('asks for confirmation before reloading a dirty draft, and reloads on confirm', async () => {

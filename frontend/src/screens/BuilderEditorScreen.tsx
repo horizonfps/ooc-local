@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ApiError, fetchScenarioDocument, saveScenarioDocument, type ScenarioDocument } from '../api'
 import { deepEqual, validateDraft } from '../builder/validate'
 import { IdentityTab } from '../components/builder/IdentityTab'
+import { StartsTab } from '../components/builder/StartsTab'
 import { WorldTab } from '../components/builder/WorldTab'
 import { ErrorState } from '../components/ErrorState'
 import { Loading } from '../components/Loading'
@@ -193,11 +194,22 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
   }
 
   function documentOf(): ScenarioDocument | null {
-    return state.status === 'ready' ? { revision: state.revision, ...state.draft } : null
+    if (state.status !== 'ready') return null
+    const starts = Object.fromEntries(
+      Object.entries(state.draft.starts).map(([id, start]) => [
+        id,
+        { ...start, suggestions: start.suggestions.filter((s) => s.trim() !== '') },
+      ]),
+    )
+    return { revision: state.revision, ...state.draft, starts }
   }
 
-  function applySaveSuccess(sent: BuilderDraft, revision: string) {
-    setState((prev) => (prev.status === 'ready' ? { ...prev, loaded: sent, revision } : prev))
+  function applySaveSuccess(sent: BuilderDraft, raw: BuilderDraft, revision: string) {
+    setState((prev) => {
+      if (prev.status !== 'ready') return prev
+      const untouchedDuringSave = deepEqual(prev.draft, raw)
+      return { ...prev, draft: untouchedDuringSave ? sent : prev.draft, loaded: sent, revision }
+    })
     setSaveStatus('idle')
     setSaveErrorKind(null)
     setValidationAttempted(false)
@@ -206,12 +218,13 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
 
   function doSave(force: boolean) {
     const doc = documentOf()
-    if (!doc) return
+    if (!doc || state.status !== 'ready') return
+    const raw = state.draft
     const { revision: _sentRevision, ...sent } = doc
     setSaveStatus('saving')
     setSaveErrorKind(null)
     saveScenarioDocument(id, doc, force)
-      .then(({ revision }) => applySaveSuccess(sent, revision))
+      .then(({ revision }) => applySaveSuccess(sent, raw, revision))
       .catch((err) => {
         setSaveStatus('idle')
         if (err instanceof ApiError && err.status === 409) {
@@ -236,17 +249,18 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
 
   async function handleGuardSave(): Promise<void> {
     const doc = documentOf()
-    if (!doc) throw new Error('editor not ready')
+    if (!doc || state.status !== 'ready') throw new Error('editor not ready')
     if (errors.length > 0) {
       setValidationAttempted(true)
       throw new Error('validation failed')
     }
+    const raw = state.draft
     const { revision: _sentRevision, ...sent } = doc
     setSaveStatus('saving')
     setSaveErrorKind(null)
     try {
       const { revision } = await saveScenarioDocument(id, doc)
-      applySaveSuccess(sent, revision)
+      applySaveSuccess(sent, raw, revision)
     } catch (err) {
       setSaveStatus('idle')
       if (err instanceof ApiError && err.status === 409) {
@@ -568,6 +582,8 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
                   <IdentityTab {...tabProps} />
                 ) : activeTab === 'world' ? (
                   <WorldTab {...tabProps} />
+                ) : activeTab === 'starts' ? (
+                  <StartsTab {...tabProps} />
                 ) : (
                   <TabPlaceholder tab={activeTab} {...tabProps} />
                 ))
