@@ -38,8 +38,10 @@ function draftOf(doc: ScenarioDocument): BuilderDraft {
 
 function slice(tab: BuilderTab, draft: BuilderDraft): unknown {
   switch (tab) {
-    case 'identity':
-      return draft.meta
+    case 'identity': {
+      const { world_mode: _worldMode, default_start: _defaultStart, ...identityMeta } = draft.meta
+      return identityMeta
+    }
     case 'world':
       return { world: draft.world, world_mode: draft.meta.world_mode }
     case 'starts':
@@ -86,7 +88,7 @@ function demoEdit(tab: BuilderTab, draft: BuilderDraft): BuilderDraft {
 function TabPlaceholder(props: TabProps & { tab: BuilderTab }) {
   const { tab, draft, onChange } = props
   const label = t(TAB_LABEL_KEY[tab])
-  if (tab === 'media') return <p>{label}</p>
+  if (tab === 'media' || !import.meta.env.DEV) return <p>{label}</p>
   return (
     <div>
       <p>{label}</p>
@@ -110,6 +112,7 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
   const tabRefs = useRef<Partial<Record<BuilderTab, HTMLAnchorElement | null>>>({})
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [focusedTab, setFocusedTab] = useState<BuilderTab>(activeTab)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   useEffect(() => {
     setFocusedTab(activeTab)
@@ -204,7 +207,7 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
     ? { scenarioId: id, draft, onChange: handleChange, errors, goToTab }
     : null
 
-  const errorCause = state.status === 'error' ? describeError(state.error).cause : undefined
+  const described = state.status === 'error' ? describeError(state.error) : null
 
   return (
     <main className="builder-editor">
@@ -215,11 +218,27 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
         <h1 ref={headingRef} tabIndex={-1} title={scenarioName || undefined}>
           {scenarioName}
         </h1>
-        <p className="builder-editor-folder">{t('builder.editor.folder', { folder: id })}</p>
-        <div className="builder-editor-actions" />
-        <p role="status" aria-live="polite" className="builder-editor-dirty">
-          {dirty ? t('builder.editor.dirty') : t('builder.editor.clean')}
-        </p>
+        {state.status === 'ready' ? (
+          <p className="builder-editor-folder">{t('builder.editor.folder', { folder: id })}</p>
+        ) : null}
+        <div className="builder-editor-actions">
+          {state.status === 'ready' ? (
+            <button
+              type="button"
+              className="builder-editor-previewToggle"
+              aria-expanded={previewOpen}
+              aria-controls="builder-editor-preview"
+              onClick={() => setPreviewOpen((open) => !open)}
+            >
+              {previewOpen ? t('builder.editor.previewToggle.hide') : t('builder.editor.previewToggle.show')}
+            </button>
+          ) : null}
+        </div>
+        {state.status === 'ready' ? (
+          <p role="status" aria-live="polite" className="builder-editor-dirty">
+            {dirty ? t('builder.editor.dirty') : t('builder.editor.clean')}
+          </p>
+        ) : null}
       </header>
 
       {showTabs ? (
@@ -277,7 +296,7 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
                 tabProps && <TabPlaceholder tab={activeTab} {...tabProps} />
               )}
             </section>
-            <aside className="builder-editor-preview" />
+            <aside id="builder-editor-preview" className={`builder-editor-preview${previewOpen ? ' is-open' : ''}`} />
           </>
         ) : null}
 
@@ -306,8 +325,8 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
           />
         ) : null}
 
-        {state.status === 'error' ? (
-          <ErrorState title={t('builder.editor.error.title')} body={t('builder.editor.error.body')} cause={errorCause} onRetry={load} />
+        {described ? (
+          <ErrorState title={described.title} body={described.body} cause={described.cause} onRetry={load} />
         ) : null}
       </div>
     </main>

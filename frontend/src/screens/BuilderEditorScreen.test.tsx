@@ -151,7 +151,7 @@ describe('BuilderEditorScreen', () => {
     const fetchMock = mockFetch(() => jsonResponse({ detail: 'boom' }, 500))
     render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
 
-    expect(await screen.findByText(t('builder.editor.error.title'))).toBeInTheDocument()
+    expect(await screen.findByText(t('error.unexpected.title'))).toBeInTheDocument()
     const retryButton = screen.getByRole('button', { name: t('common.retry') })
 
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {

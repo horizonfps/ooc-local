@@ -266,3 +266,7 @@ a lista de sessões em `#/` continuando limpa depois.
 | `builder.preview.switchStart.submit` | `Switch start` | `Trocar de start` |
 | `builder.preview.invalid.title` | `Can't play this scenario yet` | `Ainda não dá para jogar este cenário` |
 | `builder.preview.invalid.body` | `{reason}. Fix it and the preview starts.` | `{reason}. Conserte e o preview inicia.` |
+
+## Ressalva registrada na wave 7
+
+- O shell entrega o toggle do preview (`builder-editor-previewToggle`, `aria-expanded`, classe `is-open` no aside, oculto >=1100px). O comportamento de tela cheia no mobile com botao de voltar como primeiro tabulavel fica a cargo deste ticket, junto do conteudo do painel.
