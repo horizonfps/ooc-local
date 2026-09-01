@@ -1,7 +1,7 @@
 ---
 id: TCK-040
 title: Extrair o GamePanel reutilizavel de dentro do GameScreen
-status: ready
+status: in_review
 points: 3
 blockedBy: []
 files:
