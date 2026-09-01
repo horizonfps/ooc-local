@@ -3,6 +3,7 @@ import { ApiError, fetchScenarioDocument, saveScenarioDocument, type ScenarioDoc
 import { deepEqual, validateDraft } from '../builder/validate'
 import { CharactersTab } from '../components/builder/CharactersTab'
 import { IdentityTab } from '../components/builder/IdentityTab'
+import { MediaTab } from '../components/builder/MediaTab'
 import { StartsTab } from '../components/builder/StartsTab'
 import { WorldTab } from '../components/builder/WorldTab'
 import { ErrorState } from '../components/ErrorState'
@@ -93,7 +94,7 @@ function demoEdit(tab: BuilderTab, draft: BuilderDraft): BuilderDraft {
 function TabPlaceholder(props: TabProps & { tab: BuilderTab }) {
   const { tab, draft, onChange } = props
   const label = t(TAB_LABEL_KEY[tab])
-  if (tab === 'media' || !import.meta.env.DEV) return <p>{label}</p>
+  if (!import.meta.env.DEV) return <p>{label}</p>
   return (
     <div>
       <p>{label}</p>
@@ -587,6 +588,8 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
                   <StartsTab {...tabProps} />
                 ) : activeTab === 'characters' ? (
                   <CharactersTab {...tabProps} />
+                ) : activeTab === 'media' ? (
+                  <MediaTab {...tabProps} />
                 ) : (
                   <TabPlaceholder tab={activeTab} {...tabProps} />
                 ))
