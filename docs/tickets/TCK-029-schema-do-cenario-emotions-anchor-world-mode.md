@@ -12,7 +12,7 @@ files:
   - scenarios/exemplo-escola/characters/chloe.yaml
   - scenarios/exemplo-escola/characters/ashlee.yaml
   - scenarios/exemplo-escola/characters/mika.yaml
-migration: true
+migration: false
 ui: false
 risk: medium
 ---
