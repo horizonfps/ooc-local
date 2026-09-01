@@ -179,6 +179,7 @@ const en = {
   'builder.media.error.write': "The file wasn't written. Check that the media folder is writable.",
   'builder.media.error.removeFailed': "The file wasn't removed. It's still on disk.",
   'builder.media.error.disabled': 'Writing is turned off: the builder flag is off in ~/.ooc-local/config.yaml.',
+  'builder.media.error.invalidKey': 'Character or emotion name must be a lowercase slug (letters, numbers, hyphens).',
 
   // Builder editor identity tab
   'builder.identity.heading': 'Identity',
@@ -327,6 +328,7 @@ const en = {
   'builder.media.cell.empty': 'Empty',
   'builder.media.cell.emptyDefault': 'Empty — without default this character shows no sprite at all.',
   'builder.media.cell.uploading': 'Uploading…',
+  'builder.media.cell.removing': 'Removing…',
   'builder.media.cell.upload': 'Upload an image',
   'builder.media.cell.replace': 'Replace the image',
   'builder.media.sprite.alt': '{character}, {emotion}',
@@ -566,6 +568,7 @@ const ptBr: Record<StringKey, string> = {
   'builder.media.error.write': 'O arquivo não foi escrito. Confira se a pasta media aceita escrita.',
   'builder.media.error.removeFailed': 'O arquivo não foi removido. Ele continua no disco.',
   'builder.media.error.disabled': 'A escrita está desligada: a flag builder está desligada em ~/.ooc-local/config.yaml.',
+  'builder.media.error.invalidKey': 'Nome do personagem ou emoção precisa ser um slug minúsculo (letras, números, hífen).',
 
   // Builder editor identity tab
   'builder.identity.heading': 'Identidade',
@@ -714,6 +717,7 @@ const ptBr: Record<StringKey, string> = {
   'builder.media.cell.empty': 'Vazio',
   'builder.media.cell.emptyDefault': 'Vazio — sem o default este personagem não mostra sprite nenhum.',
   'builder.media.cell.uploading': 'Enviando…',
+  'builder.media.cell.removing': 'Removendo…',
   'builder.media.cell.upload': 'Enviar uma imagem',
   'builder.media.cell.replace': 'Trocar a imagem',
   'builder.media.sprite.alt': '{character}, {emotion}',

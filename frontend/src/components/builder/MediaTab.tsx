@@ -11,7 +11,7 @@ import './media.css'
 const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 const MAX_BYTES = 8 * 1024 * 1024
 
-type CellStatus = { kind: 'uploading' } | { kind: 'error'; message: string; retry: () => void }
+type CellStatus = { kind: 'uploading' } | { kind: 'removing' } | { kind: 'error'; message: string; retry: () => void }
 
 type LoadState = { status: 'loading' } | { status: 'error'; error: unknown } | { status: 'ready'; index: MediaIndex }
 
@@ -35,6 +35,7 @@ function uploadErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.status === 415) return t('builder.media.error.type')
     if (err.status === 413) return t('builder.media.error.size', { max: 8 })
+    if (err.status === 422) return t('builder.media.error.invalidKey')
     if (err.status === 503) return t('builder.media.error.disabled')
     if (err.status === 500) return t('builder.media.error.write')
   }
@@ -53,11 +54,15 @@ function orderedEmotions(character: CharacterDoc): string[] {
 }
 
 export function countSpriteSlots(characters: Record<string, CharacterDoc>, index: MediaIndex): { filled: number; total: number } {
+  const seen = new Set<string>()
   let filled = 0
   let total = 0
   for (const [id, character] of Object.entries(characters)) {
     const folder = character.sprite || id
     for (const emotion of character.emotions) {
+      const key = cellKey(folder, emotion)
+      if (seen.has(key)) continue
+      seen.add(key)
       total += 1
       if (index.sprites[folder]?.[emotion]) filled += 1
     }
@@ -77,6 +82,8 @@ function MediaSpriteCell(props: {
   const { folder, characterName, emotion, url, status, onFile, onOpenRemove } = props
   const [dragOver, setDragOver] = useState(false)
   const uploading = status?.kind === 'uploading'
+  const removing = status?.kind === 'removing'
+  const busy = uploading || removing
 
   function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -104,13 +111,14 @@ function MediaSpriteCell(props: {
     'builder-media-cell',
     url ? 'is-filled' : 'is-empty',
     uploading ? 'is-uploading' : '',
+    removing ? 'is-removing' : '',
     dragOver ? 'is-dragOver' : '',
   ]
     .filter(Boolean)
     .join(' ')
 
   return (
-    <li className={className} aria-busy={uploading || undefined} data-testid={`media-cell-${folder}-${emotion}`}>
+    <li className={className} aria-busy={busy || undefined} data-testid={`media-cell-${folder}-${emotion}`}>
       <label
         className="builder-media-cell-label"
         onDragOver={handleDragOver}
@@ -123,7 +131,7 @@ function MediaSpriteCell(props: {
             src={url}
             alt={t('builder.media.sprite.alt', { character: characterName, emotion })}
             title={basename(url.split('?')[0])}
-            style={uploading ? { opacity: 0.5 } : undefined}
+            style={busy ? { opacity: 0.5 } : undefined}
           />
         ) : (
           <span className="builder-media-cell-placeholder">
@@ -131,6 +139,7 @@ function MediaSpriteCell(props: {
           </span>
         )}
         {uploading ? <span className="visually-hidden">{t('builder.media.cell.uploading')}</span> : null}
+        {removing ? <span className="visually-hidden">{t('builder.media.cell.removing')}</span> : null}
         <span className="builder-media-cell-action">{url ? t('builder.media.cell.replace') : t('builder.media.cell.upload')}</span>
         <span className="builder-media-cell-emotion">{emotion}</span>
         <input
@@ -138,7 +147,7 @@ function MediaSpriteCell(props: {
           accept="image/png,image/jpeg,image/webp"
           className="visually-hidden"
           aria-label={t('builder.media.sprite.upload', { character: characterName, emotion })}
-          disabled={uploading}
+          disabled={busy}
           onChange={handleChange}
         />
       </label>
@@ -148,7 +157,7 @@ function MediaSpriteCell(props: {
           className="builder-media-cell-remove"
           aria-label={t('builder.media.sprite.remove', { character: characterName, emotion })}
           onClick={onOpenRemove}
-          disabled={uploading}
+          disabled={busy}
         >
           {t('common.remove')}
         </button>
@@ -179,9 +188,17 @@ export function MediaTab(props: TabProps) {
 
   function load() {
     setState({ status: 'loading' })
+    let cancelled = false
     fetchMediaIndex(scenarioId)
-      .then((index) => setState({ status: 'ready', index }))
-      .catch((error) => setState({ status: 'error', error }))
+      .then((index) => {
+        if (!cancelled) setState({ status: 'ready', index })
+      })
+      .catch((error) => {
+        if (!cancelled) setState({ status: 'error', error })
+      })
+    return () => {
+      cancelled = true
+    }
   }
 
   useEffect(load, [scenarioId])
@@ -256,7 +273,7 @@ export function MediaTab(props: TabProps) {
     const { folder, emotion, path, characterName } = removeTarget
     const key = cellKey(folder, emotion)
     setRemoveTarget(null)
-    setCellStatus((prev) => ({ ...prev, [key]: { kind: 'uploading' } }))
+    setCellStatus((prev) => ({ ...prev, [key]: { kind: 'removing' } }))
     deleteMedia(scenarioId, { kind: 'sprite', key: emotion, character: folder })
       .then(() => {
         setState((prev) => {
@@ -284,8 +301,12 @@ export function MediaTab(props: TabProps) {
   const { filled, total } =
     state.status === 'ready' ? countSpriteSlots(draft.characters, state.index) : { filled: 0, total: 0 }
 
+  function preventStrayDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+  }
+
   return (
-    <div className="builder-media-tab">
+    <div className="builder-media-tab" onDragOver={preventStrayDrop} onDrop={preventStrayDrop}>
       <h2>{t('builder.media.heading')}</h2>
       <p className="field-hint">{t('builder.media.hint')}</p>
 
@@ -338,7 +359,9 @@ export function MediaTab(props: TabProps) {
           />
         ) : (
           <>
-            {filled === 0 ? <EmptyState title={t('builder.media.empty.title')} body={t('builder.media.empty.body')} /> : null}
+            {filled === 0 && !state.index.cover ? (
+              <EmptyState title={t('builder.media.empty.title')} body={t('builder.media.empty.body')} />
+            ) : null}
 
             <h3>{t('builder.media.sprites.heading')}</h3>
             {characterIds.map((id) => {

@@ -260,4 +260,68 @@ describe('MediaTab', () => {
 
     expect(await screen.findByRole('button', { name: t('common.retry') })).toBeInTheDocument()
   })
+
+  it('dropping a file outside the label is swallowed by the tab root, no fetch and no navigation', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(emptyIndex()))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { container } = render(
+      <MediaTab scenarioId="school" draft={baseDraft()} onChange={() => {}} errors={[]} goToTab={() => {}} />,
+    )
+    await screen.findByText(t('builder.media.cell.emptyDefault'))
+
+    const root = container.querySelector('.builder-media-tab') as HTMLElement
+    const file = makeFile('stray.png', 'image/png', 1024)
+    const dropEvent = new Event('drop', { bubbles: true, cancelable: true }) as unknown as DragEvent
+    Object.defineProperty(dropEvent, 'dataTransfer', { value: { files: [file] } })
+    const prevented = !root.dispatchEvent(dropEvent)
+
+    expect(prevented).toBe(true)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('a 422 upload response shows the invalid key error', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/builder/scenarios/school/media' && (!init || init.method === undefined)) {
+        return jsonResponse(emptyIndex())
+      }
+      return jsonResponse({ detail: 'invalid key' }, 422)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<MediaTab scenarioId="school" draft={baseDraft()} onChange={() => {}} errors={[]} goToTab={() => {}} />)
+    await screen.findByText(t('builder.media.cell.emptyDefault'))
+
+    const input = screen.getByLabelText(t('builder.media.sprite.upload', { character: 'Luca', emotion: 'default' }))
+    const user = userEvent.setup()
+    await user.upload(input, makeFile('x.png', 'image/png', 1024))
+
+    expect(await screen.findByText(t('builder.media.error.invalidKey'))).toBeInTheDocument()
+  })
+
+  it('two characters sharing the same sprite folder do not double count the same slot', async () => {
+    const draft = baseDraft()
+    draft.characters.mira = {
+      name: 'Mira',
+      role: 'Teacher',
+      appearance: 'Neat suit.',
+      personality: 'Strict.',
+      voice: 'Formal.',
+      mind: { feeling: 'Tired', goal: 'Grade papers', opinion_of_player: null, secret_plan: null },
+      sprite: 'luca',
+      anchor: false,
+      emotions: ['default', 'happy'],
+    }
+    draft.characters.luca.sprite = 'luca'
+
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ cover: null, sprites: { luca: { default: '/api/scenarios/school/media/sprites/luca/default.png' } }, backgrounds: {} }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<MediaTab scenarioId="school" draft={draft} onChange={() => {}} errors={[]} goToTab={() => {}} />)
+
+    expect(await screen.findByText(t('builder.media.summary', { filled: 1, total: 2 }))).toBeInTheDocument()
+  })
 })
