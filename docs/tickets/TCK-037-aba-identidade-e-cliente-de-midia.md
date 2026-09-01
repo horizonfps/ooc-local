@@ -1,7 +1,7 @@
 ---
 id: TCK-037
 title: Editar a identidade do cenario e subir a capa
-status: in_progress
+status: in_review
 points: 3
 blockedBy: [TCK-029, TCK-036, TCK-044, TCK-046]
 files:
