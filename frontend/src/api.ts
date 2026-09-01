@@ -94,6 +94,60 @@ export async function deleteBuilderScenario(id: string): Promise<void> {
   }
 }
 
+export type ScenarioMeta = {
+  name: string
+  tagline: string | null
+  description: string | null
+  locale: 'en' | 'pt-br'
+  tags: string[]
+  default_start: string
+  world_mode: 'guided' | 'custom'
+}
+
+export type HudDefaults = { location: string; time: string; weather: string }
+
+export type StartDoc = {
+  id: string
+  name: string
+  prologue: string
+  opening_scene: string
+  play_guide: string | null
+  suggestions: string[]
+  hud: HudDefaults
+  characters: string[] | null
+}
+
+export type CharacterMind = {
+  feeling: string
+  goal: string
+  opinion_of_player: string | null
+  secret_plan: string | null
+}
+
+export type CharacterDoc = {
+  name: string
+  role: string
+  appearance: string
+  personality: string
+  voice: string
+  mind: CharacterMind
+  sprite: string | null
+  anchor: boolean
+  emotions: string[]
+}
+
+export type ScenarioDocument = {
+  revision: string
+  meta: ScenarioMeta
+  world: string
+  starts: Record<string, StartDoc>
+  characters: Record<string, CharacterDoc>
+}
+
+export function fetchScenarioDocument(id: string): Promise<ScenarioDocument> {
+  return request(`/api/builder/scenarios/${id}`)
+}
+
 export function fetchSessions(): Promise<SessionSummary[]> {
   return request('/api/sessions')
 }

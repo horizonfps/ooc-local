@@ -89,6 +89,33 @@ describe('useHashRoute', () => {
     expect(result.current).toEqual({ name: 'game', id: 'second' })
   })
 
+  it('resolves builderEditor for #/builder/{id}/{tab}', () => {
+    setHash('#/builder/school/world')
+    expect(renderHook(() => useHashRoute()).result.current).toEqual({ name: 'builderEditor', id: 'school', tab: 'world' })
+  })
+
+  it('falls back to identity for an unknown tab', () => {
+    setHash('#/builder/school/nope')
+    expect(renderHook(() => useHashRoute()).result.current).toEqual({ name: 'builderEditor', id: 'school', tab: 'identity' })
+  })
+
+  it('resolves builderEditor with identity and replaces the hash when the tab is missing', () => {
+    setHash('#/builder/school')
+    expect(renderHook(() => useHashRoute()).result.current).toEqual({ name: 'builderEditor', id: 'school', tab: 'identity' })
+    expect(location.hash).toBe('#/builder/school/identity')
+  })
+
+  it('does not re-replace once the hash already carries a tab', () => {
+    setHash('#/builder/school')
+    renderHook(() => useHashRoute())
+    expect(location.hash).toBe('#/builder/school/identity')
+
+    // a second mount on the now-normalized hash must not trigger another replace
+    const { result } = renderHook(() => useHashRoute())
+    expect(result.current).toEqual({ name: 'builderEditor', id: 'school', tab: 'identity' })
+    expect(location.hash).toBe('#/builder/school/identity')
+  })
+
   it('navigates by setting location.hash', () => {
     setHash('#/')
     navigate('#/session/abc')

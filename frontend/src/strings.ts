@@ -101,6 +101,29 @@ const en = {
   'builder.delete.error':
     "Couldn't delete the folder. Nothing was removed — check that no other program has the files open.",
 
+  // Builder editor
+  'builder.editor.documentTitle': '{scenario} — builder — ooc-local',
+  'builder.editor.back': 'Back to scenarios',
+  'builder.editor.folder': 'scenarios/{folder}',
+  'builder.editor.loading': 'Loading scenario…',
+  'builder.editor.notFound.title': 'Scenario not found',
+  'builder.editor.notFound.body': "There's no folder with this id in scenarios/. Go back and pick another one.",
+  'builder.editor.invalid.title': "This scenario has a file the app can't read",
+  'builder.editor.invalid.body':
+    "{reason}. Fix the file on disk and reload — the builder won't overwrite what it can't read.",
+  'builder.editor.tabs.label': 'Scenario sections',
+  'builder.editor.tab.identity': 'Identity',
+  'builder.editor.tab.world': 'World',
+  'builder.editor.tab.starts': 'Starts',
+  'builder.editor.tab.characters': 'Characters',
+  'builder.editor.tab.media': 'Media',
+  'builder.editor.tab.dirty': 'has unsaved changes',
+  'builder.editor.tab.invalid': 'has a field to fix',
+  'builder.editor.dirty': 'Unsaved changes',
+  'builder.editor.clean': 'Everything saved',
+  'builder.editor.previewToggle.show': 'Show preview',
+  'builder.editor.previewToggle.hide': 'Hide preview',
+
   // Game screen
   'game.documentTitle': '{scenario} — ooc-local',
   'game.loading': 'Loading session…',
@@ -250,6 +273,29 @@ const ptBr: Record<StringKey, string> = {
   'builder.delete.success': '{scenario} deletado',
   'builder.delete.error':
     'Não consegui deletar a pasta. Nada foi removido — veja se outro programa está com os arquivos abertos.',
+
+  // Builder editor
+  'builder.editor.documentTitle': '{scenario} — builder — ooc-local',
+  'builder.editor.back': 'Voltar para os cenários',
+  'builder.editor.folder': 'scenarios/{folder}',
+  'builder.editor.loading': 'Carregando cenário…',
+  'builder.editor.notFound.title': 'Cenário não encontrado',
+  'builder.editor.notFound.body': 'Não existe pasta com esse id em scenarios/. Volte e escolha outro.',
+  'builder.editor.invalid.title': 'Este cenário tem um arquivo que o app não consegue ler',
+  'builder.editor.invalid.body':
+    '{reason}. Conserte o arquivo no disco e recarregue — o builder não sobrescreve o que não consegue ler.',
+  'builder.editor.tabs.label': 'Seções do cenário',
+  'builder.editor.tab.identity': 'Identidade',
+  'builder.editor.tab.world': 'Mundo',
+  'builder.editor.tab.starts': 'Starts',
+  'builder.editor.tab.characters': 'Personagens',
+  'builder.editor.tab.media': 'Mídia',
+  'builder.editor.tab.dirty': 'tem mudanças não salvas',
+  'builder.editor.tab.invalid': 'tem campo para consertar',
+  'builder.editor.dirty': 'Mudanças não salvas',
+  'builder.editor.clean': 'Tudo salvo',
+  'builder.editor.previewToggle.show': 'Mostrar preview',
+  'builder.editor.previewToggle.hide': 'Esconder preview',
 
   // Game screen
   'game.documentTitle': '{scenario} — ooc-local',
