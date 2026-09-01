@@ -1,3 +1,4 @@
+import { BuilderEditorScreen } from './screens/BuilderEditorScreen'
 import { BuilderListScreen } from './screens/BuilderListScreen'
 import { GameScreen } from './screens/GameScreen'
 import { SessionsScreen } from './screens/SessionsScreen'
@@ -8,5 +9,6 @@ export default function App() {
 
   if (route.name === 'game') return <GameScreen sessionId={route.id} />
   if (route.name === 'builderList') return <BuilderListScreen />
+  if (route.name === 'builderEditor') return <BuilderEditorScreen scenarioId={route.id} tab={route.tab} />
   return <SessionsScreen />
 }
