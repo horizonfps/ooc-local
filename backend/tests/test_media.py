@@ -135,6 +135,15 @@ def test_file_route_rejects_backslash_traversal(client, scenarios_root):
     assert response.status_code == 404
 
 
+def test_file_route_encoded_traversal_hits_containment_guard(client, scenarios_root):
+    _write_scenario(scenarios_root, "escola")
+    neighbor_dir = _write_scenario(scenarios_root, "vizinho")
+    (neighbor_dir / "secret.png").write_bytes(PNG_BYTES)
+
+    response = client.get("/api/scenarios/escola/media/..%2F..%2Fvizinho%2Fsecret.png")
+    assert response.status_code == 404
+
+
 def test_file_route_rejects_directory(client, scenarios_root):
     scenario_dir = _write_scenario(scenarios_root, "escola")
     backgrounds_dir = scenario_dir / "media" / "backgrounds"
