@@ -1,7 +1,7 @@
 ---
 id: TCK-039
 title: Subir sprites por personagem e emocao na aba Midia
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-032, TCK-036, TCK-037, TCK-048]
 files:
