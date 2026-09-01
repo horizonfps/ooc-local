@@ -1,7 +1,7 @@
 ---
 id: TCK-048
 title: Editar os personagens do cenario na aba Personagens
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-029, TCK-036, TCK-038]
 files:
@@ -230,3 +230,7 @@ preview (aparecem na narração do primeiro turno).
 | `builder.characters.delete.title` | `Delete {name}?` | `Deletar {name}?` |
 | `builder.characters.delete.body` | `characters/{id}.yaml is removed when you save. The sprites in media/sprites/{sprite}/ stay on disk.` | `characters/{id}.yaml é removido quando você salvar. Os sprites em media/sprites/{sprite}/ ficam no disco.` |
 | `builder.characters.delete.castUpdated` | `{name} was also removed from these starts: {starts}` | `{name} também saiu destes starts: {starts}` |
+
+## Ressalva registrada na wave 12
+
+- Regra de "pelo menos um personagem" foi removida na correcao da wave: contradizia o contrato do TCK-043 (`characters: {}` e payload valido). O empty state da aba convida a criar; o save nao bloqueia.
