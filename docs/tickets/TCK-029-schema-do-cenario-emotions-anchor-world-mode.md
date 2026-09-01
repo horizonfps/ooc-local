@@ -1,7 +1,7 @@
 ---
 id: TCK-029
 title: Congelar o schema do cenario com emotions, anchor, world_mode e caminho publico
-status: in_review
+status: done
 points: 3
 blockedBy: []
 files:

@@ -1,7 +1,7 @@
 ---
 id: TCK-026
 title: Remover bloco de HUD e eco da acao do jogador do output do narrador
-status: ready
+status: done
 points: 3
 blockedBy: []
 files:
