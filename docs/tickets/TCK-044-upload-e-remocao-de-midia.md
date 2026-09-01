@@ -1,7 +1,7 @@
 ---
 id: TCK-044
 title: Gravar e remover imagem do cenario por upload manual
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-032, TCK-034]
 files:

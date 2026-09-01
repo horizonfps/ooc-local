@@ -1,7 +1,7 @@
 ---
 id: TCK-045
 title: Criar, duplicar e deletar cenario pela lista do builder
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-035]
 files:
