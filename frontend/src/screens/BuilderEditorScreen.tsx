@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { ApiError, fetchScenarioDocument, type ScenarioDocument } from '../api'
+import { ApiError, fetchScenarioDocument, saveScenarioDocument, type ScenarioDocument } from '../api'
 import { deepEqual, validateDraft } from '../builder/validate'
 import { ErrorState } from '../components/ErrorState'
 import { Loading } from '../components/Loading'
 import { describeError } from '../errors'
 import { t, type StringKey } from '../i18n'
 import { navigate, type BuilderTab } from '../useHashRoute'
+import { useUnsavedGuard } from '../useUnsavedGuard'
 import './builderEditor.css'
 
 export type { BuilderTab } from '../useHashRoute'
@@ -106,6 +107,9 @@ type LoadState =
   | { status: 'error'; error: unknown }
   | { status: 'ready'; loaded: BuilderDraft; draft: BuilderDraft; revision: string }
 
+type SaveStatus = 'idle' | 'saving'
+type SaveErrorKind = 'disabled' | 'generic' | null
+
 export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab }) {
   const { scenarioId: id, tab: activeTab } = props
   const headingRef = useRef<HTMLHeadingElement>(null)
@@ -114,16 +118,33 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
   const [focusedTab, setFocusedTab] = useState<BuilderTab>(activeTab)
   const [previewOpen, setPreviewOpen] = useState(false)
 
+  const [announcement, setAnnouncement] = useState('')
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const [saveErrorKind, setSaveErrorKind] = useState<SaveErrorKind>(null)
+  const [saveError, setSaveError] = useState<unknown>(null)
+  const [validationAttempted, setValidationAttempted] = useState(false)
+  const [conflictOpen, setConflictOpen] = useState(false)
+  const [reloadConfirmOpen, setReloadConfirmOpen] = useState(false)
+
+  const conflictDialogRef = useRef<HTMLDialogElement>(null)
+  const conflictCancelRef = useRef<HTMLButtonElement>(null)
+  const reloadDialogRef = useRef<HTMLDialogElement>(null)
+  const reloadCancelRef = useRef<HTMLButtonElement>(null)
+  const validationPanelRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     setFocusedTab(activeTab)
   }, [activeTab])
 
-  function load() {
+  function load(opts?: { announceOnLoad?: boolean }) {
     setState({ status: 'loading' })
     fetchScenarioDocument(id)
       .then((doc) => {
         const draft = draftOf(doc)
         setState({ status: 'ready', loaded: draft, draft, revision: doc.revision })
+        setSaveErrorKind(null)
+        setValidationAttempted(false)
+        if (opts?.announceOnLoad) setAnnouncement(t('builder.editor.reloaded'))
       })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 404) {
@@ -167,6 +188,126 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
 
   function goToTab(tab: BuilderTab) {
     navigate(`#/builder/${id}/${tab}`)
+  }
+
+  function documentOf(): ScenarioDocument | null {
+    return state.status === 'ready' ? { revision: state.revision, ...state.draft } : null
+  }
+
+  function applySaveSuccess(revision: string) {
+    setState((prev) => (prev.status === 'ready' ? { ...prev, loaded: prev.draft, revision } : prev))
+    setSaveStatus('idle')
+    setSaveErrorKind(null)
+    setValidationAttempted(false)
+    setAnnouncement(t('builder.editor.saved', { folder: id }))
+  }
+
+  function doSave(force: boolean) {
+    const doc = documentOf()
+    if (!doc) return
+    setSaveStatus('saving')
+    setSaveErrorKind(null)
+    saveScenarioDocument(id, doc, force)
+      .then(({ revision }) => applySaveSuccess(revision))
+      .catch((err) => {
+        setSaveStatus('idle')
+        if (err instanceof ApiError && err.status === 409) {
+          setConflictOpen(true)
+        } else if (err instanceof ApiError && err.status === 503) {
+          setSaveErrorKind('disabled')
+        } else {
+          setSaveErrorKind('generic')
+          setSaveError(err)
+        }
+      })
+  }
+
+  function handleSaveClick() {
+    if (state.status !== 'ready' || saveStatus === 'saving') return
+    if (errors.length > 0) {
+      setValidationAttempted(true)
+      return
+    }
+    doSave(false)
+  }
+
+  async function handleGuardSave(): Promise<void> {
+    const doc = documentOf()
+    if (!doc || errors.length > 0) return
+    const { revision } = await saveScenarioDocument(id, doc)
+    applySaveSuccess(revision)
+  }
+
+  function handleGuardDiscard() {
+    setState((prev) => (prev.status === 'ready' ? { ...prev, draft: prev.loaded } : prev))
+  }
+
+  useUnsavedGuard(dirty, { scenarioId: id, onSave: handleGuardSave, onDiscard: handleGuardDiscard })
+
+  const handleSaveClickRef = useRef(handleSaveClick)
+  handleSaveClickRef.current = handleSaveClick
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const isSaveShortcut = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's'
+      if (!isSaveShortcut) return
+      event.preventDefault()
+      handleSaveClickRef.current()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  useEffect(() => {
+    if (validationAttempted && errors.length > 0) {
+      validationPanelRef.current?.focus()
+    }
+  }, [validationAttempted, errors.length])
+
+  useEffect(() => {
+    if (conflictOpen) {
+      conflictDialogRef.current?.showModal()
+      conflictCancelRef.current?.focus()
+    } else {
+      conflictDialogRef.current?.close()
+    }
+  }, [conflictOpen])
+
+  useEffect(() => {
+    if (reloadConfirmOpen) {
+      reloadDialogRef.current?.showModal()
+      reloadCancelRef.current?.focus()
+    } else {
+      reloadDialogRef.current?.close()
+    }
+  }, [reloadConfirmOpen])
+
+  function handleReloadClick() {
+    if (dirty) {
+      setReloadConfirmOpen(true)
+      return
+    }
+    load({ announceOnLoad: true })
+  }
+
+  function handleReloadConfirm() {
+    setReloadConfirmOpen(false)
+    load({ announceOnLoad: true })
+  }
+
+  function handleConflictReload() {
+    setConflictOpen(false)
+    load()
+  }
+
+  function handleConflictOverwrite() {
+    setConflictOpen(false)
+    doSave(true)
+  }
+
+  function jumpToValidationError(tab: BuilderTab, field: string) {
+    goToTab(tab)
+    document.getElementById(`builder-field-${field}`)?.focus()
   }
 
   function isTabDirty(tab: BuilderTab): boolean {
@@ -223,15 +364,34 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
         ) : null}
         <div className="builder-editor-actions">
           {state.status === 'ready' ? (
-            <button
-              type="button"
-              className="builder-editor-previewToggle"
-              aria-expanded={previewOpen}
-              aria-controls="builder-editor-preview"
-              onClick={() => setPreviewOpen((open) => !open)}
-            >
-              {previewOpen ? t('builder.editor.previewToggle.hide') : t('builder.editor.previewToggle.show')}
-            </button>
+            <>
+              <button
+                type="button"
+                className="builder-editor-reload"
+                onClick={handleReloadClick}
+              >
+                {t('builder.editor.reload')}
+              </button>
+              <span className="builder-editor-saveShortcut">{t('builder.editor.saveShortcut')}</span>
+              <button
+                type="button"
+                className="builder-editor-save"
+                onClick={handleSaveClick}
+                disabled={!dirty || saveStatus === 'saving'}
+                aria-busy={saveStatus === 'saving' || undefined}
+              >
+                {saveStatus === 'saving' ? t('builder.editor.saving') : t('builder.editor.save')}
+              </button>
+              <button
+                type="button"
+                className="builder-editor-previewToggle"
+                aria-expanded={previewOpen}
+                aria-controls="builder-editor-preview"
+                onClick={() => setPreviewOpen((open) => !open)}
+              >
+                {previewOpen ? t('builder.editor.previewToggle.hide') : t('builder.editor.previewToggle.show')}
+              </button>
+            </>
           ) : null}
         </div>
         {state.status === 'ready' ? (
@@ -240,6 +400,57 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
           </p>
         ) : null}
       </header>
+
+      <div role="status" aria-live="polite" className="visually-hidden">
+        {announcement}
+      </div>
+
+      <dialog
+        ref={conflictDialogRef}
+        className="builder-editor-dialog"
+        aria-labelledby="builder-editor-conflict-title"
+        onClose={() => setConflictOpen(false)}
+        onCancel={(event) => {
+          event.preventDefault()
+          setConflictOpen(false)
+        }}
+      >
+        <h2 id="builder-editor-conflict-title">{t('builder.editor.save.error.conflict.title')}</h2>
+        <p>{t('builder.editor.save.error.conflict.body', { folder: id })}</p>
+        <div className="builder-editor-dialog-actions">
+          <button type="button" ref={conflictCancelRef} onClick={() => setConflictOpen(false)}>
+            {t('common.cancel')}
+          </button>
+          <button type="button" onClick={handleConflictReload}>
+            {t('builder.editor.conflict.reload')}
+          </button>
+          <button type="button" onClick={handleConflictOverwrite}>
+            {t('builder.editor.conflict.overwrite')}
+          </button>
+        </div>
+      </dialog>
+
+      <dialog
+        ref={reloadDialogRef}
+        className="builder-editor-dialog"
+        aria-labelledby="builder-editor-reloadConfirm-title"
+        onClose={() => setReloadConfirmOpen(false)}
+        onCancel={(event) => {
+          event.preventDefault()
+          setReloadConfirmOpen(false)
+        }}
+      >
+        <h2 id="builder-editor-reloadConfirm-title">{t('builder.editor.reload.confirmTitle')}</h2>
+        <p>{t('builder.editor.reload.confirmBody')}</p>
+        <div className="builder-editor-dialog-actions">
+          <button type="button" ref={reloadCancelRef} onClick={() => setReloadConfirmOpen(false)}>
+            {t('common.cancel')}
+          </button>
+          <button type="button" onClick={handleReloadConfirm}>
+            {t('builder.editor.reload.confirmSubmit')}
+          </button>
+        </div>
+      </dialog>
 
       {showTabs ? (
         <nav
@@ -286,6 +497,42 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
               tabIndex={0}
               className="builder-editor-panel"
             >
+              {state.status === 'ready' && saveErrorKind === 'disabled' ? (
+                <ErrorState
+                  title={t('builder.editor.save.error.disabled.title')}
+                  body={t('builder.editor.save.error.disabled.body')}
+                />
+              ) : null}
+
+              {state.status === 'ready' && saveErrorKind === 'generic' ? (
+                <ErrorState
+                  title={t('builder.editor.save.error.title')}
+                  body={t('builder.editor.save.error.body')}
+                  cause={describeError(saveError).cause}
+                  onRetry={() => doSave(false)}
+                />
+              ) : null}
+
+              {state.status === 'ready' && validationAttempted && errors.length > 0 ? (
+                <div ref={validationPanelRef} role="alert" tabIndex={-1} className="builder-editor-validation">
+                  <p className="builder-editor-validation-title">{t('builder.editor.validation.summaryTitle')}</p>
+                  <p>
+                    {errors.length === 1
+                      ? t('builder.editor.save.error.validationOne')
+                      : t('builder.editor.save.error.validationOther', { count: errors.length })}
+                  </p>
+                  <ul>
+                    {errors.map((error) => (
+                      <li key={`${error.tab}:${error.field}`}>
+                        <button type="button" onClick={() => jumpToValidationError(error.tab, error.field)}>
+                          {t('builder.editor.validation.jump', { field: error.label })}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
               {state.status === 'loading' ? (
                 <>
                   <div className="builder-skeleton-block" aria-hidden="true" />
