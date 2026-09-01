@@ -13,10 +13,12 @@ from app.scenario import list_scenarios
 from app.sessions import (
     ScenarioNotFound,
     SessionDetail,
+    SessionNotEphemeral,
     SessionNotFound,
     SessionSummary,
     StartNotFound,
     create_session,
+    delete_session,
     get_session,
     init_db,
     list_sessions,
@@ -39,6 +41,7 @@ class CreateSessionRequest(BaseModel):
 
     scenario_id: str = Field(alias="scenarioId")
     start_id: str | None = Field(default=None, alias="startId")
+    ephemeral: bool = False
 
 
 @app.get("/api/health")
@@ -62,7 +65,7 @@ async def scenarios() -> list[dict[str, str | None]]:
 @app.post("/api/sessions", response_model=SessionDetail, status_code=201)
 async def create_session_route(req: CreateSessionRequest) -> SessionDetail:
     try:
-        return create_session(req.scenario_id, req.start_id)
+        return create_session(req.scenario_id, req.start_id, req.ephemeral)
     except ScenarioNotFound:
         raise HTTPException(status_code=404, detail="scenario not found") from None
     except StartNotFound:
@@ -82,6 +85,16 @@ async def get_session_route(session_id: str) -> SessionDetail:
         raise HTTPException(status_code=404, detail="session not found") from None
     except ScenarioNotFound:
         raise HTTPException(status_code=404, detail="scenario not found") from None
+
+
+@app.delete("/api/sessions/{session_id}", status_code=204)
+async def delete_session_route(session_id: str) -> None:
+    try:
+        delete_session(session_id)
+    except SessionNotFound:
+        raise HTTPException(status_code=404, detail="session not found") from None
+    except SessionNotEphemeral:
+        raise HTTPException(status_code=409, detail="session is not ephemeral") from None
 
 
 @app.post("/api/chat")

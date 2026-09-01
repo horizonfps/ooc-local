@@ -1,3 +1,4 @@
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -82,6 +83,67 @@ def scenarios_root(tmp_path, monkeypatch):
 def test_init_db_is_idempotent():
     sessions.init_db()
     sessions.init_db()
+
+
+def test_init_db_purges_ephemeral_and_keeps_normal(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    normal = sessions.create_session("exemplo-escola")
+    ephemeral = sessions.create_session("exemplo-escola", ephemeral=True)
+
+    sessions.init_db()
+    sessions.init_db()
+
+    assert [s.id for s in sessions.list_sessions()] == [normal.id]
+    with pytest.raises(sessions.SessionNotFound):
+        sessions.get_session(ephemeral.id)
+
+
+def test_init_db_migrates_db_missing_ephemeral_column(tmp_path, monkeypatch, scenarios_root):
+    db_file = tmp_path / "legacy.db"
+    monkeypatch.setenv("OOC_SESSIONS_DB", str(db_file))
+
+    conn = sqlite3.connect(db_file)
+    conn.executescript(
+        """
+        CREATE TABLE sessions (
+          id            TEXT PRIMARY KEY,
+          scenario_id   TEXT NOT NULL,
+          scenario_name TEXT NOT NULL,
+          start_id      TEXT NOT NULL,
+          created_at    TEXT NOT NULL,
+          updated_at    TEXT NOT NULL,
+          hud           TEXT NOT NULL,
+          compact       TEXT,
+          compact_seq   INTEGER
+        );
+        CREATE TABLE events (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id TEXT NOT NULL REFERENCES sessions(id),
+          seq        INTEGER NOT NULL,
+          kind       TEXT NOT NULL,
+          payload    TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          UNIQUE(session_id, seq)
+        );
+        """
+    )
+    conn.execute(
+        "INSERT INTO sessions (id, scenario_id, scenario_name, start_id, created_at, updated_at, hud) "
+        "VALUES ('legacy-id', 'exemplo-escola', 'Exemplo Escola', 'default', 't', 't', "
+        "'{\"location\": \"patio\", \"turn\": 0}')"
+    )
+    conn.commit()
+    conn.close()
+
+    sessions.init_db()
+
+    conn = sqlite3.connect(db_file)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
+    assert "ephemeral" in columns
+    conn.close()
+
+    summaries = sessions.list_sessions()
+    assert [s.id for s in summaries] == ["legacy-id"]
 
 
 def test_create_session_happy_path(scenarios_root):
@@ -224,6 +286,126 @@ def test_reopening_db_persists_state(scenarios_root):
     assert len(reopened.turns) == 2
 
 
+def test_reopening_db_persists_ephemeral_state(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    detail = sessions.create_session("exemplo-escola", ephemeral=True)
+    sessions.append_events(
+        detail.id,
+        [("player_turn", {"text": "oi"}), ("narrator_turn", {"text": "ola"})],
+    )
+
+    reopened = sessions.get_session(detail.id)
+    assert len(reopened.turns) == 2
+
+
+def test_create_session_explicit_start_ephemeral(scenarios_root):
+    _write_scenario(
+        scenarios_root,
+        "exemplo-escola",
+        starts={"default.yaml": DEFAULT_START, "rota-vilao.yaml": VILLAIN_START},
+    )
+
+    detail = sessions.create_session("exemplo-escola", "rota-vilao", ephemeral=True)
+
+    assert detail.prologue == "prologo vilao"
+    assert detail.hud.location == "sala"
+
+
+def test_list_sessions_excludes_ephemeral(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    normal = sessions.create_session("exemplo-escola")
+    sessions.create_session("exemplo-escola", ephemeral=True)
+
+    summaries = sessions.list_sessions()
+
+    assert [s.id for s in summaries] == [normal.id]
+
+
+def test_get_session_reads_ephemeral_while_alive(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    ephemeral = sessions.create_session("exemplo-escola", ephemeral=True)
+
+    reopened = sessions.get_session(ephemeral.id)
+
+    assert reopened.id == ephemeral.id
+
+
+def test_ephemeral_session_can_play_a_turn(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    ephemeral = sessions.create_session("exemplo-escola", ephemeral=True)
+
+    sessions.append_events(
+        ephemeral.id,
+        [("player_turn", {"text": "eu ando"}), ("narrator_turn", {"text": "voce anda"})],
+    )
+
+    events = sessions.read_events(ephemeral.id)
+    assert [e.kind for e in events] == ["player_turn", "narrator_turn"]
+
+
+def test_delete_session_removes_ephemeral_and_its_events(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    ephemeral = sessions.create_session("exemplo-escola", ephemeral=True)
+    sessions.append_events(
+        ephemeral.id,
+        [("player_turn", {"text": "eu ando"}), ("narrator_turn", {"text": "voce anda"})],
+    )
+
+    sessions.delete_session(ephemeral.id)
+
+    assert sessions.read_events(ephemeral.id) == []
+    with pytest.raises(sessions.SessionNotFound):
+        sessions.get_session(ephemeral.id)
+
+
+def test_delete_session_normal_raises_not_ephemeral_and_keeps_it(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    normal = sessions.create_session("exemplo-escola")
+
+    with pytest.raises(sessions.SessionNotEphemeral):
+        sessions.delete_session(normal.id)
+
+    assert [s.id for s in sessions.list_sessions()] == [normal.id]
+
+
+def test_delete_session_not_found():
+    with pytest.raises(sessions.SessionNotFound):
+        sessions.delete_session("does-not-exist")
+
+
+def test_delete_session_rollback_on_sqlite_error(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    ephemeral = sessions.create_session("exemplo-escola", ephemeral=True)
+    sessions.append_events(
+        ephemeral.id,
+        [("player_turn", {"text": "eu ando"}), ("narrator_turn", {"text": "voce anda"})],
+    )
+
+    real_connect = sessions._connect
+
+    class FailingConnection:
+        def __init__(self, conn):
+            self._conn = conn
+
+        def execute(self, sql, *args, **kwargs):
+            if sql.startswith("DELETE FROM sessions"):
+                raise sqlite3.OperationalError("boom")
+            return self._conn.execute(sql, *args, **kwargs)
+
+        def __getattr__(self, name):
+            return getattr(self._conn, name)
+
+    monkeypatch.setattr(sessions, "_connect", lambda: FailingConnection(real_connect()))
+
+    with pytest.raises(sqlite3.OperationalError):
+        sessions.delete_session(ephemeral.id)
+
+    monkeypatch.setattr(sessions, "_connect", real_connect)
+
+    reopened = sessions.get_session(ephemeral.id)
+    assert len(reopened.turns) == 2
+
+
 def test_post_sessions_route_happy_path(scenarios_root):
     _write_scenario(scenarios_root, "exemplo-escola")
     client = TestClient(main.app)
@@ -267,6 +449,39 @@ def test_get_sessions_route_lists_camel_case(scenarios_root):
 def test_get_session_route_not_found_is_404(scenarios_root):
     client = TestClient(main.app)
     response = client.get("/api/sessions/does-not-exist")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "session not found"}
+
+
+def test_delete_sessions_route_ephemeral_happy_path(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    client = TestClient(main.app)
+    created = client.post("/api/sessions", json={"scenarioId": "exemplo-escola", "ephemeral": True})
+    session_id = created.json()["id"]
+
+    response = client.delete(f"/api/sessions/{session_id}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert client.get(f"/api/sessions/{session_id}").status_code == 404
+
+
+def test_delete_sessions_route_normal_is_409(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    client = TestClient(main.app)
+    created = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"})
+    session_id = created.json()["id"]
+
+    response = client.delete(f"/api/sessions/{session_id}")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "session is not ephemeral"}
+    assert client.get(f"/api/sessions/{session_id}").status_code == 200
+
+
+def test_delete_sessions_route_not_found_is_404(scenarios_root):
+    client = TestClient(main.app)
+    response = client.delete("/api/sessions/does-not-exist")
     assert response.status_code == 404
     assert response.json() == {"detail": "session not found"}
 
