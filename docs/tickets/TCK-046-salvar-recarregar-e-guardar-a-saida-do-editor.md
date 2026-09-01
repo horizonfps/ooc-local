@@ -1,7 +1,7 @@
 ---
 id: TCK-046
 title: Salvar, recarregar e guardar a saida do editor de cenario
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-036, TCK-043]
 files:
