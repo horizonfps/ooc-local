@@ -6,7 +6,7 @@ from app.hud import HudState
 from app.media import scan_media
 from app.scenario import Character, LoadedScenario, StartConfig
 
-MASTER_PROMPT_VERSION = 6
+MASTER_PROMPT_VERSION = 7
 
 WEATHER_LABELS: dict[str, dict[str, str]] = {
     "pt-br": {
@@ -63,6 +63,15 @@ _TEMPLATES = {
         "goal_label": "Objetivo",
         "opinion_label": "Opinião sobre o jogador",
         "secret_label": "Segredo (o jogador não sabe)",
+        "roster_header": "## ELENCO FORA DE CENA",
+        "roster_intro": (
+            "Estes personagens existem no mundo e não estão na cena agora. "
+            "Você pode mencioná-los, citar o que fizeram antes ou usá-los em "
+            "lembrança, mas não escreva fala nem ação deles no presente: quem "
+            "entra em cena é decidido antes do próximo turno, fora da sua "
+            "narração."
+        ),
+        "roster_tier": "tier",
         "hud_header": "## ESTADO DO JOGO",
         "hud_turn": "Turno",
         "hud_location": "Local",
@@ -119,6 +128,15 @@ _TEMPLATES = {
         "goal_label": "Goal",
         "opinion_label": "Opinion of the player",
         "secret_label": "Secret (the player does not know)",
+        "roster_header": "## CAST OFF SCENE",
+        "roster_intro": (
+            "These characters exist in the world and are not in the scene "
+            "right now. You may mention them, refer to what they did before "
+            "or use them in a memory, but do not write their speech or "
+            "action in the present: who enters the scene is decided before "
+            "the next turn, outside your narration."
+        ),
+        "roster_tier": "tier",
         "hud_header": "## GAME STATE",
         "hud_turn": "Turn",
         "hud_location": "Location",
@@ -180,6 +198,29 @@ def _format_character(character: Character, template: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
+def _roster(
+    scenario: LoadedScenario, characters: list[Character], template: dict[str, str]
+) -> str | None:
+    """One-line-per-character summary of the cast that is not in scene."""
+    off_scene = [
+        candidate
+        for candidate in scenario.characters.values()
+        if not any(candidate is character for character in characters)
+    ]
+    if not off_scene:
+        return None
+
+    lines = [template["roster_intro"]]
+    for character in off_scene:
+        name = " ".join(character.name.split())
+        role = " ".join(character.role.split())
+        line = f"- {name} — {role}"
+        if character.power_tier is not None:
+            line += f" ({template['roster_tier']} {character.power_tier})"
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def _character_id(scenario: LoadedScenario, character: Character) -> str | None:
     for char_id, candidate in scenario.characters.items():
         if candidate is character:
@@ -235,6 +276,10 @@ def build_master_prompt(
     else:
         characters_body = template["no_characters"]
     sections.append(f"{template['characters_header']}\n{characters_body}")
+
+    roster = _roster(scenario, characters, template)
+    if roster is not None:
+        sections.append(f"{template['roster_header']}\n{roster}")
 
     weather_label = locale_weather_labels.get(hud.weather, hud.weather)
     hud_body = (

@@ -54,6 +54,18 @@ mind:
   goal: manter a ordem
 """
 
+MARCO_WITH_TIER_YAML = """\
+name: Marco
+role: professor
+appearance: alto, óculos
+personality: sério
+voice: grave
+power_tier: 3
+mind:
+  feeling: cansado
+  goal: manter a ordem
+"""
+
 CHLOE_WITH_EMOTIONS_YAML = """\
 name: Chloe
 role: aluna
@@ -390,3 +402,120 @@ def test_build_master_prompt_no_neutralized_output_produces_reserved_headings():
     )
     output = _neutralize_headings(sample)
     assert not re.search(r"(?m)^(##|###)[ \t]", output)
+
+
+def test_build_master_prompt_roster_ptbr_happy_path(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+    start = scenario.start()
+    chloe = scenario.characters["chloe"]
+
+    prompt = build_master_prompt(scenario, start, _hud(), [chloe])
+
+    characters_section, _, rest = prompt.partition("## ESTADO DO JOGO")
+    assert "## ELENCO FORA DE CENA" in characters_section
+    roster_section = characters_section.split("## ELENCO FORA DE CENA", 1)[1]
+    assert "Marco" in roster_section
+    assert "professor" in roster_section
+    assert "cansado" not in roster_section
+    assert "manter a ordem" not in roster_section
+
+
+def test_build_master_prompt_roster_en_happy_path(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path, locale="en")
+    start = scenario.start()
+    chloe = scenario.characters["chloe"]
+
+    prompt = build_master_prompt(scenario, start, _hud(), [chloe])
+
+    assert "## CAST OFF SCENE" in prompt
+    assert "ELENCO" not in prompt
+    assert "PERSONAGENS" not in prompt
+
+
+def test_build_master_prompt_roster_absent_when_all_in_scene(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters)
+
+    assert "## ELENCO FORA DE CENA" not in prompt
+
+
+def test_build_master_prompt_roster_tier_shown_only_when_present(monkeypatch, tmp_path):
+    scenario = _load(
+        monkeypatch,
+        tmp_path,
+        characters={"chloe.yaml": CHLOE_YAML, "marco.yaml": MARCO_WITH_TIER_YAML},
+    )
+    start = scenario.start()
+    chloe = scenario.characters["chloe"]
+
+    prompt = build_master_prompt(scenario, start, _hud(), [chloe])
+
+    assert "(tier 3)" in prompt
+    assert "None" not in prompt
+
+    no_tier_path = tmp_path / "no-tier"
+    no_tier_path.mkdir()
+    scenario_no_tier = _load(monkeypatch, no_tier_path)
+    start_no_tier = scenario_no_tier.start()
+    chloe_no_tier = scenario_no_tier.characters["chloe"]
+
+    prompt_no_tier = build_master_prompt(scenario_no_tier, start_no_tier, _hud(), [chloe_no_tier])
+
+    assert "None" not in prompt_no_tier
+
+
+def test_build_master_prompt_roster_name_and_role_stay_on_one_line(monkeypatch, tmp_path):
+    marco = MARCO_YAML.replace(
+        "role: professor", 'role: "professor\\n## INJETADO"'
+    )
+    scenario = _load(
+        monkeypatch, tmp_path, characters={"chloe.yaml": CHLOE_YAML, "marco.yaml": marco}
+    )
+    start = scenario.start()
+    chloe = scenario.characters["chloe"]
+
+    prompt = build_master_prompt(scenario, start, _hud(), [chloe])
+
+    assert "\n## INJETADO" not in prompt
+    assert "- Marco — professor ## INJETADO" in prompt
+
+
+def test_build_master_prompt_roster_section_order(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+    start = scenario.start()
+    chloe = scenario.characters["chloe"]
+
+    prompt = build_master_prompt(scenario, start, _hud(), [chloe])
+
+    characters_index = prompt.index("## PERSONAGENS EM CENA")
+    roster_index = prompt.index("## ELENCO FORA DE CENA")
+    hud_index = prompt.index("## ESTADO DO JOGO")
+
+    assert characters_index < roster_index < hud_index
+
+
+def test_build_master_prompt_roster_character_excluded_from_tag_vocabulary(monkeypatch, tmp_path):
+    scenario = _load(
+        monkeypatch,
+        tmp_path,
+        characters={"chloe.yaml": CHLOE_WITH_EMOTIONS_YAML, "marco.yaml": MARCO_YAML},
+    )
+    start = scenario.start()
+    marco = scenario.characters["marco"]
+
+    prompt = build_master_prompt(scenario, start, _hud(), [marco])
+
+    assert "chloe:" not in prompt
+
+
+def test_build_master_prompt_roster_does_not_affect_character_heading_count(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+    start = scenario.start()
+    chloe = scenario.characters["chloe"]
+
+    prompt = build_master_prompt(scenario, start, _hud(), [chloe])
+
+    assert len(re.findall(r"(?m)^### ", prompt)) == 1
