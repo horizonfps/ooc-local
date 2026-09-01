@@ -71,6 +71,29 @@ export function fetchBuilderScenarios(): Promise<BuilderScenarioItem[]> {
   return request('/api/builder/scenarios')
 }
 
+export function createBuilderScenario(body: { folder: string; name: string; locale: string }): Promise<BuilderScenarioItem> {
+  return request('/api/builder/scenarios', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export function duplicateBuilderScenario(id: string, folder: string): Promise<BuilderScenarioItem> {
+  return request(`/api/builder/scenarios/${id}/duplicate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folder }),
+  })
+}
+
+export async function deleteBuilderScenario(id: string): Promise<void> {
+  const response = await fetch(`/api/builder/scenarios/${id}`, { method: 'DELETE' })
+  if (!response.ok) {
+    throw new ApiError(response.status, await detailOf(response))
+  }
+}
+
 export function fetchSessions(): Promise<SessionSummary[]> {
   return request('/api/sessions')
 }
