@@ -257,7 +257,7 @@ export function GamePanel(props: GamePanelProps) {
             sawHud = true
             setHud(newHud)
             setHudStale(false)
-            if (newHud.cast !== undefined) setCast(newHud.cast)
+            if (newHud.cast != null) setCast(newHud.cast)
           },
           onError: (err) => {
             sawError = true
@@ -398,7 +398,7 @@ export function GamePanel(props: GamePanelProps) {
   useEffect(() => {
     const prev = prevCastKeyRef.current
     prevCastKeyRef.current = castKey
-    if (prev === null) return
+    if (prev === null || prev === '\0null') return
     if (prev === castKey) return
 
     const characters = cast === null || cast.length === 0 ? t('game.cast.empty') : cast.map((m) => m.name || m.id).join(', ')

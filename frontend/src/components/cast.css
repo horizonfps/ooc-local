@@ -1,7 +1,7 @@
 .cast {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 0;
   background: var(--hud-bg, #14161c);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding: 8px 16px;
@@ -29,7 +29,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 0 0.75rem;
+  padding: 4px 0.75rem;
+  line-height: 1.4;
   border-radius: 999px;
   border: 1px solid #33363f;
   background: var(--surface);
