@@ -158,6 +158,8 @@ def test_director_applies_proposal_prompt_and_hud_reflect_new_cast(scenarios_roo
             yield "voce anda ate a Chloe e o Renan."
 
     monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
 
     with client.stream(
         "POST", f"/api/sessions/{session['id']}/turn", json={"message": "vou ate eles"}
@@ -165,7 +167,17 @@ def test_director_applies_proposal_prompt_and_hud_reflect_new_cast(scenarios_roo
         events = _stream_events(response)
 
     system_content = captured_narrator[0][0].content
-    assert "Renan" in system_content
+    assert "### Renan" in system_content
+    assert "### Dara" not in system_content
+
+    applied = [props for name, props in emitted if name == "director_applied"]
+    assert len(applied) == 1
+    assert applied[0]["before"] == ["chloe", "dara"]
+    assert applied[0]["after"] == ["chloe", "renan"]
+    assert applied[0]["added"] == ["renan"]
+    assert applied[0]["removed"] == ["dara"]
+    assert applied[0]["model"] == "utility-model"
+    assert isinstance(applied[0]["duration_ms"], int)
     assert events[-1]["hud"]["cast"] == [
         {"id": "chloe", "name": "Chloe"},
         {"id": "renan", "name": "Renan"},

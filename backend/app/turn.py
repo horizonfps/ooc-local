@@ -60,7 +60,9 @@ def load_turn_context(session_id: str) -> TurnContext:
     ids = read_cast_ids(session_id)
     if ids is None:
         ids = seed_cast_ids(scenario, start)
-    characters = [scenario.characters[char_id] for char_id in ids if char_id in scenario.characters]
+    else:
+        ids = [char_id for char_id in ids if char_id in scenario.characters]
+    characters = [scenario.characters[char_id] for char_id in ids]
     return TurnContext(row=row, scenario=scenario, start=start, characters=characters, cast_ids=ids)
 
 
@@ -225,13 +227,32 @@ async def run_turn(
 
         if config.flag("director"):
             director_started = time.monotonic()
+            decision = None
             try:
                 window = events_to_messages(
                     history_events(session_id, None)[-(DIRECTOR_WINDOW_TURNS * 2) :]
                 )
-                ids, reason, raw = await decide_scene(
+                decision = await decide_scene(
                     ctx.scenario, ctx.row.hud, ctx.cast_ids, message, window, config
                 )
+            except DirectorError as exc:
+                emit(
+                    "director_failed",
+                    session_id=session_id,
+                    turn=ctx.row.hud.turn,
+                    error=str(exc),
+                    duration_ms=int((time.monotonic() - director_started) * 1000),
+                )
+            except Exception as exc:  # defensive: local providers return creative garbage
+                emit(
+                    "director_failed",
+                    session_id=session_id,
+                    turn=ctx.row.hud.turn,
+                    error=str(exc),
+                    duration_ms=int((time.monotonic() - director_started) * 1000),
+                )
+            if decision is not None:
+                ids, reason, raw = decision
                 director_duration_ms = int((time.monotonic() - director_started) * 1000)
                 if ids is not None:
                     before = ctx.cast_ids
@@ -264,22 +285,6 @@ async def run_turn(
                         kept=ctx.cast_ids,
                         duration_ms=director_duration_ms,
                     )
-            except DirectorError as exc:
-                emit(
-                    "director_failed",
-                    session_id=session_id,
-                    turn=ctx.row.hud.turn,
-                    error=str(exc),
-                    duration_ms=int((time.monotonic() - director_started) * 1000),
-                )
-            except Exception as exc:  # defensive: local providers return creative garbage
-                emit(
-                    "director_failed",
-                    session_id=session_id,
-                    turn=ctx.row.hud.turn,
-                    error=str(exc),
-                    duration_ms=int((time.monotonic() - director_started) * 1000),
-                )
 
         messages, _compact_error = await _maybe_compact(
             session_id, message, config, ctx.scenario.meta.locale, ctx
