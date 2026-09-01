@@ -124,6 +124,106 @@
   padding: 0 0.9rem 0.9rem;
 }
 
+.builder-card-actions > button {
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #33363f;
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+.builder-create {
+  border: 1px solid #33363f;
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 0 0 1.5rem;
+  background: var(--surface);
+}
+
+.builder-create h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+
+.builder-create-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.builder-create-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+}
+
+.builder-create input,
+.builder-create select,
+.builder-dialog input {
+  min-height: 44px;
+  padding: 0 0.6rem;
+  border-radius: 6px;
+  border: 1px solid #33363f;
+  background: var(--bg);
+  color: inherit;
+}
+
+.builder-create-error,
+.builder-dialog-error {
+  color: #ff8a80;
+  margin: 0 0 0.75rem;
+}
+
+.builder-create button[type='submit'] {
+  min-height: 44px;
+  padding: 0 1.25rem;
+  border-radius: 8px;
+  border: 1px solid #33363f;
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+.builder-dialog {
+  border: 1px solid #33363f;
+  border-radius: 10px;
+  background: var(--surface);
+  color: inherit;
+  padding: 1.25rem;
+  max-width: 420px;
+  width: 100%;
+}
+
+.builder-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.builder-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.builder-dialog-actions button {
+  min-height: 44px;
+  padding: 0 1rem;
+  border-radius: 6px;
+  border: 1px solid #33363f;
+  background: var(--bg);
+  color: inherit;
+  cursor: pointer;
+}
+
+.builder-dialog-delete-submit {
+  background: #7a1f1f;
+  border-color: #a83232;
+  color: #fff;
+}
+
 @media (max-width: 480px) {
   .builder-list {
     padding: 0.75rem;
@@ -138,5 +238,20 @@
   .builder-list-reload {
     min-height: 44px;
     min-width: 44px;
+  }
+
+  .builder-card-actions {
+    flex-direction: column;
+  }
+
+  .builder-card-actions > button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .builder-dialog {
+    width: calc(100% - 2rem);
+    max-width: none;
+    margin: 1rem;
   }
 }
