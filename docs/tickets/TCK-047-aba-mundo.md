@@ -1,7 +1,7 @@
 ---
 id: TCK-047
 title: Editar o mundo em modo guiado ou prompt custom
-status: ready
+status: done
 points: 3
 blockedBy: [TCK-029, TCK-036, TCK-037]
 files:
