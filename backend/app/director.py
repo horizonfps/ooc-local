@@ -52,10 +52,14 @@ class DirectorError(Exception):
     pass
 
 
+def _field(value: str) -> str:
+    return " ".join(value.split()).replace("|", "/")
+
+
 def _cast_lines(scenario: LoadedScenario) -> list[str]:
     lines = []
     for char_id, character in scenario.characters.items():
-        line = f"{char_id} | {character.name} | {character.role}"
+        line = f"{char_id} | {_field(character.name)} | {_field(character.role)}"
         if character.power_tier is not None:
             line += f" | tier {character.power_tier}"
         lines.append(line)

@@ -357,3 +357,40 @@ def test_decide_scene_provider_error_becomes_director_error(monkeypatch, tmp_pat
 def test_director_options_timeout_and_tokens():
     assert DIRECTOR_OPTIONS.timeout_s == 45.0
     assert DIRECTOR_OPTIONS.max_tokens == 120
+
+
+def test_decide_scene_whitespace_only_response_is_invalid(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+
+    ids, reason, raw = _decide_with_response(scenario, monkeypatch, "   ")
+
+    assert ids is None
+    assert reason == "invalid_json"
+    assert raw == "   "
+
+
+def test_decide_scene_builds_provider_with_director_options(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+    captured = {}
+    original_init = OpenAICompatProvider.__init__
+
+    def spy_init(self, provider_config, options):
+        captured["options"] = options
+        original_init(self, provider_config, options)
+
+    monkeypatch.setattr(OpenAICompatProvider, "__init__", spy_init)
+
+    _decide_with_response(scenario, monkeypatch, '{"scene": ["chloe"]}')
+
+    assert captured["options"] is DIRECTOR_OPTIONS
+
+
+def test_build_director_messages_flattens_pipes_and_newlines_in_cast_line(monkeypatch, tmp_path):
+    evil = CHLOE_YAML.replace("role: aluna", 'role: "aluna\\ndo | clube"')
+    scenario = _load(monkeypatch, tmp_path, characters={"chloe.yaml": evil})
+
+    messages = build_director_messages(scenario, _hud(), [], "oi", [])
+    body = messages[1].content
+    cast_line = next(line for line in body.split("\n") if line.startswith("chloe |"))
+
+    assert cast_line == "chloe | Chloe | aluna do / clube | tier 2"
