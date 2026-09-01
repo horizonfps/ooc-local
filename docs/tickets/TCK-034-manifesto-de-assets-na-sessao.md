@@ -1,7 +1,7 @@
 ---
 id: TCK-034
 title: Entregar o manifesto de sprites e backgrounds junto do SessionDetail
-status: in_review
+status: done
 points: 2
 blockedBy: [TCK-032]
 files:
