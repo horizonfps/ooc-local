@@ -69,5 +69,28 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
     }
   }
 
+  if (!draft.meta.name.trim()) {
+    errors.push(error('identity', 'name', 'Name', 'Name is required.'))
+  } else if (draft.meta.name.length > 80) {
+    errors.push(error('identity', 'name', 'Name', 'Name must be 80 characters or fewer.'))
+  }
+
+  if (draft.meta.tagline !== null && draft.meta.tagline.length > 120) {
+    errors.push(error('identity', 'tagline', 'Tagline', 'Tagline must be 120 characters or fewer.'))
+  }
+
+  if (draft.meta.description !== null && draft.meta.description.length > 4000) {
+    errors.push(error('identity', 'description', 'Description', 'Description must be 4000 characters or fewer.'))
+  }
+
+  for (const tag of draft.meta.tags) {
+    if (tag.length > 24) {
+      errors.push(error('identity', 'tags', 'Tags', `Tag "${tag}" is longer than 24 characters.`))
+    }
+  }
+  if (draft.meta.tags.length > 12) {
+    errors.push(error('identity', 'tags', 'Tags', 'Scenario has more than 12 tags.'))
+  }
+
   return errors
 }

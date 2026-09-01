@@ -164,6 +164,30 @@ export async function saveScenarioDocument(
   return response.json() as Promise<{ revision: string }>
 }
 
+export type MediaTarget = { kind: 'cover' | 'sprite' | 'background'; key: string; character?: string }
+
+export async function uploadMedia(id: string, target: MediaTarget, file: File): Promise<{ path: string; url: string }> {
+  const formData = new FormData()
+  formData.append('kind', target.kind)
+  formData.append('key', target.key)
+  if (target.character !== undefined) formData.append('character', target.character)
+  formData.append('file', file)
+  const response = await fetch(`/api/builder/scenarios/${id}/media`, { method: 'POST', body: formData })
+  if (!response.ok) {
+    throw new ApiError(response.status, await detailOf(response))
+  }
+  return response.json() as Promise<{ path: string; url: string }>
+}
+
+export async function deleteMedia(id: string, target: MediaTarget): Promise<void> {
+  const params = new URLSearchParams({ kind: target.kind, key: target.key })
+  if (target.character !== undefined) params.set('character', target.character)
+  const response = await fetch(`/api/builder/scenarios/${id}/media?${params.toString()}`, { method: 'DELETE' })
+  if (!response.ok) {
+    throw new ApiError(response.status, await detailOf(response))
+  }
+}
+
 export function fetchSessions(): Promise<SessionSummary[]> {
   return request('/api/sessions')
 }
