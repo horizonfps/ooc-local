@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import CONFIG_DIR
 from app.hud import HudState, hud_from_start
+from app.media import SessionAssets, session_assets
 from app.observability import emit
 from app.scenario import ScenarioError, load_scenario
 
@@ -88,6 +89,7 @@ class SessionDetail(BaseModel):
     play_guide: str | None = Field(alias="playGuide")
     turns: list[TurnView]
     hud: HudState
+    assets: SessionAssets
 
 
 class SessionRow(BaseModel):
@@ -142,6 +144,16 @@ def init_db() -> None:
     purge_ephemeral_sessions()
 
 
+def _emit_session_assets(session_id: str, assets: SessionAssets) -> None:
+    emit(
+        "session_assets",
+        session_id=session_id,
+        sprite_characters=len(assets.sprites),
+        sprite_files=sum(len(emotions) for emotions in assets.sprites.values()),
+        backgrounds=len(assets.backgrounds),
+    )
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
@@ -194,6 +206,9 @@ def create_session(
         ephemeral=ephemeral,
     )
 
+    assets = session_assets(scenario)
+    _emit_session_assets(session_id, assets)
+
     return SessionDetail(
         id=session_id,
         scenario_id=scenario_id,
@@ -202,6 +217,7 @@ def create_session(
         play_guide=start.play_guide,
         turns=[],
         hud=hud,
+        assets=assets,
     )
 
 
@@ -270,6 +286,9 @@ def get_session(session_id: str) -> SessionDetail:
     events = read_events(session_id, kinds=("player_turn", "narrator_turn"))
     turns = _build_turns(events)
 
+    assets = session_assets(scenario)
+    _emit_session_assets(session_id, assets)
+
     return SessionDetail(
         id=row.id,
         scenario_id=row.scenario_id,
@@ -278,6 +297,7 @@ def get_session(session_id: str) -> SessionDetail:
         play_guide=start.play_guide,
         turns=turns,
         hud=row.hud,
+        assets=assets,
     )
 
 

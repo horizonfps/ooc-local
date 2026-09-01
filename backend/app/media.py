@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.observability import emit
-from app.scenario import ScenarioError, scenario_path
+from app.scenario import LoadedScenario, ScenarioError, scenario_path
 
 router = APIRouter()
 
@@ -20,6 +20,11 @@ _FILE_RE = re.compile(r"^([a-z0-9-]+)\.(png|jpg|webp)$")
 
 class MediaIndex(BaseModel):
     cover: str | None = None
+    sprites: dict[str, dict[str, str]] = {}
+    backgrounds: dict[str, str] = {}
+
+
+class SessionAssets(BaseModel):
     sprites: dict[str, dict[str, str]] = {}
     backgrounds: dict[str, str] = {}
 
@@ -94,6 +99,34 @@ def scan_media(scenario_id: str) -> MediaIndex:
         has_cover=cover is not None,
     )
     return MediaIndex(cover=cover, sprites=sprites, backgrounds=backgrounds)
+
+
+def session_assets(scenario: LoadedScenario) -> SessionAssets:
+    root = media_root(scenario.id)
+    sprites_dir = root / "sprites"
+
+    sprites: dict[str, dict[str, str]] = {}
+    for char_id, character in scenario.characters.items():
+        folder_name = character.sprite or char_id
+        if not KEY_RE.match(folder_name):
+            continue
+        flat = _scan_flat(sprites_dir / folder_name)
+        if not flat:
+            continue
+        urls = {
+            emotion: media_url(scenario.id, f"sprites/{folder_name}/{filename}")
+            for emotion, filename in flat.items()
+        }
+        sprites[char_id.lower()] = urls
+        if character.sprite and character.sprite.lower() != char_id.lower():
+            sprites[character.sprite.lower()] = urls
+
+    backgrounds = {
+        location.lower(): media_url(scenario.id, f"backgrounds/{filename}")
+        for location, filename in _scan_flat(root / "backgrounds").items()
+    }
+
+    return SessionAssets(sprites=sprites, backgrounds=backgrounds)
 
 
 def _require_scenario(scenario_id: str) -> Path:
