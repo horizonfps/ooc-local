@@ -1,10 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
+import { CastRow } from './CastRow'
 import { ErrorState } from './ErrorState'
 import { Hud } from './Hud'
 import { Loading } from './Loading'
 import { TurnText, findUnclosedBracket } from './TurnText'
-import { fetchSession, streamTurn, type HudState, type SessionAssets, type SessionDetail, type TurnView } from '../api'
+import { fetchSession, streamTurn, type CastMember, type HudState, type SessionAssets, type SessionDetail, type TurnView } from '../api'
 import { classifyError, describeError, type ErrorKind } from '../errors'
 import { t } from '../i18n'
 import { navigate } from '../useHashRoute'
@@ -89,15 +90,18 @@ export function GamePanel(props: GamePanelProps) {
   const [extraTurns, setExtraTurns] = useState<TurnView[]>([])
   const [hud, setHud] = useState<HudState | null>(null)
   const [hudStale, setHudStale] = useState(false)
+  const [cast, setCast] = useState<CastMember[] | null>(null)
   const [lastMessage, setLastMessage] = useState('')
   const [atBottom, setAtBottom] = useState(true)
   const [doneAnnouncement, setDoneAnnouncement] = useState('')
   const [sceneAnnouncement, setSceneAnnouncement] = useState('')
+  const [castAnnouncement, setCastAnnouncement] = useState('')
   const [focusToken, setFocusToken] = useState(0)
   const [stageEnabled, setStageEnabled] = useState(readStagePreference)
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null)
   const [brokenSpriteUrls, setBrokenSpriteUrls] = useState<Set<string>>(new Set())
   const prevAnnounceRef = useRef<{ background: string | null; charactersKey: string } | null>(null)
+  const prevCastKeyRef = useRef<string | null>(null)
 
   const load = () => {
     setState({ phase: 'loading' })
@@ -125,12 +129,15 @@ export function GamePanel(props: GamePanelProps) {
     setPending(null)
     setExtraTurns([])
     setHudStale(false)
+    setCast(null)
     setLastMessage('')
     setDoneAnnouncement('')
     setSceneAnnouncement('')
+    setCastAnnouncement('')
     setBackgroundUrl(null)
     setBrokenSpriteUrls(new Set())
     prevAnnounceRef.current = null
+    prevCastKeyRef.current = null
   }, [sessionId])
 
   useEffect(
@@ -142,7 +149,10 @@ export function GamePanel(props: GamePanelProps) {
   )
 
   useEffect(() => {
-    if (state.phase === 'ready') setHud(state.session.hud)
+    if (state.phase === 'ready') {
+      setHud(state.session.hud)
+      setCast(state.session.cast)
+    }
   }, [state])
 
   useEffect(() => {
@@ -224,6 +234,8 @@ export function GamePanel(props: GamePanelProps) {
     const index = nextIndex()
     setLastMessage(message)
     setPending({ index, message, text: '', status: 'streaming' })
+    setSceneAnnouncement('')
+    setCastAnnouncement('')
 
     const controller = new AbortController()
     abortRef.current = controller
@@ -245,6 +257,7 @@ export function GamePanel(props: GamePanelProps) {
             sawHud = true
             setHud(newHud)
             setHudStale(false)
+            if (newHud.cast !== undefined) setCast(newHud.cast)
           },
           onError: (err) => {
             sawError = true
@@ -315,6 +328,7 @@ export function GamePanel(props: GamePanelProps) {
 
   const turns = state.phase === 'ready' ? [...state.session.turns, ...extraTurns] : []
   const hudView = state.phase === 'ready' ? (hud ?? state.session.hud) : null
+  const castView = state.phase === 'ready' ? (cast ?? state.session.cast) : null
   const inputId_ = `game-input-${inputId}`
 
   const sceneText = useMemo(() => {
@@ -379,6 +393,19 @@ export function GamePanel(props: GamePanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, scene.background, spritesKey])
 
+  const castKey = cast === null ? '\0null' : cast.map((m) => m.id).join('|')
+
+  useEffect(() => {
+    const prev = prevCastKeyRef.current
+    prevCastKeyRef.current = castKey
+    if (prev === null) return
+    if (prev === castKey) return
+
+    const characters = cast === null || cast.length === 0 ? t('game.cast.empty') : cast.map((m) => m.name || m.id).join(', ')
+    setCastAnnouncement(t('game.cast.announce', { characters }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [castKey])
+
   const handleToggleStage = () => {
     setStageEnabled((prev) => {
       const next = !prev
@@ -418,6 +445,7 @@ export function GamePanel(props: GamePanelProps) {
       ) : null}
 
       <Hud hud={hudView} busy={turnPhase === 'streaming'} stale={hudStale} />
+      <CastRow cast={castView} busy={turnPhase === 'streaming'} stale={hudStale} />
 
       {state.phase === 'loading' ? (
         <div className="game-history game-history--skeleton" aria-hidden="true">
@@ -517,7 +545,7 @@ export function GamePanel(props: GamePanelProps) {
       </p>
 
       <p className="visually-hidden" aria-live="polite" role="status">
-        {sceneAnnouncement}
+        {[sceneAnnouncement, castAnnouncement].filter(Boolean).join(' ')}
       </p>
 
       {state.phase === 'ready' && !atBottom ? (
