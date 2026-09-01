@@ -1,7 +1,7 @@
 ---
 id: TCK-050
 title: Persistir o elenco em cena como estado da sessão e expor no contrato
-status: in_review
+status: done
 points: 3
 blockedBy: []
 files:

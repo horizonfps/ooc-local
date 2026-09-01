@@ -1,7 +1,7 @@
 ---
 id: TCK-051
 title: Adicionar seção de elenco fora de cena ao prompt do narrador
-status: in_review
+status: done
 points: 3
 blockedBy: []
 files:
