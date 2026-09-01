@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 
 from pydantic import BaseModel
 
+from app.cast import cast_event, resolve_cast, seed_cast_ids
 from app.cleanup import strip_engine_echo
 from app.compact import (
     COMPACT_KEEP_TURNS,
@@ -15,6 +16,7 @@ from app.compact import (
     select_window,
 )
 from app.config import Config, load_config
+from app.director import DIRECTOR_RAW_LOG_CHARS, DIRECTOR_WINDOW_TURNS, DirectorError, decide_scene
 from app.hud import advance, apply_location
 from app.llm.base import ChatMessage
 from app.llm.openai_compat import OpenAICompatProvider
@@ -28,6 +30,7 @@ from app.sessions import (
     append_events,
     get_compact,
     get_session_row,
+    read_cast_ids,
     read_events,
     set_compact,
 )
@@ -42,12 +45,7 @@ class TurnContext(BaseModel):
     scenario: LoadedScenario
     start: StartConfig
     characters: list[Character]
-
-
-def _characters_in_scene(scenario: LoadedScenario, start: StartConfig) -> list[Character]:
-    if start.characters is None:
-        return list(scenario.characters.values())
-    return [scenario.characters[char_id] for char_id in start.characters]
+    cast_ids: list[str]
 
 
 def load_turn_context(session_id: str) -> TurnContext:
@@ -59,8 +57,13 @@ def load_turn_context(session_id: str) -> TurnContext:
     except (ScenarioError, KeyError):
         raise ScenarioNotFound(row.scenario_id) from None
 
-    characters = _characters_in_scene(scenario, start)
-    return TurnContext(row=row, scenario=scenario, start=start, characters=characters)
+    ids = read_cast_ids(session_id)
+    if ids is None:
+        ids = seed_cast_ids(scenario, start)
+    else:
+        ids = [char_id for char_id in ids if char_id in scenario.characters]
+    characters = [scenario.characters[char_id] for char_id in ids]
+    return TurnContext(row=row, scenario=scenario, start=start, characters=characters, cast_ids=ids)
 
 
 def history_events(session_id: str, compact_seq: int | None) -> list[Event]:
@@ -208,7 +211,10 @@ async def run_turn(
             stripped_lines=stripped_lines,
             location_changed=location_changed,
             error=error,
+            cast=len(ctx.cast_ids) if ctx is not None else None,
         )
+
+    pending_cast_event: tuple[str, dict] | None = None
 
     try:
         if config is None:
@@ -218,6 +224,67 @@ async def run_turn(
         role = config.models["narrator"]
         role_model = role.model
         provider = OpenAICompatProvider(config.providers[role.provider])
+
+        if config.flag("director"):
+            director_started = time.monotonic()
+            decision = None
+            try:
+                window = events_to_messages(
+                    history_events(session_id, None)[-(DIRECTOR_WINDOW_TURNS * 2) :]
+                )
+                decision = await decide_scene(
+                    ctx.scenario, ctx.row.hud, ctx.cast_ids, message, window, config
+                )
+            except DirectorError as exc:
+                emit(
+                    "director_failed",
+                    session_id=session_id,
+                    turn=ctx.row.hud.turn,
+                    error=str(exc),
+                    duration_ms=int((time.monotonic() - director_started) * 1000),
+                )
+            except Exception as exc:  # defensive: local providers return creative garbage
+                emit(
+                    "director_failed",
+                    session_id=session_id,
+                    turn=ctx.row.hud.turn,
+                    error=str(exc),
+                    duration_ms=int((time.monotonic() - director_started) * 1000),
+                )
+            if decision is not None:
+                ids, reason, raw = decision
+                director_duration_ms = int((time.monotonic() - director_started) * 1000)
+                if ids is not None:
+                    before = ctx.cast_ids
+                    if ids != before:
+                        new_characters = [
+                            ctx.scenario.characters[char_id]
+                            for char_id in ids
+                            if char_id in ctx.scenario.characters
+                        ]
+                        ctx = ctx.model_copy(update={"cast_ids": ids, "characters": new_characters})
+                        pending_cast_event = cast_event(ids, "director")
+                    emit(
+                        "director_applied",
+                        session_id=session_id,
+                        turn=ctx.row.hud.turn,
+                        before=before,
+                        after=ids,
+                        added=[char_id for char_id in ids if char_id not in before],
+                        removed=[char_id for char_id in before if char_id not in ids],
+                        duration_ms=director_duration_ms,
+                        model=config.models["utility"].model,
+                    )
+                else:
+                    emit(
+                        "director_rejected",
+                        session_id=session_id,
+                        turn=ctx.row.hud.turn,
+                        reason=reason,
+                        raw=raw[:DIRECTOR_RAW_LOG_CHARS],
+                        kept=ctx.cast_ids,
+                        duration_ms=director_duration_ms,
+                    )
 
         messages, _compact_error = await _maybe_compact(
             session_id, message, config, ctx.scenario.meta.locale, ctx
@@ -253,10 +320,13 @@ async def run_turn(
         ]
         for tag in tags:
             events.append(("tag", {"kind": tag.kind, "args": tag.args, "raw": tag.raw, "valid": tag.valid}))
+        if pending_cast_event is not None:
+            events.append(pending_cast_event)
         append_events(session_id, events, hud=new_hud)
 
         hud = new_hud
-        yield {"hud": new_hud.model_dump()}
+        cast = [member.model_dump() for member in resolve_cast(ctx.scenario, ctx.cast_ids)]
+        yield {"hud": {**new_hud.model_dump(), "cast": cast}}
         emit_game_turn(None)
     except Exception as exc:
         emit_game_turn(str(exc))
