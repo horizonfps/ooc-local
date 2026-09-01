@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { t } from '../i18n'
+import { isEngineEchoLine } from './turnCleanup'
 import './turnText.css'
 
 // Mirrors TAG_RE in backend/app/tags.py (TCK-004); divergence is a contract bug.
@@ -31,6 +32,14 @@ function cleanLineIfTagged(line: string): string {
   return out.trim()
 }
 
+// Cleans a raw line and returns null when it should be dropped (empty, or engine echo).
+function cleanedLineOrDrop(line: string): string | null {
+  const treated = cleanLineIfTagged(line)
+  if (treated.trim() === '') return null
+  if (isEngineEchoLine(treated)) return null
+  return treated
+}
+
 function findUnclosedBracket(text: string): number {
   const openIdx = text.lastIndexOf('[')
   if (openIdx === -1) return -1
@@ -40,8 +49,8 @@ function findUnclosedBracket(text: string): number {
 function buildBlocks(text: string): Block[] {
   const blocks: Block[] = []
   for (const line of text.split('\n')) {
-    const treated = cleanLineIfTagged(line)
-    if (treated.trim() === '') continue
+    const treated = cleanedLineOrDrop(line)
+    if (treated === null) continue
     const match = SPEAKER_RE.exec(treated)
     if (match && match[1].trim() !== '') {
       blocks.push({ kind: 'speech', name: match[1].trim(), text: match[2] })
@@ -67,8 +76,9 @@ function parseTurnText(text: string, streaming: boolean): Block[] {
   const brokenLine = normalized.slice(lineStart)
 
   if (streaming) {
-    const prefix = cleanLineIfTagged(brokenLine.slice(0, unclosedIdx - lineStart)).trim()
-    if (prefix !== '') {
+    const cleaned = cleanedLineOrDrop(brokenLine.slice(0, unclosedIdx - lineStart))
+    const prefix = cleaned === null ? null : cleaned.trim()
+    if (prefix !== null && prefix !== '') {
       const match = SPEAKER_RE.exec(prefix)
       if (match && match[1].trim() !== '') {
         blocks.push({ kind: 'speech', name: match[1].trim(), text: match[2] })

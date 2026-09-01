@@ -148,4 +148,41 @@ describe('TurnText', () => {
     expect(lines[0].textContent).toContain('Primeira')
     expect(lines[1].textContent).toContain('Segunda')
   })
+
+  it('drops a HUD block and player echo, rendering only the remaining prose', () => {
+    const { container } = render(
+      <TurnText text={'# Turno 3\n**HUD**\nLocal: pátio\n\nVocê atravessa o pátio.'} />,
+    )
+    const lines = container.querySelectorAll('.turnText-line')
+    expect(lines).toHaveLength(1)
+    expect(container.querySelector('em')?.textContent).toBe('Você atravessa o pátio.')
+  })
+
+  it('drops the player echo line and renders only the other speaker', () => {
+    const { container } = render(
+      <TurnText text={'**Você** | vou até a Chloe\n**Chloe** | Oi.'} />,
+    )
+    const lines = container.querySelectorAll('.turnText-line')
+    expect(lines).toHaveLength(1)
+    expect(screen.getByText('Chloe').tagName).toBe('STRONG')
+    expect(screen.getByText('Oi.')).toBeTruthy()
+  })
+
+  it('drops a HUD field line while streaming and keeps the open-bracket prose out of the block', () => {
+    const { container } = render(<TurnText text={'Local: pátio\nEla ergue os olhos [SPR'} streaming />)
+    const lines = container.querySelectorAll('.turnText-line')
+    expect(lines).toHaveLength(1)
+    expect(container.querySelector('em')?.textContent).toBe('Ela ergue os olhos')
+  })
+
+  it('renders a line matching a HUD field label but spoken by a character', () => {
+    const { container } = render(<TurnText text="**Chloe** | Hora: de ir embora." />)
+    expect(screen.getByText('Chloe').tagName).toBe('STRONG')
+    expect(container.querySelector('.turnText-line--speech')?.textContent).toContain('Hora: de ir embora.')
+  })
+
+  it('renders nothing when the whole text is engine echo', () => {
+    const { container } = render(<TurnText text={'# Turno 3\n**HUD**\nLocal: pátio'} />)
+    expect(container.firstChild).toBeNull()
+  })
 })
