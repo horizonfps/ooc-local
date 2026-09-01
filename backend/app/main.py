@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from app import builder
 from app.config import load_config
 from app.llm.base import ChatMessage
 from app.llm.openai_compat import OpenAICompatProvider
@@ -30,6 +31,7 @@ SMOKE_SYSTEM_PROMPT = "You are the narrator of an interactive story. Reply brief
 app = FastAPI(title="ooc-local")
 setup_logging()
 init_db()
+app.include_router(builder.router)
 
 
 class ChatRequest(BaseModel):
