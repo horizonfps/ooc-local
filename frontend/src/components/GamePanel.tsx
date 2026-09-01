@@ -92,6 +92,7 @@ export function GamePanel(props: GamePanelProps) {
   const [lastMessage, setLastMessage] = useState('')
   const [atBottom, setAtBottom] = useState(true)
   const [doneAnnouncement, setDoneAnnouncement] = useState('')
+  const [sceneAnnouncement, setSceneAnnouncement] = useState('')
   const [focusToken, setFocusToken] = useState(0)
   const [stageEnabled, setStageEnabled] = useState(readStagePreference)
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null)
@@ -126,6 +127,7 @@ export function GamePanel(props: GamePanelProps) {
     setHudStale(false)
     setLastMessage('')
     setDoneAnnouncement('')
+    setSceneAnnouncement('')
     setBackgroundUrl(null)
     setBrokenSpriteUrls(new Set())
     prevAnnounceRef.current = null
@@ -327,12 +329,12 @@ export function GamePanel(props: GamePanelProps) {
       }
     }
     return parts.join('\n')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.phase, state.phase === 'ready' ? state.session.prologue : null, turns.length, pending?.text])
+  }, [state.phase, state.phase === 'ready' ? state.session.prologue : null, turns, pending?.status, pending?.text])
 
   const scene = useMemo(() => reduceScene(EMPTY_SCENE, sceneText), [sceneText])
 
   const assets: SessionAssets | null = state.phase === 'ready' ? state.session.assets : null
+  const hasArt = assets !== null && (Object.keys(assets.sprites).length > 0 || Object.keys(assets.backgrounds).length > 0)
 
   const resolvedBackground = assets && scene.background ? resolveBackground(assets, scene.background) : null
 
@@ -340,15 +342,19 @@ export function GamePanel(props: GamePanelProps) {
     if (resolvedBackground !== null) setBackgroundUrl(resolvedBackground)
   }, [resolvedBackground])
 
-  const visibleSprites = assets
+  const resolvedSprites = assets
     ? scene.sprites
         .map((s) => ({ ...s, url: resolveSprite(assets, s.character, s.emotion) }))
-        .filter((s): s is typeof s & { url: string } => s.url !== null && !brokenSpriteUrls.has(s.url))
+        .filter((s): s is typeof s & { url: string } => s.url !== null)
     : []
+
+  const visibleSprites = resolvedSprites.filter((s) => !brokenSpriteUrls.has(s.url))
+
+  const spritesKey = scene.sprites.map((s) => `${s.character}:${s.emotion}`).join('|')
 
   useEffect(() => {
     if (state.phase !== 'ready') return
-    const charactersKey = visibleSprites.map((s) => `${s.character}:${s.emotion}`).join('|')
+    const charactersKey = spritesKey
     const prev = prevAnnounceRef.current
     prevAnnounceRef.current = { background: scene.background, charactersKey }
     if (prev === null) return
@@ -359,19 +365,19 @@ export function GamePanel(props: GamePanelProps) {
 
     const backgroundText = scene.background ?? ''
     const charactersText =
-      visibleSprites.length === 0
+      resolvedSprites.length === 0
         ? t('game.scene.empty')
-        : visibleSprites.map((s) => t('game.scene.characterEmotion', { character: s.character, emotion: s.emotion })).join(', ')
+        : resolvedSprites.map((s) => t('game.scene.characterEmotion', { character: s.character, emotion: s.emotion })).join(', ')
 
     if (backgroundChanged && charactersChanged) {
-      setDoneAnnouncement(t('game.scene.announce', { background: backgroundText, characters: charactersText }))
+      setSceneAnnouncement(t('game.scene.announce', { background: backgroundText, characters: charactersText }))
     } else if (backgroundChanged) {
-      setDoneAnnouncement(t('game.scene.announceBackground', { background: backgroundText }))
+      setSceneAnnouncement(t('game.scene.announceBackground', { background: backgroundText }))
     } else {
-      setDoneAnnouncement(t('game.scene.announceCharacters', { characters: charactersText }))
+      setSceneAnnouncement(t('game.scene.announceCharacters', { characters: charactersText }))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.phase, scene.background, visibleSprites.map((s) => `${s.character}:${s.emotion}`).join('|')])
+  }, [state.phase, scene.background, spritesKey])
 
   const handleToggleStage = () => {
     setStageEnabled((prev) => {
@@ -384,11 +390,11 @@ export function GamePanel(props: GamePanelProps) {
   return (
     <div className="game-panel" aria-label={regionLabel}>
       {stageEnabled && backgroundUrl ? (
-        <div className="game-stage-bg" aria-hidden="true" style={{ backgroundImage: `url(${backgroundUrl})` }} />
+        <div className="game-stage-bg" aria-hidden="true" style={{ backgroundImage: `url("${backgroundUrl}")` }} />
       ) : null}
 
       <div className="game-stage-content">
-      {state.phase === 'ready' ? (
+      {state.phase === 'ready' && hasArt ? (
         <div className="game-stage-toggle">
           <button type="button" aria-pressed={stageEnabled} onClick={handleToggleStage}>
             {stageEnabled ? t('game.stage.hide') : t('game.stage.show')}
@@ -508,6 +514,10 @@ export function GamePanel(props: GamePanelProps) {
 
       <p className="visually-hidden" aria-live="polite" role="status">
         {doneAnnouncement}
+      </p>
+
+      <p className="visually-hidden" aria-live="polite" role="status">
+        {sceneAnnouncement}
       </p>
 
       {state.phase === 'ready' && !atBottom ? (

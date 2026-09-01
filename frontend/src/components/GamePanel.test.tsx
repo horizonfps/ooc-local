@@ -188,6 +188,7 @@ describe('GamePanel', () => {
       await screen.findByText('Once upon a time.')
       expect(document.querySelector('.game-stage-bg')).toBeNull()
       expect(document.querySelector('.game-stage-sprites')).toBeNull()
+      expect(document.querySelector('.game-stage-toggle')).toBeNull()
     })
 
     it('drops a sprite that fails to load without showing an error', async () => {
