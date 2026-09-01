@@ -62,7 +62,9 @@ function BuilderCard(props: { scenario: BuilderScenarioItem }) {
         <span className="builder-card-name">{scenario.name || scenario.id}</span>
         <ErrorState
           title={t('builder.list.item.broken')}
-          body={t('builder.list.item.brokenBody', { reason: scenario.reason ?? '' })}
+          body={t('builder.list.item.brokenBody', {
+            reason: scenario.reason ?? t('builder.list.item.reasonUnknown'),
+          })}
         />
         <div className="builder-card-actions" />
       </li>
@@ -98,6 +100,7 @@ export function BuilderListScreen() {
   const headingRef = useRef<HTMLHeadingElement>(null)
   const [state, setState] = useState<ListState>({ status: 'loading' })
   const [announcement, setAnnouncement] = useState('')
+  const [loadCount, setLoadCount] = useState(0)
 
   useEffect(() => {
     headingRef.current?.focus()
@@ -127,12 +130,13 @@ export function BuilderListScreen() {
     fetchBuilderScenarios()
       .then((scenarios) => {
         setState({ status: 'loaded', scenarios })
+        setLoadCount((n) => n + 1)
         setAnnouncement(t('builder.list.reloaded'))
       })
       .catch((error) => setState({ status: 'error', error }))
   }
 
-  const error = state.status === 'error' ? describeError(state.error) : null
+  const errorCause = state.status === 'error' ? describeError(state.error).cause : null
 
   return (
     <main className="builder-list">
@@ -163,7 +167,14 @@ export function BuilderListScreen() {
         </>
       ) : null}
 
-      {error ? <ErrorState title={error.title} body={error.body} cause={error.cause} onRetry={load} /> : null}
+      {state.status === 'error' ? (
+        <ErrorState
+          title={t('builder.list.error.title')}
+          body={t('builder.list.error.body')}
+          cause={errorCause ?? undefined}
+          onRetry={load}
+        />
+      ) : null}
 
       {state.status === 'loaded' && state.scenarios.length === 0 ? (
         <EmptyState title={t('builder.list.empty.title')} body={t('builder.list.empty.body')} />
@@ -172,7 +183,7 @@ export function BuilderListScreen() {
       {state.status === 'loaded' && state.scenarios.length > 0 ? (
         <ul className="builder-card-grid">
           {state.scenarios.map((scenario) => (
-            <BuilderCard key={scenario.id} scenario={scenario} />
+            <BuilderCard key={`${scenario.id}:${loadCount}`} scenario={scenario} />
           ))}
         </ul>
       ) : null}

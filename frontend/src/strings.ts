@@ -64,6 +64,7 @@ const en = {
   'builder.list.item.broken': "This folder can't be opened",
   'builder.list.item.brokenBody':
     "{reason}. Fix the file on disk and reload — the builder won't overwrite what it can't read.",
+  'builder.list.item.reasonUnknown': 'Unreadable file',
   'builder.list.item.coverAlt': 'Cover of {scenario}',
   'builder.create.locale.en': 'English',
   'builder.create.locale.ptBr': 'Portuguese (Brazil)',
@@ -181,6 +182,7 @@ const ptBr: Record<StringKey, string> = {
   'builder.list.item.broken': 'Não dá para abrir esta pasta',
   'builder.list.item.brokenBody':
     '{reason}. Conserte o arquivo no disco e recarregue — o builder não sobrescreve o que não consegue ler.',
+  'builder.list.item.reasonUnknown': 'Arquivo ilegível',
   'builder.list.item.coverAlt': 'Capa de {scenario}',
   'builder.create.locale.en': 'Inglês',
   'builder.create.locale.ptBr': 'Português (Brasil)',

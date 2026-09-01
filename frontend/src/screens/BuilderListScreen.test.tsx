@@ -150,7 +150,7 @@ describe('BuilderListScreen', () => {
     })
     render(<BuilderListScreen />)
 
-    expect(await screen.findByText(t('error.offline.title'))).toBeInTheDocument()
+    expect(await screen.findByText(t('builder.list.error.title'))).toBeInTheDocument()
   })
 
   it('reloads the list and announces it on reload', async () => {
