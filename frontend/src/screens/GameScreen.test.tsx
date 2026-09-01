@@ -613,7 +613,7 @@ describe('GameScreen turns', () => {
     const history = screen.getByRole('list')
     Object.defineProperty(history, 'scrollHeight', { value: 1000, configurable: true })
     Object.defineProperty(history, 'clientHeight', { value: 300, configurable: true })
-    Object.defineProperty(history, 'scrollTop', { value: 100, configurable: true })
+    Object.defineProperty(history, 'scrollTop', { value: 100, writable: true, configurable: true })
     fireEvent.scroll(history)
 
     const button = await screen.findByRole('button', { name: t('game.scrollToLatest') })
@@ -637,7 +637,7 @@ describe('GameScreen turns', () => {
     const history = screen.getByRole('list')
     Object.defineProperty(history, 'scrollHeight', { value: 1000, configurable: true })
     Object.defineProperty(history, 'clientHeight', { value: 300, configurable: true })
-    Object.defineProperty(history, 'scrollTop', { value: 100, configurable: true })
+    Object.defineProperty(history, 'scrollTop', { value: 100, writable: true, configurable: true })
     fireEvent.scroll(history)
 
     const button = await screen.findByRole('button', { name: t('game.scrollToLatest') })
