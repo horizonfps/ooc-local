@@ -230,8 +230,8 @@ describe('GameScreen', () => {
     render(<GameScreen sessionId="missing" />)
 
     expect(await screen.findByText(t('game.notFound.title'))).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: t('common.back') })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: t('common.retry') })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: t('common.back') })).toBeInTheDocument()
   })
 
   it('shows an ErrorState with working retry on a 500', async () => {
