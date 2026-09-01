@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 
 from pydantic import BaseModel
 
+from app.cleanup import strip_engine_echo
 from app.compact import (
     COMPACT_KEEP_TURNS,
     CompactError,
@@ -190,6 +191,7 @@ async def run_turn(
     hud = None
     role_model = None
     tags = []
+    stripped_lines = 0
 
     def emit_game_turn(error: str | None) -> None:
         emit(
@@ -202,6 +204,7 @@ async def run_turn(
             chars=len(raw_text),
             tags=len(tags),
             invalid_tags=sum(1 for tag in tags if not tag.valid),
+            stripped_lines=stripped_lines,
             error=error,
         )
 
@@ -231,6 +234,7 @@ async def run_turn(
             yield {"delta": delta}
 
         clean_text, tags = parse_tags(raw_text)
+        clean_text, stripped_lines = strip_engine_echo(clean_text)
         if not clean_text.strip():
             emit_game_turn("empty turn")
             yield {"error": "empty turn"}
