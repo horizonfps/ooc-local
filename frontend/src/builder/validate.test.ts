@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { BuilderDraft } from '../screens/BuilderEditorScreen'
 import { validateDraft } from './validate'
+import { t } from '../i18n'
 
 function draft(overrides: Partial<BuilderDraft> = {}): BuilderDraft {
   return {
@@ -75,5 +76,15 @@ describe('validateDraft', () => {
   it('flags an empty starts map', () => {
     const errors = validateDraft(draft({ starts: {} }))
     expect(errors.some((e) => e.tab === 'starts' && e.field === 'starts')).toBe(true)
+  })
+
+  it('does not flag a missing universe when guided world_mode holds hand-written, non-canonical text', () => {
+    const errors = validateDraft(draft({ world: 'Just some free-form prose, no headings.' }))
+    expect(errors.some((e) => e.tab === 'world')).toBe(false)
+  })
+
+  it('flags "}} text {{" as an unbalanced variable', () => {
+    const errors = validateDraft(draft({ world: '## Universe\n\n}} text {{' }))
+    expect(errors.some((e) => e.tab === 'world' && e.message === t('builder.world.variables.unbalanced'))).toBe(true)
   })
 })

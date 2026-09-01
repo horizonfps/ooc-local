@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
@@ -38,20 +38,28 @@ function baseDraft(): BuilderDraft {
 function Harness(props: { initial: BuilderDraft }) {
   const [draft, setDraft] = useState(props.initial)
   const errors = validateDraft(draft)
-  return <WorldTab scenarioId="school" draft={draft} onChange={setDraft} errors={errors} goToTab={() => {}} />
+  return (
+    <>
+      <WorldTab scenarioId="school" draft={draft} onChange={setDraft} errors={errors} goToTab={() => {}} />
+      <pre data-testid="world-debug">{draft.world}</pre>
+      <pre data-testid="world-mode-debug">{draft.meta.world_mode}</pre>
+    </>
+  )
 }
 
 describe('WorldTab', () => {
-  it('filling the guided fields updates world with the canonical headings', async () => {
-    const user = userEvent.setup()
+  it('filling the guided fields updates world with the canonical headings', () => {
     render(<Harness initial={baseDraft()} />)
 
     const toneInput = screen.getByLabelText(t('builder.world.tone'))
-    await user.type(toneInput, 'Grim and quiet.')
+    fireEvent.change(toneInput, { target: { value: 'Grim and quiet.' } })
 
     expect(screen.getByLabelText(t('builder.world.universe'))).toHaveValue('A dusty old school.')
     const universeInput = screen.getByLabelText(t('builder.world.universe')) as HTMLTextAreaElement
     expect(universeInput.value).toContain('A dusty old school.')
+    expect(screen.getByTestId('world-debug').textContent).toBe(
+      '## Universe\n\nA dusty old school.\n\n## Tone\n\nGrim and quiet.',
+    )
   })
 
   it('inserting a variable writes it at the cursor position', async () => {
@@ -114,5 +122,36 @@ describe('WorldTab', () => {
     const errors = validateDraft(draft)
 
     expect(errors.some((e) => e.tab === 'world' && e.message === t('builder.world.variables.unbalanced'))).toBe(true)
+  })
+
+  it('clicking "keep as custom" in the fallback banner records world_mode custom', async () => {
+    const draft = baseDraft()
+    draft.meta.world_mode = 'guided'
+    draft.world = 'Just some free-form prose, no headings.'
+    const user = userEvent.setup()
+    render(<Harness initial={draft} />)
+
+    await user.click(screen.getByRole('button', { name: t('builder.world.mode.fallback.keepCustom') }))
+
+    expect(screen.getByTestId('world-mode-debug').textContent).toBe('custom')
+  })
+
+  it('confirming the switch from custom to guided shows the five fields empty', async () => {
+    const draft = baseDraft()
+    draft.meta.world_mode = 'custom'
+    draft.world = 'A free-form prompt.'
+    const user = userEvent.setup()
+    render(<Harness initial={draft} />)
+
+    await user.click(screen.getByRole('radio', { name: t('builder.world.mode.guided') }))
+    await user.click(screen.getByRole('button', { name: t('builder.world.mode.switchToGuidedSubmit') }))
+
+    expect(screen.getByLabelText(t('builder.world.universe'))).toHaveValue('')
+    expect(screen.getByLabelText(t('builder.world.tone'))).toHaveValue('')
+    expect(screen.getByLabelText(t('builder.world.rules'))).toHaveValue('')
+    expect(screen.getByLabelText(t('builder.world.conflict'))).toHaveValue('')
+    expect(screen.getByLabelText(t('builder.world.mission'))).toHaveValue('')
+    expect(screen.getByTestId('world-debug').textContent).toBe('')
+    expect(screen.getByTestId('world-mode-debug').textContent).toBe('guided')
   })
 })

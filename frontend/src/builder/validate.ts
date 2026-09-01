@@ -6,9 +6,19 @@ const ID_RE = /^[a-z0-9-]+$/
 
 function hasUnbalancedVariable(text: string): boolean {
   return text.split('\n').some((line) => {
-    const opens = (line.match(/\{\{/g) ?? []).length
-    const closes = (line.match(/\}\}/g) ?? []).length
-    return opens > closes
+    let open = false
+    for (let i = 0; i < line.length; i += 1) {
+      if (line.startsWith('{{', i)) {
+        if (open) return true
+        open = true
+        i += 1
+      } else if (line.startsWith('}}', i)) {
+        if (!open) return true
+        open = false
+        i += 1
+      }
+    }
+    return open
   })
 }
 
@@ -106,7 +116,7 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
     errors.push(error('world', 'world', t('builder.world.custom.label'), t('builder.field.required')))
   } else if (draft.meta.world_mode === 'guided') {
     const guided = parseGuidedWorld(draft.world)
-    if (!guided || !guided.universe.trim()) {
+    if (guided && !guided.universe.trim()) {
       errors.push(error('world', 'universe', t('builder.world.universe'), t('builder.field.required')))
     }
   }

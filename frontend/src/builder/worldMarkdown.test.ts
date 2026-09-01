@@ -51,4 +51,11 @@ describe('worldMarkdown', () => {
   it('exposes the canonical headings in order', () => {
     expect(WORLD_HEADINGS).toEqual(['Universe', 'Tone', 'Rules', 'Conflict', 'Mission'])
   })
+
+  it('parses empty and whitespace-only input as five empty guided fields', () => {
+    const empty: GuidedWorld = { universe: '', tone: '', rules: '', conflict: '', mission: '' }
+    expect(parseGuidedWorld('')).toEqual(empty)
+    expect(parseGuidedWorld('   \n  ')).toEqual(empty)
+    expect(serializeGuidedWorld(empty)).toBe('')
+  })
 })

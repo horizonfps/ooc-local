@@ -17,7 +17,7 @@ const GUIDED_FIELDS: readonly { key: keyof GuidedWorld; labelKey: 'builder.world
 ]
 
 function extractVariableNames(text: string): string[] {
-  return Array.from(new Set(Array.from(text.matchAll(/\{\{(\w+)\}\}/g), (m) => m[1])))
+  return Array.from(new Set(Array.from(text.matchAll(/\{\{\s*(\w+)\s*\}\}/g), (m) => m[1])))
 }
 
 export function WorldTab(props: TabProps) {

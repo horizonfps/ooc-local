@@ -18,6 +18,8 @@ export function serializeGuidedWorld(w: GuidedWorld): string {
 }
 
 export function parseGuidedWorld(md: string): GuidedWorld | null {
+  if (!md.trim()) return { universe: '', tone: '', rules: '', conflict: '', mission: '' }
+
   const lines = md.split('\n')
   const result: GuidedWorld = { universe: '', tone: '', rules: '', conflict: '', mission: '' }
   let currentField: keyof GuidedWorld | null = null
