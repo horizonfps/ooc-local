@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -213,6 +213,7 @@ describe('IdentityTab', () => {
 
     const img = await screen.findByAltText(t('builder.identity.cover.alt', { scenario: 'The School' }))
     expect(img).toHaveAttribute('src', '/api/scenarios/school/media/cover.png')
+    fireEvent.load(img)
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: t('builder.identity.cover.remove') }))
@@ -222,5 +223,24 @@ describe('IdentityTab', () => {
       'src',
       '/api/scenarios/school/media/cover.png',
     )
+  })
+
+  it('shows the placeholder and hides remove once every cover extension fails to load', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<IdentityTab scenarioId="school" draft={baseDraft()} onChange={() => {}} errors={[]} goToTab={() => {}} />)
+
+    let img = await screen.findByAltText(t('builder.identity.cover.alt', { scenario: 'The School' }))
+    fireEvent.error(img)
+    img = await screen.findByAltText(t('builder.identity.cover.alt', { scenario: 'The School' }))
+    fireEvent.error(img)
+    img = await screen.findByAltText(t('builder.identity.cover.alt', { scenario: 'The School' }))
+    fireEvent.error(img)
+
+    expect(screen.queryByAltText(t('builder.identity.cover.alt', { scenario: 'The School' }))).not.toBeInTheDocument()
+    expect(screen.getByText(t('builder.identity.cover.empty'))).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: t('builder.identity.cover.remove') })).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

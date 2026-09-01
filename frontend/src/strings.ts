@@ -159,6 +159,16 @@ const en = {
   'builder.field.slugInvalid': 'Use only lowercase letters, numbers and hyphens.',
   'builder.field.slugTaken': '{slug} is already used in this scenario.',
   'builder.detail.selected': 'Editing {name}',
+  'builder.field.label.starts': 'Starts',
+  'builder.field.label.defaultStart': 'Default start',
+  'builder.field.label.startId': 'Start id',
+  'builder.field.label.startCharacters': 'Start characters',
+  'builder.field.label.characterId': 'Character id',
+
+  // Structural validation messages (validateDraft)
+  'builder.validate.startsRequired': 'At least one start is required.',
+  'builder.validate.defaultStartMissing': 'Default start "{id}" was not found among the starts.',
+  'builder.validate.startUnknownCharacter': 'Start "{start}" references unknown character "{character}".',
 
   // Media errors (shared by identity, media/sprites and media/backgrounds tabs)
   'builder.media.error.type': 'Only PNG, JPEG and WebP images.',
@@ -400,6 +410,16 @@ const ptBr: Record<StringKey, string> = {
   'builder.field.slugInvalid': 'Use só letras minúsculas, números e hífens.',
   'builder.field.slugTaken': '{slug} já está em uso neste cenário.',
   'builder.detail.selected': 'Editando {name}',
+  'builder.field.label.starts': 'Starts',
+  'builder.field.label.defaultStart': 'Início padrão',
+  'builder.field.label.startId': 'Id do start',
+  'builder.field.label.startCharacters': 'Personagens do start',
+  'builder.field.label.characterId': 'Id do personagem',
+
+  // Structural validation messages (validateDraft)
+  'builder.validate.startsRequired': 'É preciso pelo menos um start.',
+  'builder.validate.defaultStartMissing': 'O início padrão "{id}" não foi encontrado entre os starts.',
+  'builder.validate.startUnknownCharacter': 'O start "{start}" referencia um personagem desconhecido "{character}".',
 
   // Media errors (shared by identity, media/sprites and media/backgrounds tabs)
   'builder.media.error.type': 'Só imagens PNG, JPEG e WebP.',

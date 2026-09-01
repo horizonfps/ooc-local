@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, fetchScenarioDocument, saveScenarioDocument, type ScenarioDocument } from '../api'
 import { deepEqual, validateDraft } from '../builder/validate'
+import { IdentityTab } from '../components/builder/IdentityTab'
 import { ErrorState } from '../components/ErrorState'
 import { Loading } from '../components/Loading'
 import { describeError } from '../errors'
@@ -561,7 +562,12 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
                   <Loading label={t('builder.editor.loading')} visuallyHidden />
                 </>
               ) : (
-                tabProps && <TabPlaceholder tab={activeTab} {...tabProps} />
+                tabProps &&
+                (activeTab === 'identity' ? (
+                  <IdentityTab {...tabProps} />
+                ) : (
+                  <TabPlaceholder tab={activeTab} {...tabProps} />
+                ))
               )}
             </section>
             <aside id="builder-editor-preview" className={`builder-editor-preview${previewOpen ? ' is-open' : ''}`} />

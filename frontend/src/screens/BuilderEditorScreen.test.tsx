@@ -98,9 +98,9 @@ describe('BuilderEditorScreen', () => {
   it('marks dirty on onChange from a tab placeholder and clears it when undone', async () => {
     const user = userEvent.setup()
     mockFetch(() => jsonResponse(DOCUMENT))
-    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-identity')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
     await user.click(editButton)
     expect(screen.getByText(t('builder.editor.dirty'))).toBeInTheDocument()
 
@@ -125,16 +125,29 @@ describe('BuilderEditorScreen', () => {
     expect(document.activeElement).toBe(identityTab)
   })
 
+  it('renders the identity tab with the name field from the draft and marks dirty on edit', async () => {
+    const user = userEvent.setup()
+    mockFetch(() => jsonResponse(DOCUMENT))
+    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
+
+    const nameField = await screen.findByLabelText(t('builder.identity.name'))
+    expect(nameField).toHaveValue('The School')
+    expect(screen.getByText(t('builder.editor.clean'))).toBeInTheDocument()
+
+    await user.type(nameField, ' Reborn')
+    expect(screen.getByText(t('builder.editor.dirty'))).toBeInTheDocument()
+  })
+
   it('keeps the draft when the tab prop changes', async () => {
     const user = userEvent.setup()
     mockFetch(() => jsonResponse(DOCUMENT))
-    const { rerender } = render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
+    const { rerender } = render(<BuilderEditorScreen scenarioId="school" tab="world" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-identity')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
     await user.click(editButton)
     expect(screen.getByText(t('builder.editor.dirty'))).toBeInTheDocument()
 
-    rerender(<BuilderEditorScreen scenarioId="school" tab="world" />)
+    rerender(<BuilderEditorScreen scenarioId="school" tab="characters" />)
     expect(await screen.findByText(t('builder.editor.dirty'))).toBeInTheDocument()
   })
 
@@ -188,9 +201,9 @@ describe('BuilderEditorScreen', () => {
       return jsonResponse(DOCUMENT)
     })
     vi.stubGlobal('fetch', fetchMock)
-    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-identity')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
     await user.click(editButton)
     expect(screen.getByText(t('builder.editor.dirty'))).toBeInTheDocument()
 
@@ -208,9 +221,9 @@ describe('BuilderEditorScreen', () => {
       () => jsonResponse(DOCUMENT),
       () => jsonResponse({ revision: 'rev-2' }),
     )
-    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-identity')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
     await user.click(editButton)
     expect(screen.getByText(t('builder.editor.dirty'))).toBeInTheDocument()
 
@@ -237,9 +250,9 @@ describe('BuilderEditorScreen', () => {
       return jsonResponse(DOCUMENT)
     })
     vi.stubGlobal('fetch', fetchMock)
-    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-identity')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
     await user.click(editButton)
     await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
 
@@ -258,9 +271,9 @@ describe('BuilderEditorScreen', () => {
       () => jsonResponse({ detail: 'builder disabled by flag' }, 503),
     )
     vi.stubGlobal('fetch', fetchMock)
-    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-identity')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
     await user.click(editButton)
     await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
 
@@ -276,9 +289,9 @@ describe('BuilderEditorScreen', () => {
       () => jsonResponse({ detail: 'boom' }, 500),
     )
     vi.stubGlobal('fetch', fetchMock)
-    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-identity')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
     await user.click(editButton)
     await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
 
@@ -290,9 +303,9 @@ describe('BuilderEditorScreen', () => {
     const user = userEvent.setup()
     const invalidDocument = { ...DOCUMENT, starts: {} }
     mockFetch(() => jsonResponse(invalidDocument))
-    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-identity')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
     await user.click(editButton)
     await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
 
@@ -307,9 +320,9 @@ describe('BuilderEditorScreen', () => {
   it('asks for confirmation before reloading a dirty draft, and reloads on confirm', async () => {
     const user = userEvent.setup()
     const fetchMock = mockFetch(() => jsonResponse(DOCUMENT))
-    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
+    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
 
-    const editButton = await screen.findByTestId('builder-tab-demo-edit-identity')
+    const editButton = await screen.findByTestId('builder-tab-demo-edit-world')
     await user.click(editButton)
     await user.click(screen.getByRole('button', { name: t('builder.editor.reload') }))
 

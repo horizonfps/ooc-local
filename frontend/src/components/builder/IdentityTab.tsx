@@ -31,15 +31,23 @@ function IdentityCover(props: { scenarioId: string; scenarioName: string }) {
   const { scenarioId, scenarioName } = props
   const [extIndex, setExtIndex] = useState(0)
   const [overrideUrl, setOverrideUrl] = useState<string | null>(null)
+  const [confirmed, setConfirmed] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<{ message: string; retry: () => void } | null>(null)
 
-  const hasImage = overrideUrl !== null || extIndex < COVER_EXTENSIONS.length
-  const src = overrideUrl ?? (extIndex < COVER_EXTENSIONS.length ? `/api/scenarios/${scenarioId}/media/cover.${COVER_EXTENSIONS[extIndex]}` : null)
+  const attempting = overrideUrl === null && extIndex < COVER_EXTENSIONS.length
+  const showImg = overrideUrl !== null || attempting
+  const hasImage = overrideUrl !== null || confirmed
+  const src = overrideUrl ?? (attempting ? `/api/scenarios/${scenarioId}/media/cover.${COVER_EXTENSIONS[extIndex]}` : null)
+
+  function handleImgLoad() {
+    setConfirmed(true)
+  }
 
   function handleImgError() {
     if (overrideUrl !== null) {
       setOverrideUrl(null)
+      setConfirmed(false)
       setExtIndex(COVER_EXTENSIONS.length)
       return
     }
@@ -59,6 +67,7 @@ function IdentityCover(props: { scenarioId: string; scenarioName: string }) {
     setError(null)
     try {
       const result = await uploadMedia(scenarioId, COVER_TARGET, file)
+      setExtIndex(0)
       setOverrideUrl(`${result.url}?t=${Date.now()}`)
     } catch (err) {
       setError({ message: uploadErrorMessage(err), retry: () => submit(file) })
@@ -73,6 +82,7 @@ function IdentityCover(props: { scenarioId: string; scenarioName: string }) {
     try {
       await deleteMedia(scenarioId, COVER_TARGET)
       setOverrideUrl(null)
+      setConfirmed(false)
       setExtIndex(COVER_EXTENSIONS.length)
     } catch (err) {
       setError({ message: removeErrorMessage(err), retry: handleRemove })
@@ -93,11 +103,12 @@ function IdentityCover(props: { scenarioId: string; scenarioName: string }) {
       <p className="field-hint" id="identity-cover-hint">
         {t('builder.identity.cover.hint')}
       </p>
-      {hasImage && src ? (
+      {showImg && src ? (
         <img
           className="builder-identity-cover-image"
           src={src}
           alt={t('builder.identity.cover.alt', { scenario: scenarioName })}
+          onLoad={handleImgLoad}
           onError={handleImgError}
         />
       ) : (
@@ -136,7 +147,6 @@ export function IdentityTab(props: TabProps) {
   const { scenarioId, draft, onChange, errors } = props
   const meta = draft.meta
 
-  const [touched, setTouched] = useState({ name: false, tagline: false, description: false })
   const [tagInput, setTagInput] = useState('')
   const [tagNotice, setTagNotice] = useState('')
 
@@ -144,29 +154,13 @@ export function IdentityTab(props: TabProps) {
     onChange({ ...draft, meta: { ...meta, ...patch } })
   }
 
-  function hasError(field: string): boolean {
-    return errors.some((e) => e.tab === 'identity' && e.field === field)
+  function fieldError(field: string): string | null {
+    return errors.find((e) => e.tab === 'identity' && e.field === field)?.message ?? null
   }
 
-  function nameErrorText(): string | null {
-    if (!meta.name.trim()) return t('builder.field.required')
-    if (meta.name.length > 80) return t('builder.field.tooLong', { max: 80 })
-    return null
-  }
-
-  function taglineErrorText(): string | null {
-    if (meta.tagline !== null && meta.tagline.length > 120) return t('builder.field.tooLong', { max: 120 })
-    return null
-  }
-
-  function descriptionErrorText(): string | null {
-    if (meta.description !== null && meta.description.length > 4000) return t('builder.field.tooLong', { max: 4000 })
-    return null
-  }
-
-  const nameInvalid = touched.name && hasError('name')
-  const taglineInvalid = touched.tagline && hasError('tagline')
-  const descriptionInvalid = touched.description && hasError('description')
+  const nameError = fieldError('name')
+  const taglineError = fieldError('tagline')
+  const descriptionError = fieldError('description')
 
   function commitTag() {
     const raw = tagInput.trim()
@@ -207,13 +201,12 @@ export function IdentityTab(props: TabProps) {
           id="builder-field-name"
           value={meta.name}
           onChange={(e) => updateMeta({ name: e.target.value })}
-          onBlur={() => setTouched((prev) => ({ ...prev, name: true }))}
-          aria-invalid={nameInvalid ? 'true' : undefined}
-          aria-describedby={nameInvalid ? 'builder-field-name-error' : undefined}
+          aria-invalid={nameError ? 'true' : undefined}
+          aria-describedby={nameError ? 'builder-field-name-error' : undefined}
         />
-        {nameInvalid ? (
+        {nameError ? (
           <p role="alert" id="builder-field-name-error" className="field-error">
-            {nameErrorText()}
+            {nameError}
           </p>
         ) : null}
       </div>
@@ -224,10 +217,9 @@ export function IdentityTab(props: TabProps) {
           id="builder-field-tagline"
           value={meta.tagline ?? ''}
           onChange={(e) => updateMeta({ tagline: e.target.value === '' ? null : e.target.value })}
-          onBlur={() => setTouched((prev) => ({ ...prev, tagline: true }))}
-          aria-invalid={taglineInvalid ? 'true' : undefined}
+          aria-invalid={taglineError ? 'true' : undefined}
           aria-describedby={
-            [taglineInvalid ? 'builder-field-tagline-error' : null, 'builder-field-tagline-hint'].filter(Boolean).join(' ') ||
+            [taglineError ? 'builder-field-tagline-error' : null, 'builder-field-tagline-hint'].filter(Boolean).join(' ') ||
             undefined
           }
         />
@@ -239,9 +231,9 @@ export function IdentityTab(props: TabProps) {
             {t('builder.field.counter', { count: meta.tagline.length, max: 120 })}
           </p>
         ) : null}
-        {taglineInvalid ? (
+        {taglineError ? (
           <p role="alert" id="builder-field-tagline-error" className="field-error">
-            {taglineErrorText()}
+            {taglineError}
           </p>
         ) : null}
       </div>
@@ -253,10 +245,9 @@ export function IdentityTab(props: TabProps) {
           className="builder-field-textarea"
           value={meta.description ?? ''}
           onChange={(e) => updateMeta({ description: e.target.value === '' ? null : e.target.value })}
-          onBlur={() => setTouched((prev) => ({ ...prev, description: true }))}
-          aria-invalid={descriptionInvalid ? 'true' : undefined}
+          aria-invalid={descriptionError ? 'true' : undefined}
           aria-describedby={
-            [descriptionInvalid ? 'builder-field-description-error' : null, 'builder-field-description-hint']
+            [descriptionError ? 'builder-field-description-error' : null, 'builder-field-description-hint']
               .filter(Boolean)
               .join(' ') || undefined
           }
@@ -264,9 +255,9 @@ export function IdentityTab(props: TabProps) {
         <p className="field-hint" id="builder-field-description-hint">
           {t('builder.identity.description.hint')}
         </p>
-        {descriptionInvalid ? (
+        {descriptionError ? (
           <p role="alert" id="builder-field-description-error" className="field-error">
-            {descriptionErrorText()}
+            {descriptionError}
           </p>
         ) : null}
       </div>
