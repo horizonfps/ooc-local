@@ -1,7 +1,7 @@
 ---
 id: TCK-055
 title: Rodar o director antes do narrador e persistir o elenco do turno
-status: in_review
+status: done
 points: 5
 blockedBy: [TCK-050, TCK-053]
 files:
