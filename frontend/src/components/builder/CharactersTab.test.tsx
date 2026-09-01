@@ -176,16 +176,97 @@ describe('CharactersTab', () => {
     expect(screen.getByText(t('builder.characters.delete.castUpdated', { name: 'Luca', starts: 'Default start' }))).toBeInTheDocument()
   })
 
-  it('a draft without characters blocks save with the at-least-one error', () => {
+  it('a draft without characters is valid — characters: {} is an accepted payload', () => {
     const draft = baseDraft()
     draft.characters = {}
     const errors = validateDraft(draft)
 
-    expect(
-      errors.some(
-        (e) => e.tab === 'characters' && e.field === 'characters' && e.message === t('builder.characters.error.atLeastOne'),
-      ),
-    ).toBe(true)
+    expect(errors.some((e) => e.tab === 'characters' && e.field === 'characters')).toBe(false)
+  })
+
+  it('a legacy character with blank role/appearance/personality/voice/mind saves without errors', () => {
+    const draft = baseDraft()
+    draft.characters.luca = {
+      name: 'Luca',
+      role: '',
+      appearance: '',
+      personality: '',
+      voice: '',
+      mind: { feeling: '', goal: '', opinion_of_player: null, secret_plan: null },
+      sprite: null,
+      anchor: false,
+      emotions: ['default'],
+    }
+    const errors = validateDraft(draft)
+
+    expect(errors.some((e) => e.tab === 'characters' && e.field.startsWith('characters.luca'))).toBe(false)
+  })
+
+  it('refuses to add an emotion once the cap is reached', async () => {
+    const draft = baseDraft()
+    draft.characters.luca.emotions = ['default', ...Array.from({ length: 19 }, (_, i) => `e${i}`)]
+    render(<Harness initial={draft} />)
+
+    const addInput = screen.getByLabelText(t('builder.characters.emotions.add'))
+    fireEvent.change(addInput, { target: { value: 'one-too-many' } })
+    fireEvent.keyDown(addInput, { key: 'Enter' })
+
+    expect(screen.getByText(t('builder.characters.emotions.max', { max: 19 }))).toBeInTheDocument()
+    const characters = JSON.parse(screen.getByTestId('characters-debug').textContent ?? '{}')
+    expect(characters.luca.emotions).toHaveLength(20)
+  })
+
+  it('resets the emotion input, error and notice when switching to another character', async () => {
+    const user = userEvent.setup()
+    const draft = baseDraft()
+    draft.characters.luca.emotions = ['default', 'smile']
+    draft.characters.mira = {
+      name: 'Mira',
+      role: 'Student',
+      appearance: 'x',
+      personality: 'y',
+      voice: 'z',
+      mind: { feeling: 'x', goal: 'y', opinion_of_player: null, secret_plan: null },
+      sprite: null,
+      anchor: false,
+      emotions: ['default', 'smile'],
+    }
+    render(<Harness initial={draft} />)
+
+    const addInput = screen.getByLabelText(t('builder.characters.emotions.add'))
+    fireEvent.change(addInput, { target: { value: 'Feliz' } })
+    fireEvent.keyDown(addInput, { key: 'Enter' })
+    expect(screen.getAllByText(t('builder.field.slugInvalid')).length).toBeGreaterThan(0)
+
+    await user.click(screen.getByRole('button', { name: t('builder.characters.emotions.remove', { emotion: 'smile' }) }))
+    expect(screen.getByText(t('builder.characters.emotions.hasAsset', { emotion: 'smile' }))).toBeInTheDocument()
+
+    await user.click(screen.getByText('Mira', { selector: '.builder-characters-listItemName' }))
+
+    expect(screen.queryByText(t('builder.field.slugInvalid'))).toBeNull()
+    expect(screen.queryByText(t('builder.characters.emotions.hasAsset', { emotion: 'smile' }))).toBeNull()
+    expect(screen.getByLabelText(t('builder.characters.emotions.add'))).toHaveValue('')
+  })
+
+  it('trims the sprite value as it is typed', () => {
+    render(<Harness initial={baseDraft()} />)
+
+    const sprite = screen.getByLabelText(new RegExp(t('builder.characters.sprite')))
+    fireEvent.change(sprite, { target: { value: '  luca-sprite  ' } })
+
+    const characters = JSON.parse(screen.getByTestId('characters-debug').textContent ?? '{}')
+    expect(characters.luca.sprite).toBe('luca-sprite')
+  })
+
+  it('trims the name on blur', () => {
+    render(<Harness initial={baseDraft()} />)
+
+    const name = document.getElementById('builder-field-characters.luca.name') as HTMLInputElement
+    fireEvent.change(name, { target: { value: '  Luca Jr  ' } })
+    fireEvent.blur(name)
+
+    const characters = JSON.parse(screen.getByTestId('characters-debug').textContent ?? '{}')
+    expect(characters.luca.name).toBe('Luca Jr')
   })
 
   it('selecting an item moves focus to the first field and announces it', async () => {

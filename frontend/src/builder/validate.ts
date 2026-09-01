@@ -6,6 +6,9 @@ const ID_RE = /^[a-z0-9-]+$/
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
 const WEATHER_CODES = ['clear', 'cloudy', 'rain', 'storm', 'snow', 'fog', 'night']
 
+// Mirrors backend/app/scenario.py Character.emotions cap (20 total, default forced in).
+export const MAX_EMOTIONS = 20
+
 function hasUnbalancedVariable(text: string): boolean {
   return text.split('\n').some((line) => {
     let open = false
@@ -139,17 +142,15 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
 
   const characterIds = Object.keys(draft.characters)
 
-  if (characterIds.length === 0) {
-    errors.push(error('characters', 'characters', t('builder.field.label.characters'), t('builder.characters.error.atLeastOne')))
-  }
-
   for (const charId of characterIds) {
     const character = draft.characters[charId]
     const charLabel = character.name.trim() || charId
     const withChar = (label: string) => `${charLabel} — ${label}`
 
     if (!ID_RE.test(charId)) {
-      errors.push(error('characters', `characters.${charId}`, t('builder.field.label.characterId'), t('builder.field.slugInvalid')))
+      errors.push(
+        error('characters', `characters.${charId}`, withChar(t('builder.field.label.characterId')), t('builder.field.slugInvalid')),
+      )
     }
 
     if (!character.name.trim()) {
@@ -160,44 +161,9 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
       )
     }
 
-    if (!character.role.trim()) {
-      errors.push(error('characters', `characters.${charId}.role`, withChar(t('builder.characters.role')), t('builder.field.required')))
-    } else if (character.role.length > 140) {
+    if (character.role.length > 140) {
       errors.push(
         error('characters', `characters.${charId}.role`, withChar(t('builder.characters.role')), t('builder.field.tooLong', { max: 140 })),
-      )
-    }
-
-    if (!character.appearance.trim()) {
-      errors.push(
-        error('characters', `characters.${charId}.appearance`, withChar(t('builder.characters.appearance')), t('builder.field.required')),
-      )
-    }
-
-    if (!character.personality.trim()) {
-      errors.push(
-        error('characters', `characters.${charId}.personality`, withChar(t('builder.characters.personality')), t('builder.field.required')),
-      )
-    }
-
-    if (!character.voice.trim()) {
-      errors.push(error('characters', `characters.${charId}.voice`, withChar(t('builder.characters.voice')), t('builder.field.required')))
-    }
-
-    if (!character.mind.feeling.trim()) {
-      errors.push(
-        error(
-          'characters',
-          `characters.${charId}.mind.feeling`,
-          withChar(t('builder.characters.mind.feeling')),
-          t('builder.field.required'),
-        ),
-      )
-    }
-
-    if (!character.mind.goal.trim()) {
-      errors.push(
-        error('characters', `characters.${charId}.mind.goal`, withChar(t('builder.characters.mind.goal')), t('builder.field.required')),
       )
     }
 
@@ -219,6 +185,17 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
         )
       }
     })
+
+    if (character.emotions.length > MAX_EMOTIONS) {
+      errors.push(
+        error(
+          'characters',
+          `characters.${charId}.emotions`,
+          withChar(t('builder.characters.emotions.legend')),
+          t('builder.characters.emotions.max', { max: MAX_EMOTIONS - 1 }),
+        ),
+      )
+    }
   }
 
   if (!draft.meta.name.trim()) {

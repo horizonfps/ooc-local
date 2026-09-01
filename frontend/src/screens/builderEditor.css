@@ -556,6 +556,10 @@
   font-weight: 600;
 }
 
+.builder-starts-list li.is-invalid .builder-starts-listItem {
+  border-color: #ff8a8a;
+}
+
 .builder-starts-badge {
   padding: 0.1rem 0.5rem;
   border-radius: 999px;
@@ -676,6 +680,10 @@
 .builder-characters-list li.is-selected .builder-characters-listItem {
   border-color: var(--fg);
   font-weight: 600;
+}
+
+.builder-characters-list li.is-invalid .builder-characters-listItem {
+  border-color: #ff8a8a;
 }
 
 .builder-characters-avatar {

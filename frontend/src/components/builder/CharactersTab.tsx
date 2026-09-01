@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { TabProps } from '../../screens/BuilderEditorScreen'
 import type { CharacterDoc, CharacterMind } from '../../api'
 import { t } from '../../i18n'
+import { MAX_EMOTIONS } from '../../builder/validate'
 import { EmptyState } from '../EmptyState'
 import '../../screens/builderEditor.css'
 
@@ -71,6 +72,12 @@ export function CharactersTab(props: TabProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft.characters])
+
+  useEffect(() => {
+    setEmotionInput('')
+    setEmotionError(null)
+    setEmotionNotice('')
+  }, [selectedId])
 
   useEffect(() => {
     if (createOpen) {
@@ -188,12 +195,17 @@ export function CharactersTab(props: TabProps) {
       setEmotionError(t('builder.field.slugInvalid'))
       return
     }
-    setEmotionError(null)
     const character = draft.characters[id]
     if (character.emotions.includes(value)) {
+      setEmotionError(null)
       setEmotionInput('')
       return
     }
+    if (character.emotions.length >= MAX_EMOTIONS) {
+      setEmotionError(t('builder.characters.emotions.max', { max: MAX_EMOTIONS - 1 }))
+      return
+    }
+    setEmotionError(null)
     updateCharacter(id, { emotions: [...character.emotions, value] })
     setEmotionInput('')
   }
@@ -321,6 +333,7 @@ export function CharactersTab(props: TabProps) {
                 ref={nameFieldRef}
                 value={selectedCharacter.name}
                 onChange={(e) => updateCharacter(selectedId, { name: e.target.value })}
+                onBlur={(e) => updateCharacter(selectedId, { name: e.target.value.trim() })}
                 aria-invalid={fieldError(`characters.${selectedId}.name`) ? 'true' : undefined}
                 aria-describedby={fieldError(`characters.${selectedId}.name`) ? `builder-field-characters.${selectedId}.name-error` : undefined}
               />
@@ -512,7 +525,7 @@ export function CharactersTab(props: TabProps) {
                 id={`builder-field-characters.${selectedId}.sprite`}
                 value={selectedCharacter.sprite ?? ''}
                 placeholder={selectedId}
-                onChange={(e) => updateCharacter(selectedId, { sprite: e.target.value.trim() === '' ? null : e.target.value })}
+                onChange={(e) => updateCharacter(selectedId, { sprite: e.target.value.trim() === '' ? null : e.target.value.trim() })}
                 aria-invalid={fieldError(`characters.${selectedId}.sprite`) ? 'true' : undefined}
                 aria-describedby={
                   [
