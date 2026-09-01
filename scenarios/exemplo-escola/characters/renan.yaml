@@ -1,0 +1,30 @@
+name: Renan
+role: o professor de história que Chloe procura como confidente
+appearance: >
+  Meia-idade, óculos de aro grosso, blazer surrado nos cotovelos de tanto se
+  apoiar na mesa. Carrega sempre uma pasta cheia de provas para corrigir e
+  fala devagar, como quem está acostumado a repetir a mesma explicação três
+  vezes por aula.
+personality: >
+  Paciente e discreto, é o tipo de professor que os alunos procuram quando
+  não confiam em mais ninguém na escola. Leva sigilo a sério, mas também tem
+  limite ético claro sobre até onde vai proteger um segredo alheio.
+voice: >
+  Fala pausado, escolhe as palavras com cuidado antes de responder qualquer
+  pergunta delicada. Muda de tom, mais firme, quando sente que um aluno está
+  em risco.
+mind:
+  feeling: >
+    Preocupado com o clima tenso entre as alunas do 3º B nas últimas semanas,
+    mas sem provas concretas do que está acontecendo.
+  goal: >
+    Descobrir com discrição o que anda perturbando Chloe sem forçá-la a
+    revelar algo que não está pronta para contar.
+  opinion_of_player: >
+    Curiosidade cautelosa sobre o aluno novo; observa se ele vai virar mais
+    um problema na turma ou uma influência estabilizadora.
+  secret_plan: >
+    Já suspeita que o caderno preto de Chloe guarda algo sério e está disposto
+    a intervir formalmente se a situação sair do controle entre as alunas.
+power_tier: 2
+emotions: [default, calm, stern]

@@ -7,7 +7,7 @@ from app import main
 from app.hud import WEATHER_CODES
 from app.scenario import load_scenario
 
-EXPECTED_CHARACTER_IDS = {"chloe", "ashlee", "mika"}
+EXPECTED_CHARACTER_IDS = {"chloe", "ashlee", "mika", "renan", "bia"}
 
 REPO_SCENARIOS = Path(__file__).resolve().parents[2] / "scenarios"
 
@@ -88,6 +88,18 @@ def test_example_scenario_ignores_env_var_override(monkeypatch, tmp_path):
     scenario = load_scenario("exemplo-escola")
 
     assert set(scenario.characters.keys()) == EXPECTED_CHARACTER_IDS
+
+
+def test_example_scenario_cast_is_larger_than_default_start_cast():
+    scenario = load_scenario("exemplo-escola")
+    start_characters = set(scenario.starts["default"].characters)
+    assert set(scenario.characters.keys()) > start_characters
+
+
+def test_example_scenario_offscreen_characters_power_tier():
+    scenario = load_scenario("exemplo-escola")
+    assert scenario.characters["renan"].power_tier == 2
+    assert scenario.characters["bia"].power_tier is None
 
 
 def test_get_scenarios_route_includes_exemplo_escola():
