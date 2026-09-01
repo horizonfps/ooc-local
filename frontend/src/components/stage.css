@@ -1,0 +1,100 @@
+.game-panel {
+  position: relative;
+}
+
+.game-stage-content {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.game-stage-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  transition: opacity 200ms;
+  pointer-events: none;
+}
+
+.game-stage-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  opacity: 0.8;
+}
+
+.game-stage-toggle {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.25rem 0;
+}
+
+.game-stage-toggle button {
+  min-height: 32px;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  border: 1px solid #33363f;
+  background: var(--surface);
+  color: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.game-stage-sprites {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0.5rem;
+  height: clamp(96px, 18vh, 180px);
+  margin-bottom: 0.5rem;
+}
+
+.game-stage-sprites img {
+  max-height: 100%;
+  max-width: 33%;
+  object-fit: contain;
+  animation: game-stage-sprite-in 150ms ease-out;
+}
+
+@keyframes game-stage-sprite-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 720px) {
+  .game-stage-sprites {
+    height: clamp(80px, 14vh, 120px);
+  }
+
+  .game-stage-sprites img {
+    max-width: 50%;
+  }
+}
+
+@media (max-width: 480px) {
+  .game-stage-sprites img:not(:last-child) {
+    display: none;
+  }
+
+  .game-stage-sprites img {
+    max-width: 100%;
+  }
+}
+
+@media (max-height: 520px) {
+  .game-stage-sprites {
+    display: none;
+  }
+}

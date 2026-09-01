@@ -402,6 +402,14 @@ const en = {
   'game.scrollToLatest': 'Jump to latest',
   'game.notFound.title': 'Session not found',
   'game.notFound.body': "This session doesn't exist anymore. Go back and pick another one.",
+  'game.sprite.alt': '{character}, {emotion}',
+  'game.stage.hide': 'Hide the artwork',
+  'game.stage.show': 'Show the artwork',
+  'game.scene.announce': 'Scene: {background}. On screen: {characters}.',
+  'game.scene.announceBackground': 'Scene: {background}.',
+  'game.scene.announceCharacters': 'On screen: {characters}.',
+  'game.scene.characterEmotion': '{character} ({emotion})',
+  'game.scene.empty': 'no one',
 
   // HUD
   'hud.turn': 'Turn',
@@ -832,6 +840,14 @@ const ptBr: Record<StringKey, string> = {
   'game.scrollToLatest': 'Ir para o mais recente',
   'game.notFound.title': 'Sessão não encontrada',
   'game.notFound.body': 'Essa sessão não existe mais. Volte e escolha outra.',
+  'game.sprite.alt': '{character}, {emotion}',
+  'game.stage.hide': 'Esconder a arte',
+  'game.stage.show': 'Mostrar a arte',
+  'game.scene.announce': 'Cena: {background}. Em cena: {characters}.',
+  'game.scene.announceBackground': 'Cena: {background}.',
+  'game.scene.announceCharacters': 'Em cena: {characters}.',
+  'game.scene.characterEmotion': '{character} ({emotion})',
+  'game.scene.empty': 'ninguém',
 
   // HUD
   'hud.turn': 'Turno',

@@ -40,7 +40,7 @@ function cleanedLineOrDrop(line: string): string | null {
   return treated
 }
 
-function findUnclosedBracket(text: string): number {
+export function findUnclosedBracket(text: string): number {
   const openIdx = text.lastIndexOf('[')
   if (openIdx === -1) return -1
   return text.indexOf(']', openIdx) === -1 ? openIdx : -1

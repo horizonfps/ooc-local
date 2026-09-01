@@ -1,13 +1,34 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
 import { ErrorState } from './ErrorState'
 import { Hud } from './Hud'
 import { Loading } from './Loading'
-import { TurnText } from './TurnText'
-import { fetchSession, streamTurn, type HudState, type SessionDetail, type TurnView } from '../api'
+import { TurnText, findUnclosedBracket } from './TurnText'
+import { fetchSession, streamTurn, type HudState, type SessionAssets, type SessionDetail, type TurnView } from '../api'
 import { classifyError, describeError, type ErrorKind } from '../errors'
 import { t } from '../i18n'
 import { navigate } from '../useHashRoute'
+import { EMPTY_SCENE, reduceScene, resolveBackground, resolveSprite } from '../scene'
+import './stage.css'
+
+const STAGE_STORAGE_KEY = 'ooc-local:stage'
+
+function readStagePreference(): boolean {
+  try {
+    const raw = localStorage.getItem(STAGE_STORAGE_KEY)
+    return raw === null ? true : raw === '1'
+  } catch {
+    return true
+  }
+}
+
+function writeStagePreference(value: boolean) {
+  try {
+    localStorage.setItem(STAGE_STORAGE_KEY, value ? '1' : '0')
+  } catch {
+    // localStorage unavailable: preference just doesn't persist
+  }
+}
 
 type GameState =
   | { phase: 'loading' }
@@ -72,6 +93,10 @@ export function GamePanel(props: GamePanelProps) {
   const [atBottom, setAtBottom] = useState(true)
   const [doneAnnouncement, setDoneAnnouncement] = useState('')
   const [focusToken, setFocusToken] = useState(0)
+  const [stageEnabled, setStageEnabled] = useState(readStagePreference)
+  const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null)
+  const [brokenSpriteUrls, setBrokenSpriteUrls] = useState<Set<string>>(new Set())
+  const prevAnnounceRef = useRef<{ background: string | null; charactersKey: string } | null>(null)
 
   const load = () => {
     setState({ phase: 'loading' })
@@ -101,6 +126,9 @@ export function GamePanel(props: GamePanelProps) {
     setHudStale(false)
     setLastMessage('')
     setDoneAnnouncement('')
+    setBackgroundUrl(null)
+    setBrokenSpriteUrls(new Set())
+    prevAnnounceRef.current = null
   }, [sessionId])
 
   useEffect(
@@ -287,8 +315,102 @@ export function GamePanel(props: GamePanelProps) {
   const hudView = state.phase === 'ready' ? (hud ?? state.session.hud) : null
   const inputId_ = `game-input-${inputId}`
 
+  const sceneText = useMemo(() => {
+    if (state.phase !== 'ready') return ''
+    const parts = [state.session.prologue, ...turns.map((turn) => turn.text)]
+    if (pending) {
+      if (pending.status === 'streaming') {
+        const cutoff = findUnclosedBracket(pending.text)
+        parts.push(cutoff === -1 ? pending.text : pending.text.slice(0, cutoff))
+      } else {
+        parts.push(pending.text)
+      }
+    }
+    return parts.join('\n')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.phase, state.phase === 'ready' ? state.session.prologue : null, turns.length, pending?.text])
+
+  const scene = useMemo(() => reduceScene(EMPTY_SCENE, sceneText), [sceneText])
+
+  const assets: SessionAssets | null = state.phase === 'ready' ? state.session.assets : null
+
+  const resolvedBackground = assets && scene.background ? resolveBackground(assets, scene.background) : null
+
+  useEffect(() => {
+    if (resolvedBackground !== null) setBackgroundUrl(resolvedBackground)
+  }, [resolvedBackground])
+
+  const visibleSprites = assets
+    ? scene.sprites
+        .map((s) => ({ ...s, url: resolveSprite(assets, s.character, s.emotion) }))
+        .filter((s): s is typeof s & { url: string } => s.url !== null && !brokenSpriteUrls.has(s.url))
+    : []
+
+  useEffect(() => {
+    if (state.phase !== 'ready') return
+    const charactersKey = visibleSprites.map((s) => `${s.character}:${s.emotion}`).join('|')
+    const prev = prevAnnounceRef.current
+    prevAnnounceRef.current = { background: scene.background, charactersKey }
+    if (prev === null) return
+
+    const backgroundChanged = prev.background !== scene.background
+    const charactersChanged = prev.charactersKey !== charactersKey
+    if (!backgroundChanged && !charactersChanged) return
+
+    const backgroundText = scene.background ?? ''
+    const charactersText =
+      visibleSprites.length === 0
+        ? t('game.scene.empty')
+        : visibleSprites.map((s) => t('game.scene.characterEmotion', { character: s.character, emotion: s.emotion })).join(', ')
+
+    if (backgroundChanged && charactersChanged) {
+      setDoneAnnouncement(t('game.scene.announce', { background: backgroundText, characters: charactersText }))
+    } else if (backgroundChanged) {
+      setDoneAnnouncement(t('game.scene.announceBackground', { background: backgroundText }))
+    } else {
+      setDoneAnnouncement(t('game.scene.announceCharacters', { characters: charactersText }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.phase, scene.background, visibleSprites.map((s) => `${s.character}:${s.emotion}`).join('|')])
+
+  const handleToggleStage = () => {
+    setStageEnabled((prev) => {
+      const next = !prev
+      writeStagePreference(next)
+      return next
+    })
+  }
+
   return (
     <div className="game-panel" aria-label={regionLabel}>
+      {stageEnabled && backgroundUrl ? (
+        <div className="game-stage-bg" aria-hidden="true" style={{ backgroundImage: `url(${backgroundUrl})` }} />
+      ) : null}
+
+      <div className="game-stage-content">
+      {state.phase === 'ready' ? (
+        <div className="game-stage-toggle">
+          <button type="button" aria-pressed={stageEnabled} onClick={handleToggleStage}>
+            {stageEnabled ? t('game.stage.hide') : t('game.stage.show')}
+          </button>
+        </div>
+      ) : null}
+
+      {stageEnabled && visibleSprites.length > 0 ? (
+        <div className="game-stage-sprites">
+          {visibleSprites.map((sprite) => (
+            <img
+              key={sprite.character}
+              src={sprite.url}
+              alt={t('game.sprite.alt', { character: sprite.character, emotion: sprite.emotion })}
+              loading="lazy"
+              decoding="async"
+              onError={() => setBrokenSpriteUrls((prev) => new Set(prev).add(sprite.url))}
+            />
+          ))}
+        </div>
+      ) : null}
+
       <Hud hud={hudView} busy={turnPhase === 'streaming'} stale={hudStale} />
 
       {state.phase === 'loading' ? (
@@ -418,6 +540,7 @@ export function GamePanel(props: GamePanelProps) {
       ) : (
         <div className="game-footer" />
       )}
+      </div>
     </div>
   )
 }

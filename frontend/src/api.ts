@@ -32,6 +32,10 @@ export type SessionSummary = {
   updatedAt: string
   location: string
 }
+export type SessionAssets = {
+  sprites: Record<string, Record<string, string>>
+  backgrounds: Record<string, string>
+}
 export type SessionDetail = {
   id: string
   scenarioId: string
@@ -40,6 +44,7 @@ export type SessionDetail = {
   playGuide: string | null
   turns: TurnView[]
   hud: HudState
+  assets: SessionAssets
 }
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
