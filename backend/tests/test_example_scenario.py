@@ -71,6 +71,8 @@ def test_example_scenario_prologue_word_count_within_budget():
 def test_example_scenario_default_start_conflict_and_mission_word_count_within_budget():
     scenario = load_scenario("exemplo-escola")
     start = scenario.starts["default"]
+    assert start.conflict is not None
+    assert start.mission is not None
     word_count = len(start.conflict.split()) + len(start.mission.split())
     assert 100 <= word_count <= 300
 

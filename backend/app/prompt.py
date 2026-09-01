@@ -294,14 +294,14 @@ def build_master_prompt(
     )
     sections.append(f"{template['hud_header']}\n{hud_body}")
 
-    opening_parts = [_neutralize_headings(start.opening_scene)]
+    opening_parts = [_neutralize_headings(start.opening_scene).strip()]
     if start.conflict is not None:
         opening_parts.append(
-            f"{template['conflict_label']}: {_neutralize_headings(start.conflict)}"
+            f"{template['conflict_label']}: {_neutralize_headings(start.conflict).strip()}"
         )
     if start.mission is not None:
         opening_parts.append(
-            f"{template['mission_label']}: {_neutralize_headings(start.mission)}"
+            f"{template['mission_label']}: {_neutralize_headings(start.mission).strip()}"
         )
     sections.append(f"{template['opening_header']}\n" + "\n\n".join(opening_parts))
 

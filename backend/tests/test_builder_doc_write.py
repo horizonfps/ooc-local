@@ -156,6 +156,24 @@ def test_put_writes_conflict_and_mission_in_canonical_order(client, scenarios_ro
     assert opening_scene_index < conflict_index < mission_index < play_guide_index
 
 
+def test_put_with_only_conflict_writes_that_key_alone(client, scenarios_root):
+    scenario_dir = _write_scenario(scenarios_root, "exemplo-escola")
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+
+    doc["starts"]["default"]["conflict"] = "um caderno circula"
+    doc["starts"]["default"]["mission"] = None
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 200
+    lines = (scenario_dir / "starts" / "default.yaml").read_text(encoding="utf-8").splitlines()
+    assert any(line.startswith("conflict:") for line in lines)
+    assert not any(line.startswith("mission:") for line in lines)
+    reread = client.get("/api/builder/scenarios/exemplo-escola").json()
+    assert reread["starts"]["default"]["conflict"] == "um caderno circula"
+    assert reread["starts"]["default"]["mission"] is None
+
+
 def test_put_with_blank_conflict_and_mission_omits_keys_and_get_returns_null(client, scenarios_root):
     scenario_dir = _write_scenario(
         scenarios_root,

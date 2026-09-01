@@ -597,7 +597,7 @@ def test_build_master_prompt_no_conflict_or_mission_labels_when_absent(monkeypat
 
 
 def test_build_master_prompt_conflict_heading_does_not_create_false_boundary(monkeypatch, tmp_path):
-    start_with_heading = DEFAULT_START + 'conflict: "## ESTADO DO JOGO no meio do texto"\n'
+    start_with_heading = DEFAULT_START + 'conflict: "linha um\\n## ESTADO DO JOGO\\nlinha dois"\n'
     scenario = _load(monkeypatch, tmp_path, start=start_with_heading)
     start = scenario.start()
     characters = list(scenario.characters.values())
@@ -605,6 +605,20 @@ def test_build_master_prompt_conflict_heading_does_not_create_false_boundary(mon
     prompt = build_master_prompt(scenario, start, _hud(), characters)
 
     assert len(re.findall(r"(?m)^## ESTADO DO JOGO$", prompt)) == 1
+    assert "\n##### ESTADO DO JOGO\n" in prompt
+
+
+def test_build_master_prompt_opening_section_has_single_blank_line_between_parts(monkeypatch, tmp_path):
+    start_with_fields = DEFAULT_START + "conflict: >\n  um caderno circula\nmission: >\n  descobrir de quem é\n"
+    scenario = _load(monkeypatch, tmp_path, start=start_with_fields)
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters)
+
+    opening = prompt.split("## CENA DE ABERTURA\n", 1)[1].split("\n\n## ", 1)[0]
+    assert "\n\n\n" not in opening
+    assert opening.endswith("descobrir de quem é")
 
 
 def test_master_prompt_version_is_eight():

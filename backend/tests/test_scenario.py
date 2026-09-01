@@ -153,6 +153,16 @@ def test_start_conflict_strips_surrounding_whitespace(monkeypatch, tmp_path):
     assert scenario.starts["default"].conflict == "texto"
 
 
+def test_start_mission_strips_surrounding_whitespace(monkeypatch, tmp_path):
+    start_with_padded_mission = DEFAULT_START + "mission: '  texto  '\n"
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start_with_padded_mission})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.starts["default"].mission == "texto"
+
+
 def test_start_conflict_and_mission_absent_by_default(monkeypatch, tmp_path):
     _write_scenario(tmp_path, "exemplo-escola")
     monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
