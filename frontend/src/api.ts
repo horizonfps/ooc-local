@@ -148,6 +148,22 @@ export function fetchScenarioDocument(id: string): Promise<ScenarioDocument> {
   return request(`/api/builder/scenarios/${id}`)
 }
 
+export async function saveScenarioDocument(
+  id: string,
+  doc: ScenarioDocument,
+  force?: boolean,
+): Promise<{ revision: string }> {
+  const response = await fetch(`/api/builder/scenarios/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...doc, force: force ?? false }),
+  })
+  if (!response.ok) {
+    throw new ApiError(response.status, await detailOf(response))
+  }
+  return response.json() as Promise<{ revision: string }>
+}
+
 export function fetchSessions(): Promise<SessionSummary[]> {
   return request('/api/sessions')
 }
