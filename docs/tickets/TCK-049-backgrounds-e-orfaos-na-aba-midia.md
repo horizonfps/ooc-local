@@ -1,7 +1,7 @@
 ---
 id: TCK-049
 title: Gerenciar backgrounds e sprites orfaos na aba Midia
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-039]
 files:
@@ -182,3 +182,7 @@ quando o narrador emitir `[BG:patio-da-escola]`.
 | `builder.media.bg.upload` | `Upload the background for {location}` | `Enviar o background de {location}` |
 | `builder.media.bg.remove` | `Remove the background of {location}` | `Remover o background de {location}` |
 | `builder.media.bg.fromStart` | `Location of the start {start}` | `Local do start {start}` |
+
+## Ressalva registrada na wave 14
+
+- `hud.location` em alfabeto nao-latino gera slug vazio e o start nao semeia celula de background (descartado em silencio). Aceito para o MVP en/pt-br; revisitar quando o app ganhar locale zh.
