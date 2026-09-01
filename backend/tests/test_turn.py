@@ -422,6 +422,7 @@ def test_turn_route_missing_narrator_role_emits_turn_failed_and_done(scenarios_r
         {
             "providers": {"local": {"base_url": "http://x/v1"}},
             "models": {"utility": {"provider": "local", "model": "m"}},
+            "flags": {"director": False},
         }
     )
     monkeypatch.setattr(main, "load_config", lambda: config_without_narrator)
