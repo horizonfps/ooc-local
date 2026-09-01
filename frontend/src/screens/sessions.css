@@ -4,9 +4,22 @@
   padding: 1rem;
 }
 
+.sessions-topbar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 1.5rem;
+}
+
 .sessions h1 {
   font-size: 1.25rem;
-  margin: 0 0 1.5rem;
+  margin: 0;
+}
+
+.sessions-builderLink {
+  color: var(--focus);
+  white-space: nowrap;
 }
 
 .sessions h2 {

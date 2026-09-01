@@ -105,9 +105,14 @@ export function SessionsScreen() {
 
   return (
     <main className="sessions">
-      <h1 ref={headingRef} tabIndex={-1}>
-        {t('app.title')}
-      </h1>
+      <div className="sessions-topbar">
+        <h1 ref={headingRef} tabIndex={-1}>
+          {t('app.title')}
+        </h1>
+        <a className="sessions-builderLink" href="#/builder">
+          {t('sessions.builderLink')}
+        </a>
+      </div>
 
       <section className="sessions-new">
         <h2>{t('sessions.new.heading')}</h2>

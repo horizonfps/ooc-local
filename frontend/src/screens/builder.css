@@ -1,0 +1,142 @@
+.builder-list {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.builder-list-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 1.5rem;
+}
+
+.builder-list-topbar h1 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.builder-list-back,
+.builder-list-reload {
+  min-height: 44px;
+  padding: 0 1rem;
+  border-radius: 8px;
+  border: 1px solid #33363f;
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+.builder-list-skeleton {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.builder-list-skeleton li {
+  height: 180px;
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.builder-card-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.builder-card {
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  border: 1px solid #33363f;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.builder-card-invalid {
+  border-color: #a86b1c;
+  padding: 0.9rem;
+  gap: 0.5rem;
+}
+
+.builder-card-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.9rem;
+  color: inherit;
+  text-decoration: none;
+  min-height: 44px;
+}
+
+.builder-card-cover {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.builder-card-cover-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+
+.builder-card-name {
+  font-weight: 600;
+}
+
+.builder-card-tagline {
+  margin: 0;
+  color: var(--fg-muted);
+}
+
+.builder-card-meta {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 0.875rem;
+}
+
+.builder-card-locale {
+  align-self: flex-start;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  border: 1px solid #33363f;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+}
+
+.builder-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0 0.9rem 0.9rem;
+}
+
+@media (max-width: 480px) {
+  .builder-list {
+    padding: 0.75rem;
+  }
+
+  .builder-card-grid,
+  .builder-list-skeleton {
+    grid-template-columns: 1fr;
+  }
+
+  .builder-list-back,
+  .builder-list-reload {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}

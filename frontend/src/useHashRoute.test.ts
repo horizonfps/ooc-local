@@ -31,6 +31,20 @@ describe('useHashRoute', () => {
     expect(renderHook(() => useHashRoute()).result.current).toEqual({ name: 'sessions' })
   })
 
+  it('resolves builderList for #/builder and #/builder/', () => {
+    setHash('#/builder')
+    expect(renderHook(() => useHashRoute()).result.current).toEqual({ name: 'builderList' })
+
+    setHash('#/builder/')
+    expect(renderHook(() => useHashRoute()).result.current).toEqual({ name: 'builderList' })
+  })
+
+  it('does not normalize #/builder away', () => {
+    setHash('#/builder')
+    renderHook(() => useHashRoute())
+    expect(location.hash).toBe('#/builder')
+  })
+
   it('resolves game with the id from the hash', () => {
     setHash('#/session/abc')
     expect(renderHook(() => useHashRoute()).result.current).toEqual({ name: 'game', id: 'abc' })

@@ -200,6 +200,14 @@ describe('SessionsScreen', () => {
     expect(location.hash).toBe('#/session/sess-9')
   })
 
+  it('shows a link to the builder pointing at #/builder', async () => {
+    mockFetch({ sessions: () => jsonResponse([]) })
+    render(<SessionsScreen />)
+
+    const link = await screen.findByRole('link', { name: t('sessions.builderLink') })
+    expect(link).toHaveAttribute('href', '#/builder')
+  })
+
   it('shows coherent relative time for now and three days ago', async () => {
     const now = new Date().toISOString()
     const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
