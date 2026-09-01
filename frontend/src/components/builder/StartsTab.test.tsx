@@ -217,6 +217,30 @@ describe('StartsTab', () => {
     expect(goToTab).toHaveBeenCalledWith('characters')
   })
 
+  it('cast mode switches between whole cast and an explicit selection', async () => {
+    const user = userEvent.setup()
+    render(<Harness initial={baseDraft()} />)
+
+    expect(screen.getByRole('radio', { name: t('builder.starts.cast.all') })).toBeChecked()
+    expect(screen.queryByRole('checkbox', { name: 'Luca' })).toBeNull()
+
+    await user.click(screen.getByRole('radio', { name: t('builder.starts.cast.custom') }))
+    let starts = JSON.parse(screen.getByTestId('starts-debug').textContent ?? '{}')
+    expect(starts.default.characters).toEqual([])
+
+    await user.click(screen.getByRole('checkbox', { name: 'Luca' }))
+    starts = JSON.parse(screen.getByTestId('starts-debug').textContent ?? '{}')
+    expect(starts.default.characters).toEqual(['luca'])
+
+    await user.click(screen.getByRole('checkbox', { name: 'Luca' }))
+    starts = JSON.parse(screen.getByTestId('starts-debug').textContent ?? '{}')
+    expect(starts.default.characters).toEqual([])
+
+    await user.click(screen.getByRole('radio', { name: t('builder.starts.cast.all') }))
+    starts = JSON.parse(screen.getByTestId('starts-debug').textContent ?? '{}')
+    expect(starts.default.characters).toBeNull()
+  })
+
   it('deleting the only start is impossible: the button is disabled with the reason', () => {
     render(<Harness initial={baseDraft()} />)
 

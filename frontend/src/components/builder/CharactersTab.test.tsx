@@ -176,7 +176,7 @@ describe('CharactersTab', () => {
     await user.click(within(dialog as HTMLElement).getByRole('button', { name: t('builder.characters.delete') }))
 
     const starts = JSON.parse(screen.getByTestId('starts-debug').textContent ?? '{}')
-    expect(starts.default.characters).toBeNull()
+    expect(starts.default.characters).toEqual([])
     expect(screen.getByText(t('builder.characters.delete.castUpdated', { name: 'Luca', starts: 'Default start' }))).toBeInTheDocument()
   })
 

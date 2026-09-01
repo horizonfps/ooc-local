@@ -31,10 +31,9 @@ function nextSuggestedId(existing: readonly string[]): string {
   return `start-${n}`
 }
 
-function toggleCharacter(start: StartDoc, charId: string): string[] | null {
+function toggleCharacter(start: StartDoc, charId: string): string[] {
   const current = start.characters ?? []
-  const next = current.includes(charId) ? current.filter((c) => c !== charId) : [...current, charId]
-  return next.length === 0 ? null : next
+  return current.includes(charId) ? current.filter((c) => c !== charId) : [...current, charId]
 }
 
 export function StartsTab(props: TabProps) {
@@ -497,19 +496,41 @@ export function StartsTab(props: TabProps) {
                 </button>
               ) : (
                 <>
-                  <p className="field-hint">{t('builder.starts.cast.hint')}</p>
-                  <div className="builder-starts-castList">
-                    {characterIds.map((charId) => (
-                      <label key={charId} className="builder-starts-castItem">
-                        <input
-                          type="checkbox"
-                          checked={(selectedStart.characters ?? []).includes(charId)}
-                          onChange={() => updateStart(selectedId, { characters: toggleCharacter(selectedStart, charId) })}
-                        />
-                        {draft.characters[charId].name}
-                      </label>
-                    ))}
-                  </div>
+                  <label className="builder-starts-castItem">
+                    <input
+                      type="radio"
+                      name="builder-starts-castMode"
+                      checked={selectedStart.characters === null}
+                      onChange={() => updateStart(selectedId, { characters: null })}
+                    />
+                    {t('builder.starts.cast.all')}
+                  </label>
+                  <label className="builder-starts-castItem">
+                    <input
+                      type="radio"
+                      name="builder-starts-castMode"
+                      checked={selectedStart.characters !== null}
+                      onChange={() => updateStart(selectedId, { characters: [] })}
+                    />
+                    {t('builder.starts.cast.custom')}
+                  </label>
+                  {selectedStart.characters !== null ? (
+                    <>
+                      <p className="field-hint">{t('builder.starts.cast.hint')}</p>
+                      <div className="builder-starts-castList">
+                        {characterIds.map((charId) => (
+                          <label key={charId} className="builder-starts-castItem">
+                            <input
+                              type="checkbox"
+                              checked={selectedStart.characters !== null && selectedStart.characters.includes(charId)}
+                              onChange={() => updateStart(selectedId, { characters: toggleCharacter(selectedStart, charId) })}
+                            />
+                            {draft.characters[charId].name}
+                          </label>
+                        ))}
+                      </div>
+                    </>
+                  ) : null}
                 </>
               )}
             </fieldset>

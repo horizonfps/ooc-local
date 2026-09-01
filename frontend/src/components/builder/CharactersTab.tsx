@@ -180,7 +180,7 @@ export function CharactersTab(props: TabProps) {
       const start = nextStarts[startId]
       if (start.characters && start.characters.includes(id)) {
         const filtered = start.characters.filter((c) => c !== id)
-        nextStarts[startId] = { ...start, characters: filtered.length === 0 ? null : filtered }
+        nextStarts[startId] = { ...start, characters: filtered }
         affectedStartNames.push(start.name || startId)
       }
     }
