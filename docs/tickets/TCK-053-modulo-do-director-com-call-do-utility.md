@@ -1,7 +1,7 @@
 ---
 id: TCK-053
 title: Criar o módulo do director com o call do utility e o parser da proposta
-status: ready
+status: done
 points: 3
 blockedBy: [TCK-050]
 files:

@@ -1,7 +1,7 @@
 ---
 id: TCK-054
 title: Exibir a linha de elenco em cena abaixo do HUD na tela de jogo
-status: ready
+status: done
 points: 5
 blockedBy: [TCK-050]
 files:
