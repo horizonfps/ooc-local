@@ -26,8 +26,8 @@ export function slugify(value: string): string {
     .replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/-{2,}/g, '-')
-    .replace(/^-+|-+$/g, '')
     .slice(0, 64)
+    .replace(/^-+|-+$/g, '')
 }
 
 function dedupeFolder(base: string, existingIds: readonly string[]): string {
@@ -108,6 +108,8 @@ function BuilderCard(props: {
   const [confirmText, setConfirmText] = useState('')
   const [delError, setDelError] = useState<string | null>(null)
   const [delSubmitting, setDelSubmitting] = useState(false)
+  const dupSubmittingRef = useRef(false)
+  const delSubmittingRef = useRef(false)
 
   useEffect(() => {
     if (dialogOpen === 'duplicate') {
@@ -128,6 +130,12 @@ function BuilderCard(props: {
     trigger?.focus()
   }
 
+  function handleDialogClosed() {
+    const trigger = dialogOpen === 'duplicate' ? duplicateTriggerRef.current : deleteTriggerRef.current
+    setDialogOpen(null)
+    trigger?.focus()
+  }
+
   function handleDialogKeyDown(event: React.KeyboardEvent<HTMLDialogElement>) {
     if (event.key === 'Escape') {
       event.preventDefault()
@@ -138,6 +146,7 @@ function BuilderCard(props: {
   function openDuplicate() {
     setNewFolder(dedupeFolder(`${scenario.id}-copy`, existingIds))
     setDupError(null)
+    dupSubmittingRef.current = false
     setDupSubmitting(false)
     setDialogOpen('duplicate')
   }
@@ -145,18 +154,20 @@ function BuilderCard(props: {
   function openDelete() {
     setConfirmText('')
     setDelError(null)
+    delSubmittingRef.current = false
     setDelSubmitting(false)
     setDialogOpen('delete')
   }
 
   async function handleDuplicateSubmit(event: React.FormEvent) {
     event.preventDefault()
-    if (dupSubmitting) return
+    if (dupSubmittingRef.current) return
     const folder = newFolder.trim()
     if (!folder || !FOLDER_RE.test(folder)) {
       setDupError(t('builder.create.error.invalidFolder'))
       return
     }
+    dupSubmittingRef.current = true
     setDupSubmitting(true)
     setDupError(null)
     try {
@@ -165,7 +176,9 @@ function BuilderCard(props: {
       duplicateDialogRef.current?.close()
       onDuplicated(created)
       announce(t('builder.duplicate.success', { scenario: displayName, folder }))
+      duplicateTriggerRef.current?.focus()
     } catch (err) {
+      dupSubmittingRef.current = false
       setDupSubmitting(false)
       if (err instanceof ApiError && (err.status === 409 || err.status === 422)) {
         setDupError(
@@ -176,12 +189,14 @@ function BuilderCard(props: {
       setDupError(t('builder.duplicate.error'))
       return
     }
+    dupSubmittingRef.current = false
     setDupSubmitting(false)
   }
 
   async function handleDeleteSubmit(event: React.FormEvent) {
     event.preventDefault()
-    if (delSubmitting || confirmText !== scenario.id) return
+    if (delSubmittingRef.current || confirmText !== scenario.id) return
+    delSubmittingRef.current = true
     setDelSubmitting(true)
     setDelError(null)
     try {
@@ -192,10 +207,12 @@ function BuilderCard(props: {
       announce(t('builder.delete.success', { scenario: displayName }))
       headingRef.current?.focus()
     } catch {
+      delSubmittingRef.current = false
       setDelSubmitting(false)
       setDelError(t('builder.delete.error'))
       return
     }
+    delSubmittingRef.current = false
     setDelSubmitting(false)
   }
 
@@ -223,6 +240,7 @@ function BuilderCard(props: {
         className="builder-dialog"
         aria-labelledby={`builder-duplicate-title-${scenario.id}`}
         onKeyDown={handleDialogKeyDown}
+        onClose={handleDialogClosed}
       >
         <h2 id={`builder-duplicate-title-${scenario.id}`}>{t('builder.duplicate.title', { scenario: displayName })}</h2>
         <p>{t('builder.duplicate.body')}</p>
@@ -256,6 +274,7 @@ function BuilderCard(props: {
         className="builder-dialog"
         aria-labelledby={`builder-delete-title-${scenario.id}`}
         onKeyDown={handleDialogKeyDown}
+        onClose={handleDialogClosed}
       >
         <h2 id={`builder-delete-title-${scenario.id}`}>{t('builder.delete.title', { scenario: displayName })}</h2>
         <p>{t('builder.delete.body', { folder: scenario.id })}</p>
