@@ -152,6 +152,56 @@ const en = {
   'builder.editor.validation.summaryTitle': 'Fix these before saving',
   'builder.editor.validation.jump': 'Go to {field}',
 
+  // Builder field patterns (shared by identity, world, starts and characters tabs)
+  'builder.field.required': 'This field is required.',
+  'builder.field.tooLong': 'Too long — {max} characters max.',
+  'builder.field.counter': '{count}/{max}',
+  'builder.field.slugInvalid': 'Use only lowercase letters, numbers and hyphens.',
+  'builder.field.slugTaken': '{slug} is already used in this scenario.',
+  'builder.detail.selected': 'Editing {name}',
+  'builder.field.label.starts': 'Starts',
+  'builder.field.label.defaultStart': 'Default start',
+  'builder.field.label.startId': 'Start id',
+  'builder.field.label.startCharacters': 'Start characters',
+  'builder.field.label.characterId': 'Character id',
+
+  // Structural validation messages (validateDraft)
+  'builder.validate.startsRequired': 'At least one start is required.',
+  'builder.validate.defaultStartMissing': 'Default start "{id}" was not found among the starts.',
+  'builder.validate.startUnknownCharacter': 'Start "{start}" references unknown character "{character}".',
+
+  // Media errors (shared by identity, media/sprites and media/backgrounds tabs)
+  'builder.media.error.type': 'Only PNG, JPEG and WebP images.',
+  'builder.media.error.size': 'Image is over {max} MB. Shrink it and try again.',
+  'builder.media.error.write': "The file wasn't written. Check that the media folder is writable.",
+  'builder.media.error.removeFailed': "The file wasn't removed. It's still on disk.",
+  'builder.media.error.disabled': 'Writing is turned off: the builder flag is off in ~/.ooc-local/config.yaml.',
+
+  // Builder editor identity tab
+  'builder.identity.heading': 'Identity',
+  'builder.identity.name': 'Name',
+  'builder.identity.tagline': 'Tagline',
+  'builder.identity.tagline.hint': 'One line, shown next to the scenario name.',
+  'builder.identity.description': 'Description',
+  'builder.identity.description.hint': 'Markdown. Shown to the player before starting.',
+  'builder.identity.tags': 'Tags',
+  'builder.identity.tags.hint': 'Enter or comma adds a tag.',
+  'builder.identity.tags.empty': 'No tags yet.',
+  'builder.identity.tags.remove': 'Remove tag {tag}',
+  'builder.identity.tags.duplicate': '{tag} is already in the list.',
+  'builder.identity.tags.max': 'Up to 12 tags.',
+  'builder.identity.locale': 'Scenario language',
+  'builder.identity.locale.hint': 'Sets the language of the system prompts, not of this interface.',
+  'builder.identity.cover.legend': 'Cover',
+  'builder.identity.cover.hint': 'Saved to media/cover as soon as you upload it.',
+  'builder.identity.cover.empty': 'No cover yet',
+  'builder.identity.cover.upload': 'Upload a cover',
+  'builder.identity.cover.replace': 'Replace the cover',
+  'builder.identity.cover.remove': 'Remove the cover',
+  'builder.identity.cover.uploading': 'Uploading the cover…',
+  'builder.identity.cover.error': "The cover wasn't saved. Try again.",
+  'builder.identity.cover.alt': 'Cover of {scenario}',
+
   // Game screen
   'game.documentTitle': '{scenario} — ooc-local',
   'game.loading': 'Loading session…',
@@ -352,6 +402,56 @@ const ptBr: Record<StringKey, string> = {
   'builder.editor.leave.discard': 'Sair e descartar',
   'builder.editor.validation.summaryTitle': 'Conserte isto antes de salvar',
   'builder.editor.validation.jump': 'Ir para {field}',
+
+  // Builder field patterns (shared by identity, world, starts and characters tabs)
+  'builder.field.required': 'Este campo é obrigatório.',
+  'builder.field.tooLong': 'Longo demais — máximo de {max} caracteres.',
+  'builder.field.counter': '{count}/{max}',
+  'builder.field.slugInvalid': 'Use só letras minúsculas, números e hífens.',
+  'builder.field.slugTaken': '{slug} já está em uso neste cenário.',
+  'builder.detail.selected': 'Editando {name}',
+  'builder.field.label.starts': 'Starts',
+  'builder.field.label.defaultStart': 'Início padrão',
+  'builder.field.label.startId': 'Id do start',
+  'builder.field.label.startCharacters': 'Personagens do start',
+  'builder.field.label.characterId': 'Id do personagem',
+
+  // Structural validation messages (validateDraft)
+  'builder.validate.startsRequired': 'É preciso pelo menos um start.',
+  'builder.validate.defaultStartMissing': 'O início padrão "{id}" não foi encontrado entre os starts.',
+  'builder.validate.startUnknownCharacter': 'O start "{start}" referencia um personagem desconhecido "{character}".',
+
+  // Media errors (shared by identity, media/sprites and media/backgrounds tabs)
+  'builder.media.error.type': 'Só imagens PNG, JPEG e WebP.',
+  'builder.media.error.size': 'A imagem passa de {max} MB. Reduza e tente de novo.',
+  'builder.media.error.write': 'O arquivo não foi escrito. Confira se a pasta media aceita escrita.',
+  'builder.media.error.removeFailed': 'O arquivo não foi removido. Ele continua no disco.',
+  'builder.media.error.disabled': 'A escrita está desligada: a flag builder está desligada em ~/.ooc-local/config.yaml.',
+
+  // Builder editor identity tab
+  'builder.identity.heading': 'Identidade',
+  'builder.identity.name': 'Nome',
+  'builder.identity.tagline': 'Tagline',
+  'builder.identity.tagline.hint': 'Uma linha, mostrada ao lado do nome do cenário.',
+  'builder.identity.description': 'Descrição',
+  'builder.identity.description.hint': 'Markdown. Mostrada ao jogador antes de começar.',
+  'builder.identity.tags': 'Tags',
+  'builder.identity.tags.hint': 'Enter ou vírgula adiciona uma tag.',
+  'builder.identity.tags.empty': 'Nenhuma tag ainda.',
+  'builder.identity.tags.remove': 'Remover a tag {tag}',
+  'builder.identity.tags.duplicate': '{tag} já está na lista.',
+  'builder.identity.tags.max': 'Até 12 tags.',
+  'builder.identity.locale': 'Idioma do cenário',
+  'builder.identity.locale.hint': 'Define o idioma dos prompts de sistema, não o desta interface.',
+  'builder.identity.cover.legend': 'Capa',
+  'builder.identity.cover.hint': 'Salva em media/cover assim que você envia.',
+  'builder.identity.cover.empty': 'Sem capa ainda',
+  'builder.identity.cover.upload': 'Enviar uma capa',
+  'builder.identity.cover.replace': 'Trocar a capa',
+  'builder.identity.cover.remove': 'Remover a capa',
+  'builder.identity.cover.uploading': 'Enviando a capa…',
+  'builder.identity.cover.error': 'A capa não foi salva. Tente de novo.',
+  'builder.identity.cover.alt': 'Capa de {scenario}',
 
   // Game screen
   'game.documentTitle': '{scenario} — ooc-local',
