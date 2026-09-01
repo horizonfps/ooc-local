@@ -384,6 +384,27 @@ describe('BuilderEditorScreen', () => {
     expect(document.activeElement).toBe(toggle)
   })
 
+  it('blocks the save on an empty lore block title and the jump link focuses it', async () => {
+    const user = userEvent.setup()
+    mockFetch(() => jsonResponse(DOCUMENT))
+    render(<BuilderEditorScreen scenarioId="school" tab="world" />)
+
+    await screen.findByRole('button', { name: t('builder.world.lore.add') })
+    await user.click(screen.getByRole('button', { name: t('builder.world.lore.add') }))
+    await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
+
+    const summary = await screen.findByText(t('builder.editor.validation.summaryTitle'))
+    const panel = summary.closest('.builder-editor-validation') as HTMLElement
+    const titleJump = within(panel)
+      .getAllByRole('button')
+      .find((btn) => btn.textContent?.includes(t('builder.world.lore.titleLabel', { index: 1 })))
+    expect(titleJump).toBeTruthy()
+    await user.click(titleJump as HTMLElement)
+
+    const titleInput = document.getElementById('builder-field-world.lore.0.title')
+    expect(document.activeElement).toBe(titleInput)
+  })
+
   it('asks for confirmation before reloading a dirty draft, and reloads on confirm', async () => {
     const user = userEvent.setup()
     const fetchMock = mockFetch(() => jsonResponse(DOCUMENT))

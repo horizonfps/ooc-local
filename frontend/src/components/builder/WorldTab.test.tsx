@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { WorldTab } from './WorldTab'
 import { validateDraft } from '../../builder/validate'
 import type { BuilderDraft } from '../../screens/BuilderEditorScreen'
@@ -35,12 +35,18 @@ function baseDraft(): BuilderDraft {
   }
 }
 
-function Harness(props: { initial: BuilderDraft }) {
+function Harness(props: { initial: BuilderDraft; goToTab?: (tab: string) => void }) {
   const [draft, setDraft] = useState(props.initial)
   const errors = validateDraft(draft)
   return (
     <>
-      <WorldTab scenarioId="school" draft={draft} onChange={setDraft} errors={errors} goToTab={() => {}} />
+      <WorldTab
+        scenarioId="school"
+        draft={draft}
+        onChange={setDraft}
+        errors={errors}
+        goToTab={(props.goToTab as never) ?? (() => {})}
+      />
       <pre data-testid="world-debug">{draft.world}</pre>
       <pre data-testid="world-mode-debug">{draft.meta.world_mode}</pre>
     </>
@@ -136,7 +142,7 @@ describe('WorldTab', () => {
     expect(screen.getByTestId('world-mode-debug').textContent).toBe('custom')
   })
 
-  it('confirming the switch from custom to guided shows the five fields empty', async () => {
+  it('confirming the switch from custom to guided shows the three fields empty', async () => {
     const draft = baseDraft()
     draft.meta.world_mode = 'custom'
     draft.world = 'A free-form prompt.'
@@ -149,9 +155,138 @@ describe('WorldTab', () => {
     expect(screen.getByLabelText(t('builder.world.universe'))).toHaveValue('')
     expect(screen.getByLabelText(t('builder.world.tone'))).toHaveValue('')
     expect(screen.getByLabelText(t('builder.world.rules'))).toHaveValue('')
-    expect(screen.getByLabelText(t('builder.world.conflict'))).toHaveValue('')
-    expect(screen.getByLabelText(t('builder.world.mission'))).toHaveValue('')
     expect(screen.getByTestId('world-debug').textContent).toBe('')
     expect(screen.getByTestId('world-mode-debug').textContent).toBe('guided')
+  })
+
+  it('the guided mode no longer has Conflict or Mission, and shows no lore blocks', () => {
+    render(<Harness initial={baseDraft()} />)
+
+    expect(screen.queryByLabelText('Central conflict')).toBeNull()
+    expect(screen.queryByLabelText('Player mission')).toBeNull()
+    expect(screen.getByLabelText(t('builder.world.universe'))).toBeInTheDocument()
+    expect(screen.getByLabelText(t('builder.world.tone'))).toBeInTheDocument()
+    expect(screen.getByLabelText(t('builder.world.rules'))).toBeInTheDocument()
+    expect(screen.getByText(t('builder.world.lore.empty'))).toBeInTheDocument()
+  })
+
+  it('adding a lore block focuses its title and announces it', async () => {
+    const user = userEvent.setup()
+    render(<Harness initial={baseDraft()} />)
+
+    await user.click(screen.getByRole('button', { name: t('builder.world.lore.add') }))
+
+    await waitFor(() => {
+      const titleInput = document.getElementById('builder-field-world.lore.0.title')
+      expect(document.activeElement).toBe(titleInput)
+    })
+    expect(screen.getByText(t('builder.world.lore.added', { index: 1 }))).toBeInTheDocument()
+  })
+
+  it('filling a lore block writes it to world.md', async () => {
+    const user = userEvent.setup()
+    render(<Harness initial={baseDraft()} />)
+
+    await user.click(screen.getByRole('button', { name: t('builder.world.lore.add') }))
+    const titleInput = document.getElementById('builder-field-world.lore.0.title') as HTMLInputElement
+    fireEvent.change(titleInput, { target: { value: 'Factions' } })
+    const bodyInput = document.getElementById('builder-field-world.lore.0.body') as HTMLTextAreaElement
+    fireEvent.change(bodyInput, { target: { value: 'Two.' } })
+
+    expect(screen.getByTestId('world-debug').textContent).toBe('## Universe\n\nA dusty old school.\n\n## Factions\n\nTwo.')
+  })
+
+  it('removing a block in the middle moves focus to the block that shifted up', async () => {
+    const user = userEvent.setup()
+    const draft = baseDraft()
+    draft.world = '## Universe\n\nA dusty old school.\n\n## One\n\nA.\n\n## Two\n\nB.\n\n## Three\n\nC.'
+    render(<Harness initial={draft} />)
+
+    const removeSecond = screen.getByRole('button', { name: t('builder.world.lore.remove', { index: 2 }) })
+    await user.click(removeSecond)
+
+    const titleInput = document.getElementById('builder-field-world.lore.1.title') as HTMLInputElement
+    await waitFor(() => expect(document.activeElement).toBe(titleInput))
+    expect(titleInput).toHaveValue('Three')
+    expect(screen.getByText(t('builder.world.lore.removed', { index: 2 }))).toBeInTheDocument()
+  })
+
+  it('removing the only block returns focus to the add button', async () => {
+    const user = userEvent.setup()
+    const draft = baseDraft()
+    draft.world = '## Universe\n\nA dusty old school.\n\n## Factions\n\nTwo.'
+    render(<Harness initial={draft} />)
+
+    const removeButton = screen.getByRole('button', { name: t('builder.world.lore.remove', { index: 1 }) })
+    await user.click(removeButton)
+
+    const addButton = screen.getByRole('button', { name: t('builder.world.lore.add') })
+    await waitFor(() => expect(document.activeElement).toBe(addButton))
+  })
+
+  it('a reserved title does not fall back to custom mode', async () => {
+    const user = userEvent.setup()
+    render(<Harness initial={baseDraft()} />)
+
+    await user.click(screen.getByRole('button', { name: t('builder.world.lore.add') }))
+    const titleInput = document.getElementById('builder-field-world.lore.0.title') as HTMLInputElement
+    fireEvent.change(titleInput, { target: { value: 'Universe' } })
+
+    expect(titleInput).toHaveValue('Universe')
+    expect(screen.getByText(t('builder.world.lore.title.reserved', { title: 'Universe' }))).toBeInTheDocument()
+    expect(screen.queryByText(t('builder.world.mode.fallback.title'))).toBeNull()
+    expect(screen.getByLabelText(t('builder.world.universe'))).toBeInTheDocument()
+    expect(screen.getByTestId('world-debug').textContent).toBe('## Universe\n\nA dusty old school.\n\n## ')
+
+    fireEvent.change(titleInput, { target: { value: 'Universo antigo' } })
+    expect(screen.queryByText(t('builder.world.lore.title.reserved', { title: 'Universe' }))).toBeNull()
+    expect(screen.getByTestId('world-debug').textContent).toBe(
+      '## Universe\n\nA dusty old school.\n\n## Universo antigo',
+    )
+  })
+
+  it('a duplicated title shows the inline error on the second block, with aria-invalid', () => {
+    const draft = baseDraft()
+    draft.world = '## Universe\n\nA dusty old school.\n\n## Notas\n\nOne.\n\n## Notas\n\nTwo.'
+    render(<Harness initial={draft} />)
+
+    const secondTitle = document.getElementById('builder-field-world.lore.1.title') as HTMLInputElement
+    expect(secondTitle).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByText(t('builder.world.lore.title.duplicate'))).toBeInTheDocument()
+  })
+
+  it('the moved-hint note takes the user to Starts', async () => {
+    const user = userEvent.setup()
+    const goToTab = vi.fn()
+    render(<Harness initial={baseDraft()} goToTab={goToTab} />)
+
+    await user.click(screen.getByRole('button', { name: t('builder.world.guided.goToStarts') }))
+
+    expect(goToTab).toHaveBeenCalledWith('starts')
+  })
+
+  it('an old world.md file opens with two lore blocks', () => {
+    const draft = baseDraft()
+    draft.world = '## Universe\n\nA dusty old school.\n\n## Conflict\n\nThe reservoir.\n\n## Mission\n\nFind the engineer.'
+    render(<Harness initial={draft} />)
+
+    expect(screen.queryByText(t('builder.world.mode.fallback.title'))).toBeNull()
+    const firstTitle = document.getElementById('builder-field-world.lore.0.title') as HTMLInputElement
+    const secondTitle = document.getElementById('builder-field-world.lore.1.title') as HTMLInputElement
+    expect(firstTitle).toHaveValue('Conflict')
+    expect(secondTitle).toHaveValue('Mission')
+    const firstBody = document.getElementById('builder-field-world.lore.0.body') as HTMLTextAreaElement
+    const secondBody = document.getElementById('builder-field-world.lore.1.body') as HTMLTextAreaElement
+    expect(firstBody).toHaveValue('The reservoir.')
+    expect(secondBody).toHaveValue('Find the engineer.')
+  })
+
+  it('a known heading after a lore block falls back to custom mode', () => {
+    const draft = baseDraft()
+    draft.world = '## Universe\n\nA dusty old school.\n\n## Factions\n\nTwo.\n\n## Tone\n\nGrim.'
+    render(<Harness initial={draft} />)
+
+    expect(screen.getByText(t('builder.world.mode.fallback.title'))).toBeInTheDocument()
+    expect(screen.getByLabelText(t('builder.world.custom.label'))).toHaveValue(draft.world)
   })
 })

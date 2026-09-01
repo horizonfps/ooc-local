@@ -599,6 +599,85 @@
   gap: 0.5rem;
 }
 
+.builder-linkButton {
+  border: none;
+  background: none;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  min-height: 44px;
+}
+
+.builder-world-lore {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border: 1px solid #33363f;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-top: 0.5rem;
+}
+
+.builder-world-lore-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid #33363f;
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.builder-world-lore-titleField,
+.builder-world-lore-bodyField {
+  margin-bottom: 0;
+}
+
+.builder-world-lore-removeButton {
+  min-height: 44px;
+  padding: 0 1rem;
+  border-radius: 8px;
+  border: 1px solid #33363f;
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+@media (min-width: 480px) {
+  .builder-world-lore-block {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas: 'title remove' 'body body';
+    align-items: start;
+    gap: 0.5rem 0.75rem;
+  }
+
+  .builder-world-lore-titleField {
+    grid-area: title;
+    min-width: 0;
+  }
+
+  .builder-world-lore-bodyField {
+    grid-area: body;
+  }
+
+  .builder-world-lore-removeButton {
+    grid-area: remove;
+  }
+}
+
+@media (max-width: 479.98px) {
+  .builder-world-lore-block {
+    align-items: stretch;
+  }
+
+  .builder-world-lore-removeButton {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .builder-starts-tab {
   display: flex;
   flex-direction: column;
