@@ -10,6 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.cast import CAST_EVENT_KIND, CastMember, resolve_cast, seed_cast_ids
 from app.config import CONFIG_DIR
 from app.hud import HudState, hud_from_start
 from app.media import SessionAssets, session_assets
@@ -90,6 +91,7 @@ class SessionDetail(BaseModel):
     turns: list[TurnView]
     hud: HudState
     assets: SessionAssets
+    cast: list[CastMember]
 
 
 class SessionRow(BaseModel):
@@ -208,6 +210,7 @@ def create_session(
 
     assets = session_assets(scenario)
     _emit_session_assets(session_id, assets)
+    cast = resolve_cast(scenario, seed_cast_ids(scenario, start))
 
     return SessionDetail(
         id=session_id,
@@ -218,6 +221,7 @@ def create_session(
         turns=[],
         hud=hud,
         assets=assets,
+        cast=cast,
     )
 
 
@@ -289,6 +293,11 @@ def get_session(session_id: str) -> SessionDetail:
     assets = session_assets(scenario)
     _emit_session_assets(session_id, assets)
 
+    ids = read_cast_ids(session_id)
+    if ids is None:
+        ids = seed_cast_ids(scenario, start)
+    cast = resolve_cast(scenario, ids)
+
     return SessionDetail(
         id=row.id,
         scenario_id=row.scenario_id,
@@ -298,6 +307,7 @@ def get_session(session_id: str) -> SessionDetail:
         turns=turns,
         hud=row.hud,
         assets=assets,
+        cast=cast,
     )
 
 
@@ -444,6 +454,20 @@ def set_compact(session_id: str, text: str, covered_seq: int, payload: dict) -> 
         raise
     finally:
         conn.close()
+
+
+def read_cast_ids(session_id: str) -> list[str] | None:
+    """Last cast event's ids, or None if the session never had one. A malformed
+    payload is treated as absence, never raised: a corrupt event can't take
+    down GET /api/sessions/{id}."""
+    events = read_events(session_id, kinds=(CAST_EVENT_KIND,))
+    if not events:
+        return None
+    payload = events[-1].payload
+    ids = payload.get("ids")
+    if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
+        return None
+    return ids
 
 
 def _build_turns(events: list[Event]) -> list[TurnView]:
