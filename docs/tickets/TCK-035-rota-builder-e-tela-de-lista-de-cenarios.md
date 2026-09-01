@@ -1,7 +1,7 @@
 ---
 id: TCK-035
 title: Abrir a rota #/builder com a lista de cenarios
-status: ready
+status: in_review
 points: 3
 blockedBy: [TCK-030, TCK-032]
 files:
