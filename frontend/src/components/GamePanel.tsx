@@ -41,12 +41,13 @@ export type GamePanelProps = {
   sessionId: string
   onNotFound?: () => void
   onSessionLoaded?: (session: SessionDetail) => void
+  onTurnsChanged?: (count: number) => void
   regionLabel?: string
   autoFocusInput?: boolean
 }
 
 export function GamePanel(props: GamePanelProps) {
-  const { sessionId, onNotFound, onSessionLoaded, regionLabel, autoFocusInput = true } = props
+  const { sessionId, onNotFound, onSessionLoaded, onTurnsChanged, regionLabel, autoFocusInput = true } = props
   const inputId = useId()
   const historyRef = useRef<HTMLOListElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -57,6 +58,8 @@ export function GamePanel(props: GamePanelProps) {
   onNotFoundRef.current = onNotFound
   const onSessionLoadedRef = useRef(onSessionLoaded)
   onSessionLoadedRef.current = onSessionLoaded
+  const onTurnsChangedRef = useRef(onTurnsChanged)
+  onTurnsChangedRef.current = onTurnsChanged
   const [state, setState] = useState<GameState>({ phase: 'loading' })
 
   const [draft, setDraft] = useState('')
@@ -119,6 +122,12 @@ export function GamePanel(props: GamePanelProps) {
   useEffect(() => {
     if (state.phase === 'ready') onSessionLoadedRef.current?.(state.session)
   }, [state])
+
+  useEffect(() => {
+    if (state.phase !== 'ready') return
+    const count = Math.floor((state.session.turns.length + extraTurns.length) / 2)
+    onTurnsChangedRef.current?.(count)
+  }, [state, extraTurns.length])
 
   useEffect(() => {
     if (state.phase !== 'ready') return

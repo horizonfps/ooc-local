@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, fetchScenarioDocument, saveScenarioDocument, type ScenarioDocument } from '../api'
 import { deepEqual, validateDraft } from '../builder/validate'
+import { BuilderPreview } from '../components/builder/BuilderPreview'
 import { CharactersTab } from '../components/builder/CharactersTab'
 import { IdentityTab } from '../components/builder/IdentityTab'
 import { MediaTab } from '../components/builder/MediaTab'
@@ -17,6 +18,13 @@ import './builderEditor.css'
 export type { BuilderTab } from '../useHashRoute'
 
 export type BuilderDraft = Omit<ScenarioDocument, 'revision'>
+
+const EMPTY_DRAFT: BuilderDraft = {
+  meta: { name: '', tagline: null, description: null, locale: 'en', tags: [], default_start: '', world_mode: 'guided' },
+  world: '',
+  starts: {},
+  characters: {},
+}
 
 export type ValidationError = { tab: BuilderTab; field: string; label: string; message: string }
 
@@ -124,6 +132,7 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
   const [previewOpen, setPreviewOpen] = useState(false)
 
   const [announcement, setAnnouncement] = useState('')
+  const [savedAt, setSavedAt] = useState<number | null>(null)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [saveErrorKind, setSaveErrorKind] = useState<SaveErrorKind>(null)
   const [saveError, setSaveError] = useState<unknown>(null)
@@ -215,6 +224,7 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
     setSaveStatus('idle')
     setSaveErrorKind(null)
     setValidationAttempted(false)
+    setSavedAt(Date.now())
     setAnnouncement(t('builder.editor.saved', { folder: id }))
   }
 
@@ -595,7 +605,22 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
                 ))
               )}
             </section>
-            <aside id="builder-editor-preview" className={`builder-editor-preview${previewOpen ? ' is-open' : ''}`} />
+            <aside
+              id="builder-editor-preview"
+              aria-label={t('builder.preview.regionLabel')}
+              className={`builder-editor-preview${previewOpen ? ' is-open' : ''}`}
+            >
+              {state.status === 'ready' ? (
+                <BuilderPreview
+                  scenarioId={id}
+                  draft={state.draft}
+                  loadedStartIds={Object.keys(state.loaded.starts)}
+                  dirty={dirty}
+                  savedAt={savedAt}
+                  onSave={handleGuardSave}
+                />
+              ) : null}
+            </aside>
           </>
         ) : null}
 
@@ -616,12 +641,31 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
         ) : null}
 
         {state.status === 'invalid' ? (
-          <ErrorState
-            title={t('builder.editor.invalid.title')}
-            body={t('builder.editor.invalid.body', { reason: state.reason })}
-            cause={state.reason}
-            onRetry={load}
-          />
+          <>
+            <div>
+              <ErrorState
+                title={t('builder.editor.invalid.title')}
+                body={t('builder.editor.invalid.body', { reason: state.reason })}
+                cause={state.reason}
+                onRetry={load}
+              />
+            </div>
+            <aside
+              id="builder-editor-preview"
+              aria-label={t('builder.preview.regionLabel')}
+              className={`builder-editor-preview${previewOpen ? ' is-open' : ''}`}
+            >
+              <BuilderPreview
+                scenarioId={id}
+                draft={EMPTY_DRAFT}
+                loadedStartIds={[]}
+                dirty={false}
+                savedAt={null}
+                invalidReason={state.reason}
+                onSave={async () => {}}
+              />
+            </aside>
+          </>
         ) : null}
 
         {described ? (
