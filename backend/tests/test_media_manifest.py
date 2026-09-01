@@ -198,3 +198,17 @@ def test_session_assets_function_matches_scan(scenarios_root):
         "chloe": {"default": "/api/scenarios/exemplo-escola/media/sprites/chloe/default.png"}
     }
     assert assets.backgrounds == {}
+
+
+TRAVERSAL_SPRITE_YAML = CHLOE_YAML + "sprite: ../../vizinho/media/sprites/x\n"
+
+
+def test_sprite_folder_outside_key_re_is_skipped(client, scenarios_root):
+    scenario_dir = _write_scenario(scenarios_root, 'escola', character_yaml=TRAVERSAL_SPRITE_YAML)
+    sprites_dir = scenario_dir / 'media' / 'sprites' / 'chloe'
+    sprites_dir.mkdir(parents=True)
+    (sprites_dir / 'default.png').write_bytes(PNG_BYTES)
+
+    response = client.post('/api/sessions', json={'scenarioId': 'escola'})
+    assert response.status_code == 201
+    assert response.json()['assets']['sprites'] == {}

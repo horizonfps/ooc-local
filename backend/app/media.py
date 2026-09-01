@@ -108,6 +108,8 @@ def session_assets(scenario: LoadedScenario) -> SessionAssets:
     sprites: dict[str, dict[str, str]] = {}
     for char_id, character in scenario.characters.items():
         folder_name = character.sprite or char_id
+        if not KEY_RE.match(folder_name):
+            continue
         flat = _scan_flat(sprites_dir / folder_name)
         if not flat:
             continue
