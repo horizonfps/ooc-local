@@ -189,3 +189,9 @@ de que a escrita é seletiva.
 ## i18n
 
 N/A — mensagens de tela ficam no TCK-046.
+
+## Ressalvas registradas na wave 3
+
+- O TCK-031 mergeado le `world.md` com `read_text` (normaliza CRLF para LF) e o `revision` hasheia bytes crus. Ao salvar, grave SEMPRE com newline LF (`
+`), assim o arquivo converge para LF no primeiro save e o hash passa a bater com o texto servido.
+- Comportamento real do GET: pasta existente sem `scenario.yaml` retorna **404** (paridade com TCK-030), nao 422. Code contra isso.

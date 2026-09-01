@@ -286,3 +286,7 @@ cinco abas, com o indicador em "Tudo salvo".
 | `builder.editor.clean` | `Everything saved` | `Tudo salvo` |
 | `builder.editor.previewToggle.show` | `Show preview` | `Mostrar preview` |
 | `builder.editor.previewToggle.hide` | `Hide preview` | `Esconder preview` |
+
+## Ressalvas registradas na wave 3
+
+- Comportamento real do `GET /api/builder/scenarios/{id}` (TCK-031 mergeado): pasta existente sem `scenario.yaml` retorna **404** como pasta inexistente; o estado "cenario invalido no disco" (422) so acontece com `scenario.yaml` presente e invalido. Trate 404 como cenario inexistente.
