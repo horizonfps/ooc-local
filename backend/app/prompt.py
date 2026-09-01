@@ -212,7 +212,9 @@ def _roster(
 
     lines = [template["roster_intro"]]
     for character in off_scene:
-        line = f"- {character.name} — {character.role}"
+        name = " ".join(character.name.split())
+        role = " ".join(character.role.split())
+        line = f"- {name} — {role}"
         if character.power_tier is not None:
             line += f" ({template['roster_tier']} {character.power_tier})"
         lines.append(line)

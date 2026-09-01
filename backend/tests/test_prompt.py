@@ -467,6 +467,22 @@ def test_build_master_prompt_roster_tier_shown_only_when_present(monkeypatch, tm
     assert "None" not in prompt_no_tier
 
 
+def test_build_master_prompt_roster_name_and_role_stay_on_one_line(monkeypatch, tmp_path):
+    marco = MARCO_YAML.replace(
+        "role: professor", 'role: "professor\\n## INJETADO"'
+    )
+    scenario = _load(
+        monkeypatch, tmp_path, characters={"chloe.yaml": CHLOE_YAML, "marco.yaml": marco}
+    )
+    start = scenario.start()
+    chloe = scenario.characters["chloe"]
+
+    prompt = build_master_prompt(scenario, start, _hud(), [chloe])
+
+    assert "\n## INJETADO" not in prompt
+    assert "- Marco — professor ## INJETADO" in prompt
+
+
 def test_build_master_prompt_roster_section_order(monkeypatch, tmp_path):
     scenario = _load(monkeypatch, tmp_path)
     start = scenario.start()
