@@ -119,6 +119,7 @@ def test_build_master_prompt_ptbr_happy_path(monkeypatch, tmp_path):
 
     assert "350 palavras" in prompt
     assert "**Nome** | fala" in prompt
+    assert "[LOC:" in prompt
 
 
 def test_build_master_prompt_en_locale(monkeypatch, tmp_path):
@@ -137,6 +138,7 @@ def test_build_master_prompt_en_locale(monkeypatch, tmp_path):
     assert "350 words" in prompt
     assert "**Name** | line" in prompt
     assert "Weather: Cloudy" in prompt
+    assert "[LOC:" in prompt
 
     for word in ["NARRADOR", "MUNDO", "PERSONAGENS", "FORMATO DO TURNO"]:
         assert word not in prompt

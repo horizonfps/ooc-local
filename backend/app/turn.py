@@ -15,7 +15,7 @@ from app.compact import (
     select_window,
 )
 from app.config import Config, load_config
-from app.hud import advance
+from app.hud import advance, apply_location
 from app.llm.base import ChatMessage
 from app.llm.openai_compat import OpenAICompatProvider
 from app.observability import emit
@@ -192,6 +192,7 @@ async def run_turn(
     role_model = None
     tags = []
     stripped_lines = 0
+    location_changed = False
 
     def emit_game_turn(error: str | None) -> None:
         emit(
@@ -205,6 +206,7 @@ async def run_turn(
             tags=len(tags),
             invalid_tags=sum(1 for tag in tags if not tag.valid),
             stripped_lines=stripped_lines,
+            location_changed=location_changed,
             error=error,
         )
 
@@ -241,6 +243,10 @@ async def run_turn(
             return
 
         new_hud = advance(hud)
+        for tag in tags:
+            if tag.kind == "LOC" and tag.valid:
+                new_hud = apply_location(new_hud, tag.args[0])
+        location_changed = new_hud.location != hud.location
         events = [
             ("player_turn", {"text": message}),
             ("narrator_turn", {"text": clean_text}),

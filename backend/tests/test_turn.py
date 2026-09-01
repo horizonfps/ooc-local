@@ -528,3 +528,129 @@ def test_advance_wraps_midnight():
     hud = HudState(turn=5, location="patio", time="23:59", weather="clear")
     advanced = advance(hud)
     assert advanced.time == "00:01"
+
+
+def test_apply_location_normalizes_and_updates():
+    from app.hud import HudState, apply_location
+
+    hud = HudState(turn=0, location="patio", time="07:50", weather="clear")
+    updated = apply_location(hud, "  pátio   da   escola  ")
+    assert updated.location == "pátio da escola"
+
+
+def test_apply_location_same_value_returns_same_hud():
+    from app.hud import HudState, apply_location
+
+    hud = HudState(turn=0, location="patio", time="07:50", weather="clear")
+    updated = apply_location(hud, "patio")
+    assert updated is hud
+
+
+def test_apply_location_empty_after_normalization_keeps_hud():
+    from app.hud import HudState, apply_location
+
+    hud = HudState(turn=0, location="patio", time="07:50", weather="clear")
+    updated = apply_location(hud, "   ")
+    assert updated is hud
+
+
+def test_apply_location_truncates_at_word_boundary():
+    from app.hud import LOCATION_MAX_CHARS, HudState, apply_location
+
+    hud = HudState(turn=0, location="patio", time="07:50", weather="clear")
+
+    no_spaces = "a" * 200
+    updated_no_spaces = apply_location(hud, no_spaces)
+    assert updated_no_spaces.location == "a" * LOCATION_MAX_CHARS
+
+    words = "sala de aula do terceiro ano do ensino fundamental do bairro novo"
+    updated_words = apply_location(hud, words)
+    assert len(updated_words.location) <= LOCATION_MAX_CHARS
+    assert words.startswith(updated_words.location)
+    cut_at = len(updated_words.location)
+    assert cut_at == len(words) or words[cut_at] == " "
+
+
+def test_turn_applies_loc_tag_to_hud(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(
+        OpenAICompatProvider,
+        "stream_chat",
+        _make_fake_stream(["Voce sobe a escada. [LOC:sala do 3 B]"]),
+    )
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "eu subo"}
+    ) as response:
+        events = _stream_events(response)
+
+    assert events[-1]["hud"]["location"] == "sala do 3 B"
+
+    detail = client.get(f"/api/sessions/{session['id']}").json()
+    assert detail["hud"]["location"] == "sala do 3 B"
+
+
+def test_turn_without_loc_tag_preserves_previous_location(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", _make_fake_stream(["Voce anda."]))
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "eu ando"}
+    ) as response:
+        events = _stream_events(response)
+
+    assert events[-1]["hud"]["location"] == "patio"
+
+
+def test_turn_last_loc_tag_wins(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(
+        OpenAICompatProvider,
+        "stream_chat",
+        _make_fake_stream(["Voce anda. [LOC:corredor] Voce entra. [LOC:sala do 3 B]"]),
+    )
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "eu ando"}
+    ) as response:
+        events = _stream_events(response)
+
+    assert events[-1]["hud"]["location"] == "sala do 3 B"
+
+
+def test_turn_invalid_loc_tag_does_not_change_hud(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(
+        OpenAICompatProvider,
+        "stream_chat",
+        _make_fake_stream(["Voce anda. [LOC:sala 3: fundo]"]),
+    )
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "eu ando"}
+    ) as response:
+        events = _stream_events(response)
+
+    assert events[-1]["hud"]["location"] == "patio"
+
+    tag_events = [e for e in sessions.read_events(session["id"]) if e.kind == "tag"]
+    assert len(tag_events) == 1
+    assert tag_events[0].payload["kind"] == "LOC"
+    assert tag_events[0].payload["valid"] is False
+    assert tag_events[0].payload["args"] == ["sala 3", "fundo"]

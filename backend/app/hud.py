@@ -11,6 +11,9 @@ if TYPE_CHECKING:
 WEATHER_CODES = ("clear", "cloudy", "rain", "storm", "snow", "fog", "night")
 
 TURN_MINUTES = 2
+LOCATION_MAX_CHARS = 60
+
+_WHITESPACE_RE = re.compile(r"\s+")
 
 TIME_PATTERN = r"^([01]\d|2[0-3]):[0-5]\d$"
 _TIME_RE = re.compile(TIME_PATTERN)
@@ -60,3 +63,17 @@ def advance(hud: HudState) -> HudState:
     total = (hours * 60 + minutes + TURN_MINUTES) % (24 * 60)
     new_time = f"{total // 60:02d}:{total % 60:02d}"
     return hud.model_copy(update={"turn": hud.turn + 1, "time": new_time})
+
+
+def apply_location(hud: HudState, raw: str) -> HudState:
+    """Engine-owned HUD move: normalizes and applies a narrator location tag."""
+    normalized = _WHITESPACE_RE.sub(" ", raw.strip())
+    if not normalized:
+        return hud
+    if len(normalized) > LOCATION_MAX_CHARS:
+        truncated = normalized[:LOCATION_MAX_CHARS]
+        cut = truncated.rfind(" ")
+        normalized = truncated[:cut] if cut > 0 else truncated
+    if normalized == hud.location:
+        return hud
+    return hud.model_copy(update={"location": normalized})

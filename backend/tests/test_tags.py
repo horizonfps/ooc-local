@@ -208,3 +208,28 @@ def test_parse_tags_is_idempotent_on_mixed_text():
     once, _ = parse_tags(original)
     twice, _ = parse_tags(once)
     assert once == twice
+
+
+def test_loc_tag_is_valid_and_removed_from_text():
+    text, tags = parse_tags("Voce entra. [LOC:sala de aula]")
+    assert text == "Voce entra."
+    assert len(tags) == 1
+    assert tags[0].kind == "LOC"
+    assert tags[0].args == ["sala de aula"]
+    assert tags[0].valid is True
+
+
+def test_loc_tag_with_internal_colon_is_invalid_but_removed():
+    text, tags = parse_tags("[LOC:sala 3: fundo]")
+    assert text == ""
+    assert len(tags) == 1
+    assert tags[0].kind == "LOC"
+    assert tags[0].args == ["sala 3", "fundo"]
+    assert tags[0].valid is False
+
+
+def test_empty_loc_tag_is_invalid():
+    text, tags = parse_tags("[LOC:]")
+    assert text == ""
+    assert len(tags) == 1
+    assert tags[0].valid is False
