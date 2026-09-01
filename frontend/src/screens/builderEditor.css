@@ -631,3 +631,125 @@
     align-items: stretch;
   }
 }
+
+.builder-characters-tab {
+  display: flex;
+  flex-direction: column;
+}
+
+.builder-characters-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.builder-characters-list ul {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.builder-characters-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.builder-characters-listItem {
+  flex: 1;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #33363f;
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.builder-characters-list li.is-selected .builder-characters-listItem {
+  border-color: var(--fg);
+  font-weight: 600;
+}
+
+.builder-characters-avatar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: #2a2d36;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+}
+
+.builder-characters-listItemText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.builder-characters-listItemRole {
+  color: var(--fg-muted);
+  font-size: 0.8rem;
+}
+
+.builder-characters-selectRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.builder-characters-selectRow select {
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #33363f;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+}
+
+.builder-characters-selectActions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.builder-characters-emotionSuggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.builder-characters-emotionSuggestions button {
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  border: 1px solid #33363f;
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+@media (min-width: 900px) {
+  .builder-characters-body {
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+@media (max-width: 479.98px) {
+  .builder-characters-list li {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

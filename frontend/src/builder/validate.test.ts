@@ -30,11 +30,11 @@ function draft(overrides: Partial<BuilderDraft> = {}): BuilderDraft {
     characters: {
       ally: {
         name: 'Ally',
-        role: '',
-        appearance: '',
-        personality: '',
-        voice: '',
-        mind: { feeling: '', goal: '', opinion_of_player: null, secret_plan: null },
+        role: 'A friendly local',
+        appearance: 'Short and freckled.',
+        personality: 'Helpful, curious.',
+        voice: 'Warm, chatty.',
+        mind: { feeling: 'Content', goal: 'Help the player settle in', opinion_of_player: null, secret_plan: null },
         sprite: null,
         anchor: false,
         emotions: ['default'],

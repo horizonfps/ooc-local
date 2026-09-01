@@ -137,10 +137,88 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
     }
   }
 
-  for (const charId of Object.keys(draft.characters)) {
+  const characterIds = Object.keys(draft.characters)
+
+  if (characterIds.length === 0) {
+    errors.push(error('characters', 'characters', t('builder.field.label.characters'), t('builder.characters.error.atLeastOne')))
+  }
+
+  for (const charId of characterIds) {
+    const character = draft.characters[charId]
+    const charLabel = character.name.trim() || charId
+    const withChar = (label: string) => `${charLabel} — ${label}`
+
     if (!ID_RE.test(charId)) {
       errors.push(error('characters', `characters.${charId}`, t('builder.field.label.characterId'), t('builder.field.slugInvalid')))
     }
+
+    if (!character.name.trim()) {
+      errors.push(error('characters', `characters.${charId}.name`, withChar(t('builder.characters.name')), t('builder.field.required')))
+    } else if (character.name.length > 80) {
+      errors.push(
+        error('characters', `characters.${charId}.name`, withChar(t('builder.characters.name')), t('builder.field.tooLong', { max: 80 })),
+      )
+    }
+
+    if (!character.role.trim()) {
+      errors.push(error('characters', `characters.${charId}.role`, withChar(t('builder.characters.role')), t('builder.field.required')))
+    } else if (character.role.length > 140) {
+      errors.push(
+        error('characters', `characters.${charId}.role`, withChar(t('builder.characters.role')), t('builder.field.tooLong', { max: 140 })),
+      )
+    }
+
+    if (!character.appearance.trim()) {
+      errors.push(
+        error('characters', `characters.${charId}.appearance`, withChar(t('builder.characters.appearance')), t('builder.field.required')),
+      )
+    }
+
+    if (!character.personality.trim()) {
+      errors.push(
+        error('characters', `characters.${charId}.personality`, withChar(t('builder.characters.personality')), t('builder.field.required')),
+      )
+    }
+
+    if (!character.voice.trim()) {
+      errors.push(error('characters', `characters.${charId}.voice`, withChar(t('builder.characters.voice')), t('builder.field.required')))
+    }
+
+    if (!character.mind.feeling.trim()) {
+      errors.push(
+        error(
+          'characters',
+          `characters.${charId}.mind.feeling`,
+          withChar(t('builder.characters.mind.feeling')),
+          t('builder.field.required'),
+        ),
+      )
+    }
+
+    if (!character.mind.goal.trim()) {
+      errors.push(
+        error('characters', `characters.${charId}.mind.goal`, withChar(t('builder.characters.mind.goal')), t('builder.field.required')),
+      )
+    }
+
+    if (character.sprite !== null && !ID_RE.test(character.sprite)) {
+      errors.push(
+        error('characters', `characters.${charId}.sprite`, withChar(t('builder.characters.sprite')), t('builder.field.slugInvalid')),
+      )
+    }
+
+    character.emotions.forEach((emotion, index) => {
+      if (!ID_RE.test(emotion)) {
+        errors.push(
+          error(
+            'characters',
+            `characters.${charId}.emotions.${index}`,
+            withChar(t('builder.characters.emotions.legend')),
+            t('builder.field.slugInvalid'),
+          ),
+        )
+      }
+    })
   }
 
   if (!draft.meta.name.trim()) {
