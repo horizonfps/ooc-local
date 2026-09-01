@@ -1,7 +1,7 @@
 ---
 id: TCK-031
 title: Ler o cenario inteiro do disco com revision estavel
-status: ready
+status: in_review
 points: 3
 blockedBy: [TCK-029, TCK-030]
 files:
