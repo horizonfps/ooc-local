@@ -420,6 +420,11 @@ const en = {
   'game.scene.announceCharacters': 'On screen: {characters}.',
   'game.scene.characterEmotion': '{character} ({emotion})',
   'game.scene.empty': 'no one',
+  'game.cast.label': 'In scene',
+  'game.cast.empty': 'No one',
+  'game.cast.unavailable': 'Not known yet',
+  'game.cast.announce': 'Now in scene: {characters}.',
+  'game.cast.regionLabel': 'Characters in scene',
 
   // HUD
   'hud.turn': 'Turn',
@@ -868,6 +873,11 @@ const ptBr: Record<StringKey, string> = {
   'game.scene.announceCharacters': 'Em cena: {characters}.',
   'game.scene.characterEmotion': '{character} ({emotion})',
   'game.scene.empty': 'ninguém',
+  'game.cast.label': 'Em cena',
+  'game.cast.empty': 'Ninguém',
+  'game.cast.unavailable': 'Ainda não se sabe',
+  'game.cast.announce': 'Agora em cena: {characters}.',
+  'game.cast.regionLabel': 'Personagens em cena',
 
   // HUD
   'hud.turn': 'Turno',

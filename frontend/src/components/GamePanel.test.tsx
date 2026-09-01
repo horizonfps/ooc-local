@@ -270,4 +270,121 @@ describe('GamePanel', () => {
       )
     })
   })
+
+  describe('cast', () => {
+    it('updates the chips and announces the new cast once when onHud carries a different cast', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ cast: [{ id: 'aiko', name: 'Aiko' }] })),
+        post: () =>
+          sseResponse([
+            { delta: 'They arrive.' },
+            {
+              hud: {
+                turn: 1,
+                location: 'Yard',
+                time: 'Day',
+                weather: 'clear',
+                cast: [
+                  { id: 'aiko', name: 'Aiko' },
+                  { id: 'cydonia', name: 'Cydonia' },
+                ],
+              },
+            },
+            '[DONE]',
+          ]),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      expect(screen.getByText('Aiko')).toBeInTheDocument()
+
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      await screen.findByText('Cydonia')
+      await screen.findByText(t('game.cast.announce', { characters: 'Aiko, Cydonia' }))
+    })
+
+    it('loading a session does not announce the cast in the live region', async () => {
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ cast: [{ id: 'aiko', name: 'Aiko' }] })),
+        post: () => sseResponse(['[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      expect(screen.getByText('Aiko')).toBeInTheDocument()
+      expect(screen.queryByText(t('game.cast.announce', { characters: 'Aiko' }))).toBeNull()
+    })
+
+    it('keeps the previous chips when onHud carries cast null', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ cast: [{ id: 'aiko', name: 'Aiko' }] })),
+        post: () =>
+          sseResponse([
+            { delta: 'They stay.' },
+            { hud: { turn: 1, location: 'Yard', time: 'Day', weather: 'clear', cast: null } },
+            '[DONE]',
+          ]),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      await screen.findByText('Yard')
+      expect(screen.getByText('Aiko')).toBeInTheDocument()
+    })
+
+    it('keeps the previous chips when onHud omits cast', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ cast: [{ id: 'aiko', name: 'Aiko' }] })),
+        post: () =>
+          sseResponse([
+            { delta: 'They stay.' },
+            { hud: { turn: 1, location: 'Yard', time: 'Day', weather: 'clear' } },
+            '[DONE]',
+          ]),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      await screen.findByText('Yard')
+      expect(screen.getByText('Aiko')).toBeInTheDocument()
+    })
+
+    it('keeps the previous chips visible with aria-busy during the stream', async () => {
+      const user = userEvent.setup()
+      let releaseStream: (() => void) | undefined
+      const streamGate = new Promise<void>((resolve) => {
+        releaseStream = resolve
+      })
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ cast: [{ id: 'aiko', name: 'Aiko' }] })),
+        post: async () => {
+          await streamGate
+          return sseResponse([{ delta: 'They stay.' }, '[DONE]'])
+        },
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      const group = screen.getByRole('group', { name: t('game.cast.regionLabel') })
+      expect(group).toHaveAttribute('aria-busy', 'true')
+      expect(screen.getByText('Aiko')).toBeInTheDocument()
+
+      releaseStream?.()
+      await screen.findByText('They stay.')
+    })
+  })
 })
