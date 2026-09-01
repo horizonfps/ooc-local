@@ -24,3 +24,4 @@ mind:
   secret_plan: >
     Planeja se aproximar do jogador com simpatia calculada para usá-lo como
     fonte de informação sobre o que Chloe anda fazendo.
+emotions: [default, mocking, angry, smile]

@@ -8,6 +8,7 @@ from app.scenario import (
     ScenarioError,
     list_scenarios,
     load_scenario,
+    scenario_path,
     scenarios_dir,
 )
 
@@ -454,3 +455,134 @@ def test_scenario_error_reason_is_single_line_and_truncated(monkeypatch, tmp_pat
         assert "erro(s)" in exc.reason
         assert exc.details is not None
         assert "\n" in exc.details
+
+
+def test_character_emotions_and_anchor_load(monkeypatch, tmp_path):
+    character = CHLOE_YAML + "anchor: true\nemotions: [default, sad, angry, smile]\n"
+    _write_scenario(tmp_path, "exemplo-escola", characters={"chloe.yaml": character})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.characters["chloe"].anchor is True
+    assert scenario.characters["chloe"].emotions == ["default", "sad", "angry", "smile"]
+
+
+def test_character_emotions_and_anchor_default(monkeypatch, tmp_path):
+    _write_scenario(tmp_path, "exemplo-escola")
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.characters["chloe"].anchor is False
+    assert scenario.characters["chloe"].emotions == ["default"]
+
+
+def test_character_emotions_dedup_and_default_moved_first(monkeypatch, tmp_path):
+    character = CHLOE_YAML + "emotions: [sad, default, sad]\n"
+    _write_scenario(tmp_path, "exemplo-escola", characters={"chloe.yaml": character})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.characters["chloe"].emotions == ["default", "sad"]
+
+
+def test_character_emotions_default_kept_first_when_present(monkeypatch, tmp_path):
+    character = CHLOE_YAML + "emotions: [smile, default]\n"
+    _write_scenario(tmp_path, "exemplo-escola", characters={"chloe.yaml": character})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.characters["chloe"].emotions == ["default", "smile"]
+
+
+def test_character_emotions_empty_normalizes_to_default(monkeypatch, tmp_path):
+    character = CHLOE_YAML + "emotions: []\n"
+    _write_scenario(tmp_path, "exemplo-escola", characters={"chloe.yaml": character})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.characters["chloe"].emotions == ["default"]
+
+
+def test_character_emotions_invalid_slug_raises(monkeypatch, tmp_path):
+    character = CHLOE_YAML + 'emotions: ["Feliz "]\n'
+    _write_scenario(tmp_path, "exemplo-escola", characters={"chloe.yaml": character})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    try:
+        load_scenario("exemplo-escola")
+        assert False, "expected ScenarioError"
+    except ScenarioError as exc:
+        assert "invalid emotion" in exc.reason
+
+
+def test_character_emotions_over_limit_raises(monkeypatch, tmp_path):
+    extra = ", ".join(f"e{i}" for i in range(21))
+    character = CHLOE_YAML + f"emotions: [{extra}]\n"
+    _write_scenario(tmp_path, "exemplo-escola", characters={"chloe.yaml": character})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    try:
+        load_scenario("exemplo-escola")
+        assert False, "expected ScenarioError"
+    except ScenarioError as exc:
+        assert "\n" not in exc.reason
+
+
+def test_scenario_world_mode_guided_and_absent_are_equal(monkeypatch, tmp_path):
+    _write_scenario(tmp_path, "exemplo-escola", scenario_yaml=SCENARIO_YAML)
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+    scenario_absent = load_scenario("exemplo-escola")
+
+    scenario_yaml_guided = SCENARIO_YAML + "world_mode: guided\n"
+    _write_scenario(tmp_path, "exemplo-escola-guided", scenario_yaml=scenario_yaml_guided)
+    scenario_explicit = load_scenario("exemplo-escola-guided")
+
+    assert scenario_absent.meta.world_mode == "guided"
+    assert scenario_explicit.meta.world_mode == "guided"
+
+
+def test_scenario_world_mode_custom(monkeypatch, tmp_path):
+    scenario_yaml = SCENARIO_YAML + "world_mode: custom\n"
+    _write_scenario(tmp_path, "exemplo-escola", scenario_yaml=scenario_yaml)
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.meta.world_mode == "custom"
+
+
+def test_scenario_world_mode_invalid_value_raises(monkeypatch, tmp_path):
+    scenario_yaml = SCENARIO_YAML + "world_mode: guiado\n"
+    _write_scenario(tmp_path, "exemplo-escola", scenario_yaml=scenario_yaml)
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    try:
+        load_scenario("exemplo-escola")
+        assert False, "expected ScenarioError"
+    except ScenarioError as exc:
+        assert "world_mode" in exc.reason
+
+
+def test_scenario_path_public_confines_and_accepts_missing_folder(monkeypatch, tmp_path):
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    resolved = scenario_path("nao-existe-ainda")
+
+    assert not resolved.exists()
+    assert tmp_path.resolve() in resolved.parents
+
+
+@pytest.mark.parametrize("scenario_id", ["../fora", ""])
+def test_scenario_path_traversal_raises(monkeypatch, tmp_path, scenario_id):
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    try:
+        scenario_path(scenario_id)
+        assert False, "expected ScenarioError"
+    except ScenarioError:
+        pass
