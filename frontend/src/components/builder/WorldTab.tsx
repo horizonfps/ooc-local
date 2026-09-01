@@ -70,8 +70,10 @@ export function WorldTab(props: TabProps) {
     return errors.find((e) => e.tab === 'world' && e.field === field)?.message ?? null
   }
 
-  function loreTitleError(index: number): string | null {
-    if (index in pendingTitles) return t('builder.world.lore.title.reserved', { title: pendingTitles[index].trim() })
+  function loreTitleError(index: number, savedTitle: string): string | null {
+    if (savedTitle === '' && index in pendingTitles) {
+      return t('builder.world.lore.title.reserved', { title: pendingTitles[index].trim() })
+    }
     return fieldError(`world.lore.${index}.title`)
   }
 
@@ -137,6 +139,7 @@ export function WorldTab(props: TabProps) {
 
   function handleSelectCustom() {
     if (mode === 'custom') return
+    setPendingTitles({})
     setSwitchedNotice(true)
     updateMeta({ world_mode: 'custom' })
   }
@@ -151,6 +154,7 @@ export function WorldTab(props: TabProps) {
     const fields = parsed ?? EMPTY_GUIDED
     setConfirmOpen(false)
     setSwitchedNotice(false)
+    setPendingTitles({})
     onChange({ ...draft, world: serializeGuidedWorld(fields), meta: { ...meta, world_mode: 'guided' } })
   }
 
@@ -260,8 +264,8 @@ export function WorldTab(props: TabProps) {
                 const titleHintId = `${titleId}-hint`
                 const titleErrorId = `${titleId}-error`
                 const bodyId = `builder-field-world.lore.${index}.body`
-                const displayedTitle = pendingTitles[index] ?? block.title
-                const titleErrorMessage = loreTitleError(index)
+                const displayedTitle = block.title === '' ? (pendingTitles[index] ?? '') : block.title
+                const titleErrorMessage = loreTitleError(index, block.title)
                 return (
                   <div className="builder-world-lore-block" key={index}>
                     <div className="builder-field builder-world-lore-titleField">

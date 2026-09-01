@@ -664,17 +664,13 @@
 
   .builder-world-lore-removeButton {
     grid-area: remove;
+    align-self: center;
   }
 }
 
 @media (max-width: 479.98px) {
-  .builder-world-lore-block {
-    align-items: stretch;
-  }
-
   .builder-world-lore-removeButton {
     width: 100%;
-    justify-content: center;
   }
 }
 

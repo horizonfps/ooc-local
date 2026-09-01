@@ -97,6 +97,11 @@ describe('validateDraft', () => {
     ).toBe(true)
   })
 
+  it('does not flag an oversized world.md as an error', () => {
+    const errors = validateDraft(draft({ world: '## Universe\n\n' + 'x'.repeat(20000) }))
+    expect(errors.some((e) => e.tab === 'world')).toBe(false)
+  })
+
   it('flags a duplicated lore block title only on the second occurrence', () => {
     const errors = validateDraft(
       draft({ world: '## Universe\n\nA quiet town.\n\n## Notas\n\nOne.\n\n## notas\n\nTwo.' }),
