@@ -96,9 +96,60 @@
   font-size: 0.8rem;
 }
 
+.builder-media-bg-grid {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+.builder-media-bg-grid .builder-media-cell-thumb,
+.builder-media-bg-grid .builder-media-cell-placeholder {
+  aspect-ratio: 16 / 9;
+}
+
+.builder-media-bg-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+}
+
+.builder-media-orphans {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #33363f;
+}
+
+.builder-media-orphans-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.builder-media-orphan {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.builder-media-orphan-thumb {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  background: var(--surface);
+  border-radius: 6px;
+}
+
 @media (max-width: 480px) {
   .builder-media-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .builder-media-bg-grid {
+    grid-template-columns: 1fr;
   }
 
   .builder-media-cell-label {
@@ -107,5 +158,12 @@
 
   .builder-media-cell-remove {
     align-self: stretch;
+    min-height: 44px;
+  }
+
+  .builder-media-orphan-action,
+  .builder-media-bg-slot-remove {
+    min-height: 44px;
+    min-width: 44px;
   }
 }

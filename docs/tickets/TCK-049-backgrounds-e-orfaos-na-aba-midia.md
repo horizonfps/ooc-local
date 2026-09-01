@@ -1,7 +1,7 @@
 ---
 id: TCK-049
 title: Gerenciar backgrounds e sprites orfaos na aba Midia
-status: ready
+status: in_review
 points: 3
 blockedBy: [TCK-039]
 files:
