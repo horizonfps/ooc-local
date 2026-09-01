@@ -1,6 +1,7 @@
 import pytest
+from fastapi.testclient import TestClient
 
-from app import sessions
+from app import main, sessions
 from app.cast import (
     MAX_CAST_IN_SCENE,
     cast_event,
@@ -124,6 +125,7 @@ def test_api_reads_seed_then_last_cast_event(scenarios_root):
     sessions.append_events(created.id, [cast_event(["mika"], "director")])
     reopened = sessions.get_session(created.id)
     assert [m.id for m in reopened.cast] == ["mika"]
+    assert reopened.turns == []
 
 
 def test_last_cast_event_wins_over_earlier_ones(scenarios_root):
@@ -212,6 +214,39 @@ def test_resolve_cast_ignores_unknown_id(scenarios_root):
 
     members = resolve_cast(scenario, ["fantasma", "chloe"])
     assert [m.id for m in members] == ["chloe"]
+
+
+@pytest.mark.parametrize("bad_ids", ["chloe", [1], ["chloe", None]])
+def test_corrupted_cast_event_with_malformed_ids_falls_back_to_seed(scenarios_root, bad_ids):
+    _write_scenario(scenarios_root, "exemplo-escola", characters_line="characters: [chloe]\n")
+    created = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(created.id, [("cast", {"ids": bad_ids, "source": "director"})])
+
+    assert sessions.read_cast_ids(created.id) is None
+
+    reopened = sessions.get_session(created.id)
+    assert [m.id for m in reopened.cast] == ["chloe"]
+
+
+def test_cast_serialized_by_session_routes(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola", characters_line=None)
+    client = TestClient(main.app)
+
+    created = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"})
+    assert created.status_code == 201
+    body = created.json()
+    assert body["cast"] == [
+        {"id": "ashlee", "name": "Ashlee"},
+        {"id": "chloe", "name": "Chloe"},
+        {"id": "mika", "name": "Mika"},
+    ]
+
+    sessions.append_events(body["id"], [cast_event(["mika"], "director")])
+    reopened = client.get(f"/api/sessions/{body['id']}")
+    assert reopened.status_code == 200
+    assert reopened.json()["cast"] == [{"id": "mika", "name": "Mika"}]
+    assert reopened.json()["turns"] == []
 
 
 def test_corrupted_cast_event_without_ids_falls_back_to_seed(scenarios_root):
