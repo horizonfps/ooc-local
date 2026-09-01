@@ -278,6 +278,29 @@ describe('BuilderPreview', () => {
     expect(deleteInit.keepalive).toBe(true)
   })
 
+  it('deletes the session created mid-start when unmounted before the create call resolves', async () => {
+    const user = userEvent.setup()
+    let resolveCreate: (response: Response) => void = () => {}
+    const fetchMock = mockFetch({
+      create: () =>
+        new Promise<Response>((resolve) => {
+          resolveCreate = resolve
+        }),
+    })
+    const { unmount } = render(
+      <BuilderPreview scenarioId="school" draft={draft()} loadedStartIds={['default', 'alt']} dirty={false} savedAt={null} onSave={vi.fn()} />,
+    )
+
+    await user.click(screen.getByRole('button', { name: t('builder.preview.start') }))
+    unmount()
+    resolveCreate(jsonResponse(session({ id: 'sess-1' })))
+
+    await waitFor(() => {
+      const deleteCall = fetchMock.mock.calls.find(([input, init]) => String(input) === '/api/sessions/sess-1' && (init as RequestInit)?.method === 'DELETE')
+      expect(deleteCall).toBeDefined()
+    })
+  })
+
   it('shows a start error with retry when creating the session fails', async () => {
     const user = userEvent.setup()
     mockFetch({ create: () => jsonResponse({ detail: 'boom' }, 500) })

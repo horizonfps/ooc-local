@@ -50,6 +50,7 @@ export function BuilderPreview(props: BuilderPreviewProps) {
   const [focusToken, setFocusToken] = useState(0)
 
   const sessionIdRef = useRef<string | null>(null)
+  const aliveRef = useRef({ alive: true })
   const headingRef = useRef<HTMLHeadingElement>(null)
   const restartDialogRef = useRef<HTMLDialogElement>(null)
   const restartCancelRef = useRef<HTMLButtonElement>(null)
@@ -71,6 +72,8 @@ export function BuilderPreview(props: BuilderPreviewProps) {
       isFirstScenario.current = false
       return
     }
+    aliveRef.current.alive = false
+    aliveRef.current = { alive: true }
     const current = sessionIdRef.current
     sessionIdRef.current = null
     if (current) void discard(current)
@@ -86,6 +89,7 @@ export function BuilderPreview(props: BuilderPreviewProps) {
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => {
+      aliveRef.current.alive = false
       window.removeEventListener('beforeunload', handleBeforeUnload)
       const current = sessionIdRef.current
       if (current) void deleteSession(current, { keepalive: true }).catch(() => {})
@@ -116,14 +120,20 @@ export function BuilderPreview(props: BuilderPreviewProps) {
   }, [focusToken])
 
   async function startSession(startId: string) {
+    const token = aliveRef.current
     setPhase({ kind: 'starting' })
     try {
       const session = await createSession(scenarioId, { startId, ephemeral: true })
+      if (!token.alive) {
+        void deleteSession(session.id)
+        return
+      }
       sessionIdRef.current = session.id
       setPhase({ kind: 'ready', sessionId: session.id, createdAt: Date.now() })
       setTurnsPlayed(0)
       setFocusToken((n) => n + 1)
     } catch {
+      if (!token.alive) return
       sessionIdRef.current = null
       setPhase({ kind: 'error' })
     }

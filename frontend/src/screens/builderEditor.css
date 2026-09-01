@@ -335,6 +335,15 @@
   .builder-editor-previewToggle {
     display: none;
   }
+
+  .builder-editor-previewClose {
+    display: none;
+  }
+}
+
+.builder-editor-previewClose {
+  align-self: flex-end;
+  flex: none;
 }
 
 @media (max-width: 480px) {

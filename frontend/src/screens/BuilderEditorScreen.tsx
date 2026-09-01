@@ -19,13 +19,6 @@ export type { BuilderTab } from '../useHashRoute'
 
 export type BuilderDraft = Omit<ScenarioDocument, 'revision'>
 
-const EMPTY_DRAFT: BuilderDraft = {
-  meta: { name: '', tagline: null, description: null, locale: 'en', tags: [], default_start: '', world_mode: 'guided' },
-  world: '',
-  starts: {},
-  characters: {},
-}
-
 export type ValidationError = { tab: BuilderTab; field: string; label: string; message: string }
 
 export type TabProps = {
@@ -127,6 +120,8 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
   const { scenarioId: id, tab: activeTab } = props
   const headingRef = useRef<HTMLHeadingElement>(null)
   const tabRefs = useRef<Partial<Record<BuilderTab, HTMLAnchorElement | null>>>({})
+  const previewToggleRef = useRef<HTMLButtonElement>(null)
+  const previewCloseRef = useRef<HTMLButtonElement>(null)
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [focusedTab, setFocusedTab] = useState<BuilderTab>(activeTab)
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -149,6 +144,15 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
   useEffect(() => {
     setFocusedTab(activeTab)
   }, [activeTab])
+
+  useEffect(() => {
+    if (previewOpen) previewCloseRef.current?.focus()
+  }, [previewOpen])
+
+  function closePreview() {
+    setPreviewOpen(false)
+    previewToggleRef.current?.focus()
+  }
 
   function load(opts?: { announceOnLoad?: boolean }) {
     setState({ status: 'loading' })
@@ -433,6 +437,7 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
               </button>
               <button
                 type="button"
+                ref={previewToggleRef}
                 className="builder-editor-previewToggle"
                 aria-expanded={previewOpen}
                 aria-controls="builder-editor-preview"
@@ -610,6 +615,9 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
               aria-label={t('builder.preview.regionLabel')}
               className={`builder-editor-preview${previewOpen ? ' is-open' : ''}`}
             >
+              <button type="button" ref={previewCloseRef} className="builder-editor-previewClose" onClick={closePreview}>
+                {t('builder.editor.previewClose')}
+              </button>
               {state.status === 'ready' ? (
                 <BuilderPreview
                   scenarioId={id}
@@ -641,31 +649,12 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
         ) : null}
 
         {state.status === 'invalid' ? (
-          <>
-            <div>
-              <ErrorState
-                title={t('builder.editor.invalid.title')}
-                body={t('builder.editor.invalid.body', { reason: state.reason })}
-                cause={state.reason}
-                onRetry={load}
-              />
-            </div>
-            <aside
-              id="builder-editor-preview"
-              aria-label={t('builder.preview.regionLabel')}
-              className={`builder-editor-preview${previewOpen ? ' is-open' : ''}`}
-            >
-              <BuilderPreview
-                scenarioId={id}
-                draft={EMPTY_DRAFT}
-                loadedStartIds={[]}
-                dirty={false}
-                savedAt={null}
-                invalidReason={state.reason}
-                onSave={async () => {}}
-              />
-            </aside>
-          </>
+          <ErrorState
+            title={t('builder.editor.invalid.title')}
+            body={t('builder.editor.invalid.body', { reason: state.reason })}
+            cause={state.reason}
+            onRetry={load}
+          />
         ) : null}
 
         {described ? (
