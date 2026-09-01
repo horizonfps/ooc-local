@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, fetchScenarioDocument, saveScenarioDocument, type ScenarioDocument } from '../api'
 import { deepEqual, validateDraft } from '../builder/validate'
+import { BuilderPreview } from '../components/builder/BuilderPreview'
 import { CharactersTab } from '../components/builder/CharactersTab'
 import { IdentityTab } from '../components/builder/IdentityTab'
 import { MediaTab } from '../components/builder/MediaTab'
@@ -119,11 +120,14 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
   const { scenarioId: id, tab: activeTab } = props
   const headingRef = useRef<HTMLHeadingElement>(null)
   const tabRefs = useRef<Partial<Record<BuilderTab, HTMLAnchorElement | null>>>({})
+  const previewToggleRef = useRef<HTMLButtonElement>(null)
+  const previewCloseRef = useRef<HTMLButtonElement>(null)
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [focusedTab, setFocusedTab] = useState<BuilderTab>(activeTab)
   const [previewOpen, setPreviewOpen] = useState(false)
 
   const [announcement, setAnnouncement] = useState('')
+  const [savedAt, setSavedAt] = useState<number | null>(null)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [saveErrorKind, setSaveErrorKind] = useState<SaveErrorKind>(null)
   const [saveError, setSaveError] = useState<unknown>(null)
@@ -140,6 +144,15 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
   useEffect(() => {
     setFocusedTab(activeTab)
   }, [activeTab])
+
+  useEffect(() => {
+    if (previewOpen) previewCloseRef.current?.focus()
+  }, [previewOpen])
+
+  function closePreview() {
+    setPreviewOpen(false)
+    previewToggleRef.current?.focus()
+  }
 
   function load(opts?: { announceOnLoad?: boolean }) {
     setState({ status: 'loading' })
@@ -215,6 +228,7 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
     setSaveStatus('idle')
     setSaveErrorKind(null)
     setValidationAttempted(false)
+    setSavedAt(Date.now())
     setAnnouncement(t('builder.editor.saved', { folder: id }))
   }
 
@@ -423,6 +437,7 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
               </button>
               <button
                 type="button"
+                ref={previewToggleRef}
                 className="builder-editor-previewToggle"
                 aria-expanded={previewOpen}
                 aria-controls="builder-editor-preview"
@@ -595,7 +610,25 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
                 ))
               )}
             </section>
-            <aside id="builder-editor-preview" className={`builder-editor-preview${previewOpen ? ' is-open' : ''}`} />
+            <aside
+              id="builder-editor-preview"
+              aria-label={t('builder.preview.regionLabel')}
+              className={`builder-editor-preview${previewOpen ? ' is-open' : ''}`}
+            >
+              <button type="button" ref={previewCloseRef} className="builder-editor-previewClose" onClick={closePreview}>
+                {t('builder.editor.previewClose')}
+              </button>
+              {state.status === 'ready' ? (
+                <BuilderPreview
+                  scenarioId={id}
+                  draft={state.draft}
+                  loadedStartIds={Object.keys(state.loaded.starts)}
+                  dirty={dirty}
+                  savedAt={savedAt}
+                  onSave={handleGuardSave}
+                />
+              ) : null}
+            </aside>
           </>
         ) : null}
 

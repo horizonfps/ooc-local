@@ -198,16 +198,23 @@ export function fetchSessions(): Promise<SessionSummary[]> {
   return request('/api/sessions')
 }
 
-export function createSession(scenarioId: string): Promise<SessionDetail> {
+export function createSession(scenarioId: string, opts?: { startId?: string; ephemeral?: boolean }): Promise<SessionDetail> {
   return request('/api/sessions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ scenarioId }),
+    body: JSON.stringify({ scenarioId, ...(opts?.startId !== undefined ? { startId: opts.startId } : {}), ...(opts?.ephemeral !== undefined ? { ephemeral: opts.ephemeral } : {}) }),
   })
 }
 
 export function fetchSession(id: string): Promise<SessionDetail> {
   return request(`/api/sessions/${id}`)
+}
+
+export async function deleteSession(id: string, opts?: { keepalive?: boolean }): Promise<void> {
+  const response = await fetch(`/api/sessions/${id}`, { method: 'DELETE', keepalive: opts?.keepalive })
+  if (!response.ok) {
+    throw new ApiError(response.status, await detailOf(response))
+  }
 }
 
 export type TurnHandlers = {

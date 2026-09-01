@@ -163,9 +163,10 @@ describe('BuilderEditorScreen', () => {
     render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
 
     expect(await screen.findByText(t('builder.editor.invalid.title'))).toBeInTheDocument()
-    expect(screen.getByText(t('builder.editor.invalid.body', { reason: 'scenario.yaml: bad yaml' }))).toBeInTheDocument()
+    expect(screen.getAllByText(t('builder.editor.invalid.body', { reason: 'scenario.yaml: bad yaml' }))).toHaveLength(1)
     expect(screen.queryByRole('tablist')).toBeNull()
     expect(screen.queryByRole('textbox')).toBeNull()
+    expect(document.getElementById('builder-editor-preview')).toBeNull()
   })
 
   it('shows the generic error state with retry for a 500', async () => {
@@ -365,6 +366,22 @@ describe('BuilderEditorScreen', () => {
     await screen.findByText(t('builder.editor.clean'))
     const savedStarts = (putBody as { starts: { default: { suggestions: string[] } } }).starts
     expect(savedStarts.default.suggestions).toEqual(['ok'])
+  })
+
+  it('focuses the preview close button on open and returns focus to the toggle on close', async () => {
+    const user = userEvent.setup()
+    mockFetch(() => jsonResponse(DOCUMENT))
+    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
+
+    await screen.findByLabelText(t('builder.identity.name'))
+    const toggle = screen.getByRole('button', { name: t('builder.editor.previewToggle.show') })
+    await user.click(toggle)
+
+    const closeButton = await screen.findByRole('button', { name: t('builder.editor.previewClose') })
+    expect(document.activeElement).toBe(closeButton)
+
+    await user.click(closeButton)
+    expect(document.activeElement).toBe(toggle)
   })
 
   it('asks for confirmation before reloading a dirty draft, and reloads on confirm', async () => {

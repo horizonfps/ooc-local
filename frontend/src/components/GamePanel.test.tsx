@@ -124,6 +124,25 @@ describe('GamePanel', () => {
     expect(document.activeElement).not.toBe(textarea)
   })
 
+  it('calls onTurnsChanged with the played turn count as history changes', async () => {
+    const user = userEvent.setup()
+    const onTurnsChanged = vi.fn()
+    mockRoutedFetch({
+      get: () => jsonResponse(session()),
+      post: () => sseResponse([{ delta: 'It creaks open.' }, '[DONE]']),
+    })
+    render(<GamePanel sessionId="sess-1" onTurnsChanged={onTurnsChanged} />)
+
+    await screen.findByText('Once upon a time.')
+    expect(onTurnsChanged).toHaveBeenCalledWith(0)
+
+    const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+    await user.type(textarea, 'I open the door.{Enter}')
+
+    await screen.findByText('It creaks open.')
+    expect(onTurnsChanged).toHaveBeenLastCalledWith(1)
+  })
+
   it('calls onNotFound once on a 404 and does not render a back button', async () => {
     const onNotFound = vi.fn()
     mockRoutedFetch({ get: () => jsonResponse({}, 404), post: () => jsonResponse({}, 404) })
