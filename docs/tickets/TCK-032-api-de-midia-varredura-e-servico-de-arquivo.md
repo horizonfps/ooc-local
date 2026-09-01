@@ -1,7 +1,7 @@
 ---
 id: TCK-032
 title: Varrer a pasta de midia do cenario e servir os arquivos
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-029, TCK-030, TCK-031]
 files:

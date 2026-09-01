@@ -1,7 +1,7 @@
 ---
 id: TCK-043
 title: Salvar o cenario com escrita seletiva, revision e 409 de conflito
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-031]
 files:

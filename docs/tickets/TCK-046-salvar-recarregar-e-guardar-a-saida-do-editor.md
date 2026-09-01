@@ -233,3 +233,7 @@ ver a mudança — e o inverso, editar por fora, recarregar e ver a tela mudar.
 | `builder.editor.leave.discard` | `Leave and discard` | `Sair e descartar` |
 | `builder.editor.validation.summaryTitle` | `Fix these before saving` | `Conserte isto antes de salvar` |
 | `builder.editor.validation.jump` | `Go to {field}` | `Ir para {field}` |
+
+## Ressalva registrada na wave 4
+
+- O PUT do TCK-043 serializa YAML em forma canonica: o primeiro save de cenario escrito a mao reescreve os arquivos e muda o revision sem edicao do usuario. Use SEMPRE o revision retornado pelo PUT como novo baseline do rascunho; nunca compare com o revision do GET anterior ao save.
