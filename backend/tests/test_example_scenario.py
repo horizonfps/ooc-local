@@ -46,11 +46,14 @@ def test_example_scenario_default_start_has_three_suggestions():
 def test_example_scenario_characters_have_complete_mind():
     scenario = load_scenario("exemplo-escola")
     for character_id in EXPECTED_CHARACTER_IDS:
-        mind = scenario.characters[character_id].mind
+        character = scenario.characters[character_id]
+        mind = character.mind
         assert mind.feeling
         assert mind.goal
         assert mind.opinion_of_player is not None
         assert mind.secret_plan is not None
+        assert len(character.emotions) >= 2
+        assert character.emotions[0] == "default"
 
 
 def test_example_scenario_world_word_count_within_budget():

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from app.hud import validate_time, validate_weather
 from app.observability import emit
@@ -36,6 +37,9 @@ class CharacterMind(BaseModel):
     secret_plan: str | None = None
 
 
+_EMOTION_RE = re.compile(r"^[a-z0-9-]+$")
+
+
 class Character(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -46,6 +50,25 @@ class Character(BaseModel):
     voice: str
     mind: CharacterMind
     sprite: str | None = None
+    anchor: bool = False
+    emotions: list[str] = Field(default_factory=lambda: ["default"])
+
+    @field_validator("emotions")
+    @classmethod
+    def _validate_emotions(cls, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for item in value:
+            item = item.strip()
+            if not _EMOTION_RE.match(item):
+                raise ValueError(f"invalid emotion '{item}', expected [a-z0-9-]+")
+            if item not in normalized:
+                normalized.append(item)
+        if "default" in normalized:
+            normalized.remove("default")
+        normalized.insert(0, "default")
+        if len(normalized) > 20:
+            raise ValueError("too many emotions, expected at most 20")
+        return normalized
 
 
 class HudDefaults(BaseModel):
@@ -88,6 +111,7 @@ class ScenarioMeta(BaseModel):
     locale: Literal["en", "pt-br"] = "pt-br"
     tags: list[str] = []
     default_start: str = "default"
+    world_mode: Literal["guided", "custom"] = "guided"
 
 
 class LoadedScenario(BaseModel):
@@ -188,35 +212,37 @@ def _load_characters(scenario_path: Path) -> dict[str, Character]:
     return characters
 
 
-def _confine_scenario_path(scenario_id: str) -> Path:
+def scenario_path(scenario_id: str) -> Path:
+    """Scenario folder confined to scenarios_dir(); raises ScenarioError otherwise.
+    Works for folders that do not exist yet."""
     root = scenarios_dir()
     if not scenario_id or scenario_id.startswith(".") or any(
         sep in scenario_id for sep in ("/", "\\", "\0")
     ):
         raise ScenarioError(root / str(scenario_id), "scenario id outside the scenarios root")
-    scenario_path = (root / scenario_id).resolve()
-    if root.resolve() not in scenario_path.parents:
-        raise ScenarioError(scenario_path, "scenario id outside the scenarios root")
-    return scenario_path
+    resolved = (root / scenario_id).resolve()
+    if root.resolve() not in resolved.parents:
+        raise ScenarioError(resolved, "scenario id outside the scenarios root")
+    return resolved
 
 
 def load_scenario(scenario_id: str) -> LoadedScenario:
-    scenario_path = _confine_scenario_path(scenario_id)
-    meta_path = scenario_path / "scenario.yaml"
+    scenario_dir = scenario_path(scenario_id)
+    meta_path = scenario_dir / "scenario.yaml"
     if not meta_path.exists():
         raise ScenarioError(meta_path, "scenario.yaml is missing")
     meta = _load_yaml(meta_path, ScenarioMeta)
 
-    world = _load_world(scenario_path)
-    starts = _load_starts(scenario_path)
-    characters = _load_characters(scenario_path)
+    world = _load_world(scenario_dir)
+    starts = _load_starts(scenario_dir)
+    characters = _load_characters(scenario_dir)
 
     for start in starts.values():
         if start.characters is not None:
             unknown = [char_id for char_id in start.characters if char_id not in characters]
             if unknown:
                 raise ScenarioError(
-                    scenario_path / "starts" / f"{start.id}.yaml",
+                    scenario_dir / "starts" / f"{start.id}.yaml",
                     f"unknown character ids: {unknown}",
                 )
 

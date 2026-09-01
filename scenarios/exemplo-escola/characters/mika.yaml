@@ -25,3 +25,4 @@ mind:
   secret_plan: >
     Sabe mais sobre o conteúdo do caderno do que admite e está escondendo isso
     do jogador para não ter que escolher um lado ainda.
+emotions: [default, smile, sad, joy]
