@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 
-export type Route = { name: 'sessions' } | { name: 'game'; id: string }
+export type Route = { name: 'sessions' } | { name: 'game'; id: string } | { name: 'builderList' }
 
 function parseHash(hash: string): Route {
   const match = /^#\/session\/([^/]+)$/.exec(hash)
   if (match) return { name: 'game', id: match[1] }
+  if (/^#\/builder\/?$/.test(hash)) return { name: 'builderList' }
   return { name: 'sessions' }
 }
 

@@ -50,8 +50,25 @@ async function request<T>(input: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
+export type BuilderScenarioItem = {
+  id: string
+  name: string
+  tagline: string | null
+  locale: string
+  startCount: number
+  characterCount: number
+  hasCover: boolean
+  updatedAt: string
+  status: 'ok' | 'invalid'
+  reason?: string
+}
+
 export function fetchScenarios(): Promise<ScenarioSummary[]> {
   return request('/api/scenarios')
+}
+
+export function fetchBuilderScenarios(): Promise<BuilderScenarioItem[]> {
+  return request('/api/builder/scenarios')
 }
 
 export function fetchSessions(): Promise<SessionSummary[]> {
