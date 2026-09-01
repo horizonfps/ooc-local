@@ -194,8 +194,8 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
     return state.status === 'ready' ? { revision: state.revision, ...state.draft } : null
   }
 
-  function applySaveSuccess(revision: string) {
-    setState((prev) => (prev.status === 'ready' ? { ...prev, loaded: prev.draft, revision } : prev))
+  function applySaveSuccess(sent: BuilderDraft, revision: string) {
+    setState((prev) => (prev.status === 'ready' ? { ...prev, loaded: sent, revision } : prev))
     setSaveStatus('idle')
     setSaveErrorKind(null)
     setValidationAttempted(false)
@@ -205,10 +205,11 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
   function doSave(force: boolean) {
     const doc = documentOf()
     if (!doc) return
+    const { revision: _sentRevision, ...sent } = doc
     setSaveStatus('saving')
     setSaveErrorKind(null)
     saveScenarioDocument(id, doc, force)
-      .then(({ revision }) => applySaveSuccess(revision))
+      .then(({ revision }) => applySaveSuccess(sent, revision))
       .catch((err) => {
         setSaveStatus('idle')
         if (err instanceof ApiError && err.status === 409) {
@@ -233,9 +234,29 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
 
   async function handleGuardSave(): Promise<void> {
     const doc = documentOf()
-    if (!doc || errors.length > 0) return
-    const { revision } = await saveScenarioDocument(id, doc)
-    applySaveSuccess(revision)
+    if (!doc) throw new Error('editor not ready')
+    if (errors.length > 0) {
+      setValidationAttempted(true)
+      throw new Error('validation failed')
+    }
+    const { revision: _sentRevision, ...sent } = doc
+    setSaveStatus('saving')
+    setSaveErrorKind(null)
+    try {
+      const { revision } = await saveScenarioDocument(id, doc)
+      applySaveSuccess(sent, revision)
+    } catch (err) {
+      setSaveStatus('idle')
+      if (err instanceof ApiError && err.status === 409) {
+        setConflictOpen(true)
+      } else if (err instanceof ApiError && err.status === 503) {
+        setSaveErrorKind('disabled')
+      } else {
+        setSaveErrorKind('generic')
+        setSaveError(err)
+      }
+      throw err
+    }
   }
 
   function handleGuardDiscard() {
