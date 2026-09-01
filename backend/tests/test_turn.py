@@ -153,6 +153,52 @@ def test_turn_records_tags_as_events(scenarios_root, monkeypatch):
     assert narrator_event.payload["text"] == "voce se sente melhor."
 
 
+def test_turn_strips_hud_echo_and_keeps_tag_events(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(
+        OpenAICompatProvider,
+        "stream_chat",
+        _make_fake_stream(
+            ["# Turno 1\nLocal: patio\nVoce anda ate a Chloe. [STAT:reputacao:+1]"]
+        ),
+    )
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "eu ajudo"}
+    ) as response:
+        _stream_events(response)
+
+    events = sessions.read_events(session["id"])
+    narrator_event = next(e for e in events if e.kind == "narrator_turn")
+    assert narrator_event.payload["text"] == "Voce anda ate a Chloe."
+    tag_events = [e for e in events if e.kind == "tag"]
+    assert len(tag_events) == 1
+
+
+def test_turn_that_is_only_hud_and_player_echo_is_treated_as_failure(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(
+        OpenAICompatProvider, "stream_chat", _make_fake_stream(["# Turno 1\n**Você** | ando"])
+    )
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "eu ajudo"}
+    ) as response:
+        events = _stream_events(response)
+
+    assert any("error" in e for e in events)
+    assert all("hud" not in e for e in events)
+    assert sessions.read_events(session["id"]) == []
+
+
 def test_turn_second_turn_includes_previous_pair_in_context(scenarios_root, monkeypatch):
     _write_scenario(scenarios_root)
     monkeypatch.setattr(main, "load_config", lambda: _config())

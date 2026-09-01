@@ -5,7 +5,7 @@ import re
 from app.hud import HudState
 from app.scenario import Character, LoadedScenario, StartConfig
 
-MASTER_PROMPT_VERSION = 2
+MASTER_PROMPT_VERSION = 3
 
 WEATHER_LABELS: dict[str, dict[str, str]] = {
     "pt-br": {
@@ -78,6 +78,11 @@ _TEMPLATES = {
             "Você pode emitir as tags inline [STAT:nome:±N], "
             "[SPRITE:personagem:emocao] e [BG:local], sempre coladas ao trecho "
             "a que se referem.\n"
+            "Nunca escreva bloco de HUD, cabeçalho de turno nem linhas como "
+            "\"Local:\", \"Hora:\" ou \"Clima:\" — isso é estado do engine e já "
+            "aparece na tela.\n"
+            "Nunca repita a ação do jogador como fala: a linha **Você** | ... "
+            "é proibida.\n"
             "Responda em português do Brasil."
         ),
     },
@@ -115,6 +120,11 @@ _TEMPLATES = {
             "You may emit the inline tags [STAT:name:±N], "
             "[SPRITE:character:emotion] and [BG:place], always attached to "
             "the passage they refer to.\n"
+            "Never write a HUD block, a turn heading or lines like "
+            "\"Location:\", \"Time:\" or \"Weather:\" — that is engine state "
+            "and is already on screen.\n"
+            "Never repeat the player's action as speech: the line "
+            "**You** | ... is forbidden.\n"
             "Respond in English."
         ),
     },
