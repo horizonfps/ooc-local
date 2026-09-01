@@ -1,7 +1,7 @@
 ---
 id: TCK-052
 title: Acrescentar dois personagens fora de cena ao cenário exemplo
-status: ready
+status: in_review
 points: 2
 blockedBy: []
 files:
