@@ -5,7 +5,7 @@ import re
 from app.hud import HudState
 from app.scenario import Character, LoadedScenario, StartConfig
 
-MASTER_PROMPT_VERSION = 3
+MASTER_PROMPT_VERSION = 4
 
 WEATHER_LABELS: dict[str, dict[str, str]] = {
     "pt-br": {
@@ -76,8 +76,11 @@ _TEMPLATES = {
             "nunca reescreva HUD, relógio ou ficha de status dentro do texto, "
             "isso é estado do engine.\n"
             "Você pode emitir as tags inline [STAT:nome:±N], "
-            "[SPRITE:personagem:emocao] e [BG:local], sempre coladas ao trecho "
-            "a que se referem.\n"
+            "[SPRITE:personagem:emocao], [BG:local] e [LOC:local], sempre "
+            "coladas ao trecho a que se referem.\n"
+            "Quando a cena mudar de lugar, emita [LOC:nome do local] com o "
+            "nome do lugar em português, curto, no máximo 60 caracteres. O "
+            "HUD só muda de local por essa tag.\n"
             "Nunca escreva bloco de HUD, cabeçalho de turno nem linhas como "
             "\"Local:\", \"Hora:\" ou \"Clima:\" — isso é estado do engine e já "
             "aparece na tela.\n"
@@ -118,8 +121,11 @@ _TEMPLATES = {
             "rewrite HUD, clock or status sheet inside the text, that is "
             "engine state.\n"
             "You may emit the inline tags [STAT:name:±N], "
-            "[SPRITE:character:emotion] and [BG:place], always attached to "
-            "the passage they refer to.\n"
+            "[SPRITE:character:emotion], [BG:place] and [LOC:place], always "
+            "attached to the passage they refer to.\n"
+            "When the scene moves to another place, emit [LOC:place name] "
+            "with a short name, at most 60 characters. The HUD only changes "
+            "location through this tag.\n"
             "Never write a HUD block, a turn heading or lines like "
             "\"Location:\", \"Time:\" or \"Weather:\" — that is engine state "
             "and is already on screen.\n"

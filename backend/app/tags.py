@@ -23,6 +23,8 @@ def _validate(kind: str, args: list[str]) -> bool:
         return len(args) == 2 and all(args)
     if kind == "BG":
         return len(args) == 1 and bool(args[0])
+    if kind == "LOC":
+        return len(args) == 1 and bool(args[0])
     return True
 
 
