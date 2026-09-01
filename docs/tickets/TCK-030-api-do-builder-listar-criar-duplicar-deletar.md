@@ -1,7 +1,7 @@
 ---
 id: TCK-030
 title: Expor a API do builder para listar, criar, duplicar e deletar cenario
-status: ready
+status: done
 points: 5
 blockedBy: [TCK-029]
 files:

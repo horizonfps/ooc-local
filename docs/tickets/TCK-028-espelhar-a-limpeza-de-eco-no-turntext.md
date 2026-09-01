@@ -1,7 +1,7 @@
 ---
 id: TCK-028
 title: Espelhar no TurnText a limpeza de eco do engine durante o stream
-status: ready
+status: done
 points: 2
 blockedBy: [TCK-026]
 files:

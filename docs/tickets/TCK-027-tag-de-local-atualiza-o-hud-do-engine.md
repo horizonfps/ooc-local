@@ -1,7 +1,7 @@
 ---
 id: TCK-027
 title: Atualizar o local do HUD pela tag [LOC:] emitida no turno
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-026]
 files:
