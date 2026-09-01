@@ -1,7 +1,7 @@
 ---
 id: TCK-033
 title: Criar e descartar sessao efemera para o preview do builder
-status: ready
+status: in_review
 points: 3
 blockedBy: []
 files:

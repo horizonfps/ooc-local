@@ -1229,5 +1229,6 @@ def test_init_db_migrates_old_schema_with_compact_but_no_compact_seq(tmp_path, m
         "hud",
         "compact",
         "compact_seq",
+        "ephemeral",
     }
     assert sessions.get_compact("s1") == (None, None)

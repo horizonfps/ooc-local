@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   updated_at    TEXT NOT NULL,
   hud           TEXT NOT NULL,
   compact       TEXT,
-  compact_seq   INTEGER
+  compact_seq   INTEGER,
+  ephemeral     INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS events (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,6 +44,10 @@ NewEvent = tuple[str, dict]
 
 
 class SessionNotFound(Exception):
+    pass
+
+
+class SessionNotEphemeral(Exception):
     pass
 
 
@@ -123,6 +128,8 @@ def _migrate_session_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE sessions ADD COLUMN compact TEXT")
     if "compact_seq" not in columns:
         conn.execute("ALTER TABLE sessions ADD COLUMN compact_seq INTEGER")
+    if "ephemeral" not in columns:
+        conn.execute("ALTER TABLE sessions ADD COLUMN ephemeral INTEGER NOT NULL DEFAULT 0")
     conn.commit()
 
 
@@ -132,13 +139,16 @@ def init_db() -> None:
         _migrate_session_columns(conn)
     finally:
         conn.close()
+    purge_ephemeral_sessions()
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def create_session(scenario_id: str, start_id: str | None = None) -> SessionDetail:
+def create_session(
+    scenario_id: str, start_id: str | None = None, ephemeral: bool = False
+) -> SessionDetail:
     try:
         scenario = load_scenario(scenario_id)
     except ScenarioError:
@@ -157,9 +167,18 @@ def create_session(scenario_id: str, start_id: str | None = None) -> SessionDeta
         with conn:
             conn.execute(
                 "INSERT INTO sessions "
-                "(id, scenario_id, scenario_name, start_id, created_at, updated_at, hud) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (session_id, scenario_id, scenario.meta.name, start.id, now, now, hud.model_dump_json()),
+                "(id, scenario_id, scenario_name, start_id, created_at, updated_at, hud, ephemeral) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    session_id,
+                    scenario_id,
+                    scenario.meta.name,
+                    start.id,
+                    now,
+                    now,
+                    hud.model_dump_json(),
+                    int(ephemeral),
+                ),
             )
     except sqlite3.Error as exc:
         emit("session_db_error", op="create_session", error=str(exc))
@@ -167,7 +186,13 @@ def create_session(scenario_id: str, start_id: str | None = None) -> SessionDeta
     finally:
         conn.close()
 
-    emit("session_created", session_id=session_id, scenario_id=scenario_id, start_id=start.id)
+    emit(
+        "session_created",
+        session_id=session_id,
+        scenario_id=scenario_id,
+        start_id=start.id,
+        ephemeral=ephemeral,
+    )
 
     return SessionDetail(
         id=session_id,
@@ -188,6 +213,7 @@ def list_sessions() -> list[SessionSummary]:
             SELECT s.id, s.scenario_id, s.scenario_name, s.updated_at, s.created_at, s.hud,
                    (SELECT COUNT(*) FROM events e WHERE e.session_id = s.id AND e.kind = 'player_turn')
             FROM sessions s
+            WHERE s.ephemeral = 0
             ORDER BY s.updated_at DESC, s.created_at DESC, s.id DESC
             """
         )
@@ -253,6 +279,51 @@ def get_session(session_id: str) -> SessionDetail:
         turns=turns,
         hud=row.hud,
     )
+
+
+def delete_session(session_id: str) -> None:
+    conn = _connect()
+    try:
+        cur = conn.execute("SELECT ephemeral FROM sessions WHERE id = ?", (session_id,))
+        row = cur.fetchone()
+        if row is None:
+            raise SessionNotFound(session_id)
+        if row[0] == 0:
+            raise SessionNotEphemeral(session_id)
+
+        conn.execute("BEGIN IMMEDIATE")
+        cur = conn.execute("DELETE FROM events WHERE session_id = ?", (session_id,))
+        events_deleted = cur.rowcount
+        conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        conn.commit()
+    except sqlite3.Error as exc:
+        conn.rollback()
+        emit("session_db_error", op="delete_session", error=str(exc))
+        raise
+    finally:
+        conn.close()
+
+    emit("session_deleted", session_id=session_id, events=events_deleted)
+
+
+def purge_ephemeral_sessions() -> int:
+    conn = _connect()
+    try:
+        cur = conn.execute("SELECT id FROM sessions WHERE ephemeral = 1")
+        ids = [row[0] for row in cur.fetchall()]
+        if not ids:
+            return 0
+
+        with conn:
+            for session_id in ids:
+                conn.execute("DELETE FROM events WHERE session_id = ?", (session_id,))
+                conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+    finally:
+        conn.close()
+
+    count = len(ids)
+    emit("ephemeral_sessions_purged", count=count)
+    return count
 
 
 def read_events(session_id: str, kinds: tuple[str, ...] | None = None) -> list[Event]:
