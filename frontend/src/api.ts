@@ -164,6 +164,12 @@ export async function saveScenarioDocument(
   return response.json() as Promise<{ revision: string }>
 }
 
+export type MediaIndex = { cover: string | null; sprites: Record<string, Record<string, string>>; backgrounds: Record<string, string> }
+
+export function fetchMediaIndex(id: string): Promise<MediaIndex> {
+  return request(`/api/builder/scenarios/${id}/media`)
+}
+
 export type MediaTarget = { kind: 'cover' | 'sprite' | 'background'; key: string; character?: string }
 
 export async function uploadMedia(id: string, target: MediaTarget, file: File): Promise<{ path: string; url: string }> {
