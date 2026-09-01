@@ -36,6 +36,7 @@ export type SessionAssets = {
   sprites: Record<string, Record<string, string>>
   backgrounds: Record<string, string>
 }
+export type CastMember = { id: string; name: string }
 export type SessionDetail = {
   id: string
   scenarioId: string
@@ -45,6 +46,7 @@ export type SessionDetail = {
   turns: TurnView[]
   hud: HudState
   assets: SessionAssets
+  cast: CastMember[]
 }
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
@@ -222,13 +224,15 @@ export async function deleteSession(id: string, opts?: { keepalive?: boolean }):
   }
 }
 
+export type TurnHudPayload = HudState & { cast?: CastMember[] }
+
 export type TurnHandlers = {
   onDelta: (delta: string) => void
-  onHud: (hud: HudState) => void
+  onHud: (hud: TurnHudPayload) => void
   onError: (err: unknown) => void
 }
 
-type TurnEvent = { delta?: string; hud?: HudState; error?: string }
+type TurnEvent = { delta?: string; hud?: TurnHudPayload; error?: string }
 
 export type TurnOptions = { signal?: AbortSignal }
 
