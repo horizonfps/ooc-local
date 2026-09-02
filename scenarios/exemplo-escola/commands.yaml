@@ -1,0 +1,8 @@
+- name: fofoca
+  description: O que andam dizendo de você pelas costas
+  prompt: >
+    Fora da narrativa, e sem avançar a história, liste o que cada personagem em
+    cena andaria dizendo de você pelas costas neste momento. Uma linha por
+    personagem, no tom de conversa de corredor, coerente com o que já aconteceu
+    até aqui. Não invente personagem que não está em cena e não escreva nenhuma
+    ação nova.

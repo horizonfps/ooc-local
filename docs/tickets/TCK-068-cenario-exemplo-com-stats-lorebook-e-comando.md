@@ -1,7 +1,7 @@
 ---
 id: TCK-068
 title: Dar stats, lorebook e comando ao cenário exemplo da escola
-status: ready
+status: in_review
 points: 2
 blockedBy: [TCK-060]
 files:
