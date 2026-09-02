@@ -142,8 +142,12 @@ def global_commands_path() -> Path:
 def load_global_commands(path: Path | None = None) -> list[GlobalCommandDef]:
     resolved = path if path is not None else global_commands_path()
     if not resolved.exists():
-        resolved.parent.mkdir(parents=True, exist_ok=True)
-        resolved.write_text(DEFAULT_GLOBAL_COMMANDS, encoding="utf-8")
+        try:
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            resolved.write_text(DEFAULT_GLOBAL_COMMANDS, encoding="utf-8")
+        except OSError as exc:
+            emit("commands_file_invalid", path=str(resolved), error=_clip(str(exc)))
+            return _default_commands()
 
     try:
         raw = resolved.read_text(encoding="utf-8")

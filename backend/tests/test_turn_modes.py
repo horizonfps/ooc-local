@@ -185,6 +185,31 @@ def test_turn_second_turn_sees_previous_turn_labeled_in_window(scenarios_root, m
     assert ("user", '(Fala) "primeira mensagem"') in roles_contents
 
 
+def test_turn_window_labels_follow_the_scenario_locale(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root, locale="en")
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", _make_fake_stream(["first reply"]))
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "first move", "mode": "do"}
+    ) as response:
+        _stream_events(response)
+
+    captured: list = []
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", _make_fake_stream(["second reply"], captured=captured))
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "second move", "mode": "do"}
+    ) as response:
+        _stream_events(response)
+
+    contents = [m.content for m in captured[0] if m.role == "user"]
+    assert "(Action) first move" in contents
+    assert not any("(Ação)" in content for content in contents)
+
+
 def test_turn_without_mode_user_is_raw_and_payload_has_no_mode_key(scenarios_root, monkeypatch):
     _write_scenario(scenarios_root)
     monkeypatch.setattr(main, "load_config", lambda: _config())

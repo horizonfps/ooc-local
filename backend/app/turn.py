@@ -136,7 +136,7 @@ def build_context(
         windowed = history
 
     messages = [ChatMessage(role="system", content=system)]
-    messages.extend(events_to_messages(windowed))
+    messages.extend(events_to_messages(windowed, ctx.scenario.meta.locale))
     messages.append(ChatMessage(role="user", content=message))
     return messages
 
@@ -268,12 +268,13 @@ async def run_turn(
 
         if command is not None:
             hud = ctx.row.hud
-            compact, _ = get_compact(session_id)
+            compact, compact_seq = get_compact(session_id)
             system = build_master_prompt(
                 ctx.scenario, ctx.start, ctx.row.hud, ctx.characters, compact, minds=ctx.minds
             )
+            # Turns already folded into the summary stay out of the meta window too.
             window = events_to_messages(
-                history_events(session_id, None)[-(WINDOW_TURNS * 2) :], ctx.scenario.meta.locale
+                history_events(session_id, compact_seq)[-(WINDOW_TURNS * 2) :], ctx.scenario.meta.locale
             )
             messages = [
                 ChatMessage(role="system", content=system),
@@ -290,6 +291,16 @@ async def run_turn(
             clean_text, _ = parse_tags(raw_text)
             clean_text, stripped_lines = strip_engine_echo(clean_text)
             if not clean_text.strip():
+                emit(
+                    "meta_turn",
+                    session_id=session_id,
+                    command=command.name,
+                    scope=command.scope,
+                    chars=len(raw_text),
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                    model=role.model,
+                    error="empty turn",
+                )
                 yield {"error": "empty turn"}
                 return
 
@@ -309,6 +320,7 @@ async def run_turn(
                 chars=len(raw_text),
                 duration_ms=int((time.monotonic() - started) * 1000),
                 model=role.model,
+                error=None,
             )
             return
 
@@ -317,7 +329,8 @@ async def run_turn(
             decision = None
             try:
                 window = events_to_messages(
-                    history_events(session_id, None)[-(DIRECTOR_WINDOW_TURNS * 2) :]
+                    history_events(session_id, None)[-(DIRECTOR_WINDOW_TURNS * 2) :],
+                    ctx.scenario.meta.locale,
                 )
                 decision = await decide_scene(
                     ctx.scenario, ctx.row.hud, ctx.cast_ids, message, window, config
