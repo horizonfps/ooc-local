@@ -1,6 +1,7 @@
 import { t } from '../i18n'
 import type { InputMode } from '../api'
 import './modeSelector.css'
+import './states.css'
 
 const MODES: InputMode[] = ['do', 'say', 'story']
 

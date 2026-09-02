@@ -328,7 +328,7 @@ export async function streamTurn(sessionId: string, message: string, h: TurnHand
           h.onDelta(parsed.delta)
         } else if (parsed.hud !== undefined) {
           h.onHud(parsed.hud)
-        } else if (parsed.suggestions !== undefined) {
+        } else if (Array.isArray(parsed.suggestions)) {
           h.onSuggestions(parsed.suggestions)
         }
       }

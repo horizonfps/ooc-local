@@ -374,7 +374,6 @@ export function GamePanel(props: GamePanelProps) {
 
   const handleSendSuggestion = (text: string) => {
     if (turnPhase === 'streaming') return
-    setDraft('')
     void runTurn(text)
   }
 
