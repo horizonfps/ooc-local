@@ -367,7 +367,7 @@ export function GamePanel(props: GamePanelProps) {
       }
     } catch (err) {
       if (controller.signal.aborted) return
-      if (err instanceof ApiError && err.status === 422) {
+      if (err instanceof ApiError && err.status === 422 && err.detail === 'unknown_command') {
         setPending((p) =>
           p
             ? {
@@ -383,8 +383,7 @@ export function GamePanel(props: GamePanelProps) {
               }
             : p,
         )
-        setHudStale(true)
-        setDraft(message)
+        handleDraftChange(message)
         return
       }
       const classified = classifyError(err)
