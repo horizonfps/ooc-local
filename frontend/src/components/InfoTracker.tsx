@@ -27,7 +27,7 @@ export function InfoTracker(props: {
           <ul className="info__list">
             {cast.map((member) => {
               const name = member.name || member.id
-              const mind = minds?.[member.id]
+              const mind = minds != null && Object.prototype.hasOwnProperty.call(minds, member.id) ? minds[member.id] : undefined
               return (
                 <li key={member.id} className="info__row">
                   <span className="info__emoji" aria-hidden="true">

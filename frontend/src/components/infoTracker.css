@@ -17,6 +17,11 @@
   font-size: 0.9rem;
 }
 
+.info__body {
+  max-height: 28vh;
+  overflow-y: auto;
+}
+
 .info__body[aria-busy='true'] {
   opacity: 0.7;
 }
