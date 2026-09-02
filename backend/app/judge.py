@@ -24,8 +24,10 @@ _PROMPT_TEMPLATES = {
     "pt-br": {
         "system": (
             "Avalie o turno e proponha ajustes de atributos. Responda apenas o "
-            'objeto JSON {"stats": {"id": -5}}, usando só ids da lista dada, '
-            f"delta inteiro entre -{JUDGE_MAX_DELTA} e +{JUDGE_MAX_DELTA}, "
+            'objeto JSON {"stats": {"id": N}}, usando só ids da lista dada, '
+            f"N inteiro entre -{JUDGE_MAX_DELTA} e +{JUDGE_MAX_DELTA}: positivo "
+            "quando a narração beneficia o jogador nesse atributo, negativo "
+            "quando prejudica. Omita ids sem consequência clara na narração; "
             "{} quando nada mudou. Sem prosa."
         ),
         "system_dynamic": (
@@ -40,9 +42,11 @@ _PROMPT_TEMPLATES = {
     "en": {
         "system": (
             "Judge the turn and propose stat adjustments. Respond only with the "
-            'JSON object {"stats": {"id": -5}}, using only ids from the given '
-            f"list, integer delta between -{JUDGE_MAX_DELTA} and "
-            f"+{JUDGE_MAX_DELTA}, {{}} when nothing changed. No prose."
+            'JSON object {"stats": {"id": N}}, using only ids from the given '
+            f"list, N an integer between -{JUDGE_MAX_DELTA} and "
+            f"+{JUDGE_MAX_DELTA}: positive when the narration benefits the "
+            "player on that stat, negative when it hurts. Omit ids with no clear "
+            "consequence in the narration; {} when nothing changed. No prose."
         ),
         "system_dynamic": (
             ' You may also propose a new stat in "new": '
