@@ -31,10 +31,11 @@ from app.hud import (
 from app.judge import JUDGE_RAW_LOG_CHARS, JudgeError, apply_judgement, judge_turn
 from app.llm.base import ChatMessage
 from app.llm.openai_compat import OpenAICompatProvider
+from app.lore import LORE_SCAN_TURNS, build_scan_text, lore_ids, render_lore, select_lore
 from app.minds import MINDS_RAW_LOG_CHARS, MindsError, merge_minds, think_minds
 from app.observability import emit
 from app.prompt import MASTER_PROMPT_VERSION, build_master_prompt, format_player_message
-from app.scenario import Character, LoadedScenario, ScenarioError, StartConfig, load_scenario
+from app.scenario import Character, LoadedScenario, LoreEntry, ScenarioError, StartConfig, load_scenario
 from app.sessions import (
     Event,
     ScenarioNotFound,
@@ -60,6 +61,7 @@ class TurnContext(BaseModel):
     characters: list[Character]
     cast_ids: list[str]
     minds: dict[str, MindView] = {}
+    lore: list[LoreEntry] = []
 
 
 def load_turn_context(session_id: str) -> TurnContext:
@@ -127,7 +129,9 @@ def build_context(
     if ctx is None:
         ctx = load_turn_context(session_id)
 
-    system = build_master_prompt(ctx.scenario, ctx.start, ctx.row.hud, ctx.characters, compact, ctx.minds)
+    system = build_master_prompt(
+        ctx.scenario, ctx.start, ctx.row.hud, ctx.characters, compact, ctx.minds, lore=ctx.lore
+    )
 
     if history is None:
         events = history_events(session_id, None)
@@ -266,11 +270,26 @@ async def run_turn(
         role_model = role.model
         provider = OpenAICompatProvider(config.providers[role.provider])
 
+        if config.flag("lorebook") and ctx.scenario.lorebook:
+            lore_window = events_to_messages(
+                history_events(session_id, None)[-(LORE_SCAN_TURNS * 2) :], ctx.scenario.meta.locale
+            )
+            scan_text = build_scan_text(lore_window, message)
+            ctx = ctx.model_copy(update={"lore": select_lore(ctx.scenario, scan_text)})
+            emit(
+                "lore_injected",
+                session_id=session_id,
+                turn=ctx.row.hud.turn,
+                ids=lore_ids(ctx.scenario, ctx.lore),
+                tokens=estimate_tokens(render_lore(ctx.lore) or ""),
+                candidates=sum(1 for entry in ctx.scenario.lorebook.values() if entry.enabled),
+            )
+
         if command is not None:
             hud = ctx.row.hud
             compact, compact_seq = get_compact(session_id)
             system = build_master_prompt(
-                ctx.scenario, ctx.start, ctx.row.hud, ctx.characters, compact, minds=ctx.minds
+                ctx.scenario, ctx.start, ctx.row.hud, ctx.characters, compact, minds=ctx.minds, lore=ctx.lore
             )
             # Turns already folded into the summary stay out of the meta window too.
             window = events_to_messages(
