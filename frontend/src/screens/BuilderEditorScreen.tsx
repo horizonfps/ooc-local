@@ -3,6 +3,7 @@ import { ApiError, fetchScenarioDocument, saveScenarioDocument, type ScenarioDoc
 import { deepEqual, validateDraft } from '../builder/validate'
 import { BuilderPreview } from '../components/builder/BuilderPreview'
 import { CharactersTab } from '../components/builder/CharactersTab'
+import { CommandsTab } from '../components/builder/CommandsTab'
 import { IdentityTab } from '../components/builder/IdentityTab'
 import { LorebookTab } from '../components/builder/LorebookTab'
 import { MediaTab } from '../components/builder/MediaTab'
@@ -31,7 +32,7 @@ export type TabProps = {
   goToTab: (tab: BuilderTab) => void
 }
 
-const TAB_ORDER: readonly BuilderTab[] = ['identity', 'world', 'starts', 'characters', 'stats', 'lorebook', 'media']
+const TAB_ORDER: readonly BuilderTab[] = ['identity', 'world', 'starts', 'characters', 'stats', 'lorebook', 'commands', 'media']
 
 const TAB_LABEL_KEY: Record<BuilderTab, StringKey> = {
   identity: 'builder.editor.tab.identity',
@@ -40,6 +41,7 @@ const TAB_LABEL_KEY: Record<BuilderTab, StringKey> = {
   characters: 'builder.editor.tab.characters',
   stats: 'builder.editor.tab.stats',
   lorebook: 'builder.editor.tab.lorebook',
+  commands: 'builder.editor.tab.commands',
   media: 'builder.editor.tab.media',
 }
 
@@ -72,6 +74,8 @@ function slice(tab: BuilderTab, draft: BuilderDraft): unknown {
       return { stats: draft.stats, allow_dynamic_stats: draft.meta.allow_dynamic_stats }
     case 'lorebook':
       return draft.lorebook
+    case 'commands':
+      return draft.commands
     case 'media':
       return null
   }
@@ -117,6 +121,14 @@ function demoEdit(tab: BuilderTab, draft: BuilderDraft): BuilderDraft {
       const entry = draft.lorebook[id]
       const nextTitle = entry.title.endsWith(DEMO_MARK) ? entry.title.slice(0, -DEMO_MARK.length) : entry.title + DEMO_MARK
       return { ...draft, lorebook: { ...draft.lorebook, [id]: { ...entry, title: nextTitle } } }
+    }
+    case 'commands': {
+      if (draft.commands.length === 0) return draft
+      const [first, ...rest] = draft.commands
+      const nextDescription = first.description.endsWith(DEMO_MARK)
+        ? first.description.slice(0, -DEMO_MARK.length)
+        : first.description + DEMO_MARK
+      return { ...draft, commands: [{ ...first, description: nextDescription }, ...rest] }
     }
     case 'media':
       return draft
@@ -638,6 +650,8 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
                   <StatsTab {...tabProps} />
                 ) : activeTab === 'lorebook' ? (
                   <LorebookTab {...tabProps} />
+                ) : activeTab === 'commands' ? (
+                  <CommandsTab {...tabProps} />
                 ) : activeTab === 'media' ? (
                   <MediaTab {...tabProps} />
                 ) : (

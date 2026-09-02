@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BuilderDraft } from '../screens/BuilderEditorScreen'
-import type { LoreEntryDoc, StatDef } from '../api'
+import type { CommandDoc, LoreEntryDoc, StatDef } from '../api'
 import { validateDraft } from './validate'
 import { t } from '../i18n'
 
@@ -27,6 +27,15 @@ function stat(overrides: Partial<StatDef> = {}): StatDef {
     default: 40,
     description: null,
     levels: [],
+    ...overrides,
+  }
+}
+
+function command(overrides: Partial<CommandDoc> = {}): CommandDoc {
+  return {
+    name: 'fofoca',
+    description: 'O que andam dizendo',
+    prompt: 'Fora da narrativa, liste o que os NPCs estao comentando.',
     ...overrides,
   }
 }
@@ -287,5 +296,40 @@ describe('validateDraft', () => {
   it('accepts an empty body', () => {
     const errors = validateDraft(draft({ lorebook: { caderno: loreEntry({ body: '' }) } }))
     expect(errors.some((e) => e.tab === 'lorebook' && e.field.startsWith('lorebook.caderno'))).toBe(false)
+  })
+
+  it('does not complain about a scenario with no commands', () => {
+    const errors = validateDraft(draft({ commands: [] }))
+    expect(errors.some((e) => e.tab === 'commands')).toBe(false)
+  })
+
+  it('flags a command name outside the pattern, and allows underscores', () => {
+    const errors = validateDraft(draft({ commands: [command({ name: 'Fofoca' })] }))
+    expect(
+      errors.some(
+        (e) => e.tab === 'commands' && e.field === 'commands.0.name' && e.message === t('builder.field.slugUnderscoreInvalid'),
+      ),
+    ).toBe(true)
+
+    const okErrors = validateDraft(draft({ commands: [command({ name: 'fofoca_2' })] }))
+    expect(okErrors.some((e) => e.tab === 'commands' && e.field === 'commands.0.name')).toBe(false)
+  })
+
+  it('flags a duplicated name only from the second command onward', () => {
+    const errors = validateDraft(draft({ commands: [command({ name: 'fofoca' }), command({ name: 'fofoca' })] }))
+    expect(errors.some((e) => e.tab === 'commands' && e.field === 'commands.0.name')).toBe(false)
+    expect(
+      errors.some(
+        (e) => e.tab === 'commands' && e.field === 'commands.1.name' && e.message === t('builder.field.slugTaken', { slug: 'fofoca' }),
+      ),
+    ).toBe(true)
+  })
+
+  it('flags an empty prompt and accepts an empty description', () => {
+    const errors = validateDraft(draft({ commands: [command({ description: '', prompt: '' })] }))
+    expect(
+      errors.some((e) => e.tab === 'commands' && e.field === 'commands.0.prompt' && e.message === t('builder.field.required')),
+    ).toBe(true)
+    expect(errors.some((e) => e.tab === 'commands' && e.field === 'commands.0.description')).toBe(false)
   })
 })
