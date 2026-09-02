@@ -1,7 +1,7 @@
 ---
 id: TCK-075
 title: Selecionar lore por keyword no turno e injetar a seção no prompt
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-060, TCK-064, TCK-072]
 files:
