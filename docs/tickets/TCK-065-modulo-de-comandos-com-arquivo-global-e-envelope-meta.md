@@ -1,7 +1,7 @@
 ---
 id: TCK-065
 title: Criar o módulo de comandos com arquivo global, resolução por sinal e envelope meta
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-060]
 files:

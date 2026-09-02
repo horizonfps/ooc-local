@@ -1,7 +1,7 @@
 ---
 id: TCK-066
 title: Aba Stats do editor de cenário com validação
-status: in_review
+status: done
 points: 5
 blockedBy: [TCK-060]
 files:

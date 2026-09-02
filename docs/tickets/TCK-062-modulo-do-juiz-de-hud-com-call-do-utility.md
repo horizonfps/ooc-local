@@ -1,7 +1,7 @@
 ---
 id: TCK-062
 title: Criar o módulo do juiz de HUD com o call do utility e o aplicador determinístico
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-060]
 files:

@@ -1,7 +1,7 @@
 ---
 id: TCK-067
 title: Barras de stat e bloco INFO na tela de jogo
-status: in_review
+status: done
 points: 5
 blockedBy: [TCK-060]
 files:
