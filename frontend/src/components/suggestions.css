@@ -1,0 +1,40 @@
+.suggestions {
+  flex-basis: 100%;
+}
+
+.suggestions__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.suggestions__item {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.suggestions__chip {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  overflow-wrap: anywhere;
+  border-radius: 8px;
+  border: 1px solid #33363f;
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+.suggestions__edit {
+  flex: none;
+  padding: 0 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #33363f;
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+}

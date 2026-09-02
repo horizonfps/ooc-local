@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GamePanel } from './GamePanel'
@@ -53,13 +53,20 @@ function mockRoutedFetch(opts: {
 }) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     if (init?.method === 'POST') {
-      const body = JSON.parse(String(init.body)) as { message: string }
+      const body = JSON.parse(String(init.body)) as { message: string; mode?: string }
       return opts.post(body.message)
     }
     return opts.get(String(input))
   })
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
+}
+
+function postBodies(fetchMock: ReturnType<typeof vi.fn>): Array<{ message: string; mode?: string }> {
+  return fetchMock.mock.calls
+    .map((call) => call[1] as RequestInit | undefined)
+    .filter((init): init is RequestInit => init?.method === 'POST')
+    .map((init) => JSON.parse(String(init.body)))
 }
 
 beforeEach(() => {
@@ -69,6 +76,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals()
   location.hash = ''
+  localStorage.clear()
 })
 
 describe('GamePanel', () => {
@@ -119,6 +127,13 @@ describe('GamePanel', () => {
       expect(label.getAttribute('for')).toBe(textareas[i].id)
     })
     expect(textareas[0].id).not.toBe(textareas[1].id)
+
+    const user = userEvent.setup()
+    const sayRadios = screen.getAllByRole('radio', { name: t('game.mode.say') })
+    expect(sayRadios).toHaveLength(2)
+    await user.click(sayRadios[0])
+    expect(sayRadios[0]).toBeChecked()
+    expect(sayRadios[1]).not.toBeChecked()
   })
 
   it('does not steal focus on mount when autoFocusInput is false', async () => {
@@ -164,10 +179,6 @@ describe('GamePanel', () => {
       sprites: { chloe: { default: '/media/chloe/default.png', sad: '/media/chloe/sad.png' } },
       backgrounds: { patio: '/media/backgrounds/patio.png' },
     }
-
-    afterEach(() => {
-      localStorage.clear()
-    })
 
     it('renders the background layer and a sprite with an interpolated alt when a turn carries tags', async () => {
       const user = userEvent.setup()
@@ -606,6 +617,205 @@ describe('GamePanel', () => {
       expect(document.querySelector('.info--stale')).not.toBeNull()
       expect(screen.getByText(t('hud.stat.value', { value: 55, max: 100 }))).toBeInTheDocument()
       expect(screen.getByText('desconfiada')).toBeInTheDocument()
+    })
+  })
+
+  describe('suggestions', () => {
+    it('sends the suggestion text with the picked mode in the request body', async () => {
+      const user = userEvent.setup()
+      const fetchMock = mockRoutedFetch({
+        get: () => jsonResponse(session({ suggestions: ['Pegar o caderno'] })),
+        post: () => sseResponse(['[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      await user.click(screen.getByRole('radio', { name: t('game.mode.say') }))
+      await user.click(screen.getByRole('button', { name: t('game.suggest.send.aria', { text: 'Pegar o caderno' }) }))
+
+      await waitFor(() => expect(postBodies(fetchMock)).toHaveLength(1))
+      expect(postBodies(fetchMock)[0]).toEqual({ message: 'Pegar o caderno', mode: 'say' })
+    })
+
+    it('sends the default mode explicitly', async () => {
+      const user = userEvent.setup()
+      const fetchMock = mockRoutedFetch({ get: () => jsonResponse(session()), post: () => sseResponse(['[DONE]']) })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      await waitFor(() => expect(postBodies(fetchMock)).toHaveLength(1))
+      expect(postBodies(fetchMock)[0]).toEqual({ message: 'go', mode: 'do' })
+    })
+
+    it('replaces the chips with the ones from the SSE suggestions event', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ suggestions: ['Old suggestion'] })),
+        post: () => sseResponse([{ delta: 'Ok.' }, { suggestions: ['A', 'B', 'C'] }, '[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      expect(screen.getByRole('button', { name: t('game.suggest.send.aria', { text: 'Old suggestion' }) })).toBeInTheDocument()
+
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      await screen.findByRole('button', { name: t('game.suggest.send.aria', { text: 'A' }) })
+      expect(screen.getByRole('button', { name: t('game.suggest.send.aria', { text: 'B' }) })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: t('game.suggest.send.aria', { text: 'C' }) })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: t('game.suggest.send.aria', { text: 'Old suggestion' }) })).toBeNull()
+    })
+
+    it('hides the chips during the stream and brings them back after', async () => {
+      const user = userEvent.setup()
+      let releaseStream: (() => void) | undefined
+      const streamGate = new Promise<void>((resolve) => {
+        releaseStream = resolve
+      })
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ suggestions: ['Pegar o caderno'] })),
+        post: async () => {
+          await streamGate
+          return sseResponse(['[DONE]'])
+        },
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      expect(screen.queryByRole('group', { name: t('game.suggest.regionLabel') })).toBeNull()
+
+      releaseStream?.()
+      await waitFor(() => expect(screen.getByRole('group', { name: t('game.suggest.regionLabel') })).toBeInTheDocument())
+    })
+
+    it('keeps the previous chips when the turn brings no suggestions event', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ suggestions: ['Pegar o caderno'] })),
+        post: () =>
+          sseResponse([{ delta: 'Ok.' }, { hud: { turn: 1, location: 'Yard', time: 'Day', weather: 'clear' } }, '[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      await screen.findByText('Yard')
+      expect(screen.getByRole('button', { name: t('game.suggest.send.aria', { text: 'Pegar o caderno' }) })).toBeInTheDocument()
+    })
+
+    it('edit puts the text in the textarea and focuses it', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({ get: () => jsonResponse(session({ suggestions: ['Pegar o caderno'] })), post: () => sseResponse(['[DONE]']) })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      await user.click(screen.getByRole('button', { name: t('game.suggest.edit.aria', { text: 'Pegar o caderno' }) }))
+
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      expect(textarea).toHaveValue('Pegar o caderno')
+      expect(document.activeElement).toBe(textarea)
+    })
+
+    it('a failed turn restores the chips and puts the suggestion text back in the textarea', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ suggestions: ['Pegar o caderno'] })),
+        post: () => jsonResponse({}, 500),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      await user.click(screen.getByRole('button', { name: t('game.suggest.send.aria', { text: 'Pegar o caderno' }) }))
+
+      await screen.findByText(t('error.unexpected.title'))
+      expect(screen.getByRole('button', { name: t('game.suggest.send.aria', { text: 'Pegar o caderno' }) })).toBeInTheDocument()
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      expect(textarea).toHaveValue('Pegar o caderno')
+    })
+  })
+
+  describe('input mode', () => {
+    it('shows the mode badge on the player turn in the history', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({ get: () => jsonResponse(session()), post: () => sseResponse(['[DONE]']) })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      await user.click(screen.getByRole('radio', { name: t('game.mode.say') }))
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'Não fui eu.{Enter}')
+
+      const bubble = (await screen.findByText('Não fui eu.')).closest('li')
+      expect(bubble).not.toBeNull()
+      expect(within(bubble as HTMLElement).getByText(t('game.mode.say'))).toBeInTheDocument()
+    })
+
+    it('a turn without mode renders no badge', async () => {
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ turns: [{ index: 1, role: 'player', text: 'Old action' }] })),
+        post: () => sseResponse(['[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      const bubble = (await screen.findByText('Old action')).closest('li')
+      expect(bubble).not.toBeNull()
+      expect((bubble as HTMLElement).querySelector('.game-turn-mode')).toBeNull()
+    })
+
+    it('persists the mode per session', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({ get: () => jsonResponse(session()), post: () => sseResponse(['[DONE]']) })
+
+      const first = render(<GamePanel sessionId="sess-1" />)
+      await screen.findByText('Once upon a time.')
+      await user.click(screen.getByRole('radio', { name: t('game.mode.story') }))
+      expect(screen.getByRole('radio', { name: t('game.mode.story') })).toBeChecked()
+      first.unmount()
+
+      const second = render(<GamePanel sessionId="sess-1" />)
+      await screen.findByText('Once upon a time.')
+      expect(screen.getByRole('radio', { name: t('game.mode.story') })).toBeChecked()
+      second.unmount()
+
+      render(<GamePanel sessionId="sess-2" />)
+      await screen.findByText('Once upon a time.')
+      expect(screen.getByRole('radio', { name: t('game.mode.do') })).toBeChecked()
+    })
+
+    it('falls back to do when the stored mode is garbage', async () => {
+      localStorage.setItem('ooc-local:inputMode:sess-1', 'shout')
+      mockRoutedFetch({ get: () => jsonResponse(session()), post: () => sseResponse(['[DONE]']) })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      expect(screen.getByRole('radio', { name: t('game.mode.do') })).toBeChecked()
+    })
+
+    it('does not break when localStorage throws', async () => {
+      const original = window.localStorage
+      Object.defineProperty(window, 'localStorage', {
+        configurable: true,
+        get() {
+          throw new Error('blocked')
+        },
+      })
+
+      mockRoutedFetch({ get: () => jsonResponse(session()), post: () => sseResponse(['[DONE]']) })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      expect(screen.getByRole('radio', { name: t('game.mode.do') })).toBeChecked()
+
+      Object.defineProperty(window, 'localStorage', { configurable: true, value: original })
     })
   })
 })

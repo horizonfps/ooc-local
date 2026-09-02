@@ -153,6 +153,10 @@
   min-height: 44px;
 }
 
+.game-panel:has(.suggestions) {
+  --game-scrollLatest-bottom: 9rem;
+}
+
 .game-footer {
   display: flex;
   flex-wrap: wrap;
@@ -205,5 +209,14 @@
   .game-turn--player,
   .game-turn--narrator {
     width: 100%;
+  }
+
+  .modeSelector {
+    flex-basis: 100%;
+  }
+
+  .modeSelector__group {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
   }
 }
