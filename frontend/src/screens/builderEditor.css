@@ -371,6 +371,10 @@
   .builder-tags-list {
     flex-wrap: wrap;
   }
+
+  .builder-lorebook-tab .builder-tag-chip button {
+    width: auto;
+  }
 }
 
 /* Shared field patterns (identity, world, starts and characters tabs) */
@@ -1127,4 +1131,31 @@
   .builder-stats-levelRemove {
     width: 100%;
   }
+}
+
+.builder-lorebook-tab {
+  display: flex;
+  flex-direction: column;
+}
+
+.builder-lorebook-split {
+  border: 1px solid #33363f;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.builder-lorebook-split-title {
+  font-weight: 600;
+  margin: 0;
+}
+
+.builder-lorebook-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }

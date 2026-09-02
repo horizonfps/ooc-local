@@ -43,6 +43,7 @@ const DOCUMENT = {
     },
   },
   stats: [],
+  lorebook: {},
 }
 
 function jsonResponse(body: unknown, status = 200) {
@@ -91,7 +92,7 @@ describe('BuilderEditorScreen', () => {
     expect(await screen.findByRole('heading', { name: 'The School' })).toBeInTheDocument()
     const tablist = screen.getByRole('tablist', { name: t('builder.editor.tabs.label') })
     const tabs = within(tablist).getAllByRole('tab')
-    expect(tabs).toHaveLength(6)
+    expect(tabs).toHaveLength(7)
     const worldTab = within(tablist).getByRole('tab', { name: t('builder.editor.tab.world') })
     expect(worldTab).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText(t('builder.editor.clean'))).toBeInTheDocument()
@@ -103,7 +104,7 @@ describe('BuilderEditorScreen', () => {
 
     const tablist = await screen.findByRole('tablist', { name: t('builder.editor.tabs.label') })
     const tabs = within(tablist).getAllByRole('tab')
-    expect(tabs).toHaveLength(6)
+    expect(tabs).toHaveLength(7)
     expect(tabs[4]).toHaveTextContent(t('builder.editor.tab.stats'))
   })
 
@@ -452,6 +453,36 @@ describe('BuilderEditorScreen', () => {
     await user.click(toggle)
 
     expect(statsTab.className).toContain('is-dirty')
+    expect(identityTab.className).not.toContain('is-dirty')
+  })
+
+  it('shows seven tabs with Lorebook between Stats and Media', async () => {
+    mockFetch(() => jsonResponse(DOCUMENT))
+    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
+
+    const tablist = await screen.findByRole('tablist', { name: t('builder.editor.tabs.label') })
+    const tabs = within(tablist).getAllByRole('tab')
+    expect(tabs).toHaveLength(7)
+    expect(tabs[5]).toHaveTextContent(t('builder.editor.tab.lorebook'))
+  })
+
+  it('marks Lorebook and World dirty after breaking a free world block', async () => {
+    const user = userEvent.setup()
+    const doc = { ...DOCUMENT, world: '## Universe\n\nA dusty old school.\n\n## Notebook\n\nA worn notebook.' }
+    mockFetch(() => jsonResponse(doc))
+    render(<BuilderEditorScreen scenarioId="school" tab="lorebook" />)
+
+    await screen.findByRole('button', { name: t('builder.lorebook.split') })
+    const tablist = screen.getByRole('tablist', { name: t('builder.editor.tabs.label') })
+    const lorebookTab = within(tablist).getByRole('tab', { name: t('builder.editor.tab.lorebook') })
+    const worldTab = within(tablist).getByRole('tab', { name: t('builder.editor.tab.world') })
+    const identityTab = within(tablist).getByRole('tab', { name: t('builder.editor.tab.identity') })
+
+    await user.click(screen.getByRole('button', { name: t('builder.lorebook.split') }))
+    await user.click(screen.getByRole('button', { name: t('builder.lorebook.split.submit') }))
+
+    expect(lorebookTab.className).toContain('is-dirty')
+    expect(worldTab.className).toContain('is-dirty')
     expect(identityTab.className).not.toContain('is-dirty')
   })
 
