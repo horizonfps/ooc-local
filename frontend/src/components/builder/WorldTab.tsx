@@ -8,6 +8,8 @@ const EMPTY_GUIDED: GuidedWorld = { universe: '', tone: '', rules: '', lore: [] 
 
 const KNOWN_VARIABLES = ['player', 'start', 'scenario'] as const
 
+const WORLD_TOKEN_WARN = 2000
+
 const GUIDED_FIELDS: readonly {
   key: 'universe' | 'tone' | 'rules'
   labelKey: 'builder.world.universe' | 'builder.world.tone' | 'builder.world.rules'
@@ -181,6 +183,8 @@ export function WorldTab(props: TabProps) {
     })
   }
 
+  // Same estimate as backend estimate_tokens in compact.py.
+  const worldTokens = Math.ceil(draft.world.length / 4)
   const worldError = fieldError('world')
   const universeError = fieldError('universe')
   const unknownVariables = extractVariableNames(draft.world).filter(
@@ -216,6 +220,14 @@ export function WorldTab(props: TabProps) {
           </button>
         </div>
       ) : null}
+
+      <div className="builder-world-tokens">
+        <p className="field-hint">{t('builder.world.tokens', { count: worldTokens })}</p>
+        <p className="field-hint">{t('builder.world.tokens.hint')}</p>
+        <p className="field-hint builder-world-tokens-over" role="status" aria-live="polite">
+          {worldTokens > WORLD_TOKEN_WARN ? t('builder.world.tokens.over', { max: WORLD_TOKEN_WARN }) : ''}
+        </p>
+      </div>
 
       {mode === 'guided' ? (
         <div className="builder-world-guided">

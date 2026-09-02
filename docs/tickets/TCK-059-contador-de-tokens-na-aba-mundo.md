@@ -1,7 +1,7 @@
 ---
 id: TCK-059
 title: Mostrar contador de tokens estimados na aba Mundo
-status: ready
+status: in_review
 points: 2
 blockedBy: [TCK-058]
 files:
