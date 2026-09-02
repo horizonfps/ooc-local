@@ -145,10 +145,10 @@ def load_global_commands(path: Path | None = None) -> list[GlobalCommandDef]:
         resolved.parent.mkdir(parents=True, exist_ok=True)
         resolved.write_text(DEFAULT_GLOBAL_COMMANDS, encoding="utf-8")
 
-    raw = resolved.read_text(encoding="utf-8")
     try:
+        raw = resolved.read_text(encoding="utf-8")
         data = yaml.safe_load(raw)
-    except yaml.YAMLError as exc:
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
         emit("commands_file_invalid", path=str(resolved), error=_clip(str(exc)))
         return _default_commands()
 
@@ -202,9 +202,10 @@ def resolve_command(
 
     prefix = stripped[0]
     head = stripped[1:]
-    parts = head.split(None, 1)
-    name_part = parts[0] if parts else ""
-    rest = parts[1] if len(parts) > 1 else ""
+    # The name runs up to the first whitespace; a sigil followed by a space names nothing.
+    match = re.match(r"(\S*)(?:\s+(.*))?$", head, re.DOTALL)
+    name_part = match.group(1) if match else ""
+    rest = (match.group(2) or "") if match else ""
 
     name = name_part.casefold()
     arg = rest.strip()[:COMMAND_ARG_CHARS] or None

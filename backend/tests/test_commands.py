@@ -238,6 +238,27 @@ def test_resolve_command_clamps_arg(monkeypatch, tmp_path):
     assert len(resolved.arg) == COMMAND_ARG_CHARS
 
 
+def test_resolve_command_sigil_followed_by_space_is_unknown(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+
+    with pytest.raises(UnknownCommand) as excinfo:
+        resolve_command("! fofoca", scenario, [])
+
+    assert excinfo.value.name == ""
+
+
+def test_non_utf8_file_falls_back_to_defaults_and_emits(tmp_path, monkeypatch):
+    path = tmp_path / "commands.yaml"
+    path.write_bytes(b"\xff\xfe- name: diary\n")
+    events = []
+    monkeypatch.setattr("app.commands.emit", lambda event, **props: events.append((event, props)))
+
+    commands = load_global_commands(path)
+
+    assert [c.name for c in commands] == ["diary", "inner", "recap"]
+    assert events and events[0][0] == "commands_file_invalid"
+
+
 def test_resolve_command_trims_surrounding_whitespace(monkeypatch, tmp_path):
     scenario = _load(monkeypatch, tmp_path)
 
