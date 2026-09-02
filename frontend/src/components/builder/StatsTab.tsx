@@ -154,7 +154,9 @@ export function StatsTab(props: TabProps) {
       return
     }
     const focusIndex = index < nextStats.length ? index : nextStats.length - 1
-    setSelectedIndex(focusIndex)
+    // Keep the same stat selected when the removed one sat before it.
+    if (index < selectedIndex) setSelectedIndex(selectedIndex - 1)
+    else if (index === selectedIndex) setSelectedIndex(focusIndex)
     requestAnimationFrame(() => {
       document.getElementById(`builder-stats-listItem-${focusIndex}`)?.focus()
     })
@@ -351,7 +353,7 @@ export function StatsTab(props: TabProps) {
                 <input
                   id={`builder-field-stats.${selectedIndex}.color`}
                   value={selectedStat.color ?? ''}
-                  onChange={(e) => updateStat(selectedIndex, { color: e.target.value })}
+                  onChange={(e) => updateStat(selectedIndex, { color: e.target.value === '' ? null : e.target.value })}
                   onBlur={(e) => {
                     const trimmed = e.target.value.trim()
                     updateStat(selectedIndex, { color: trimmed === '' ? null : trimmed })

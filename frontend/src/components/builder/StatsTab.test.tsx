@@ -225,6 +225,24 @@ describe('StatsTab', () => {
     expect(screen.getByText(t('builder.stats.levels.removed', { index: 2 }))).toBeInTheDocument()
   })
 
+  it('keeps the selected stat when an earlier one is removed', async () => {
+    const user = userEvent.setup()
+    const draft = baseDraft([
+      stat({ id: 'a', name: 'Aaa' }),
+      stat({ id: 'b', name: 'Bbb' }),
+      stat({ id: 'c', name: 'Ccc' }),
+    ])
+    render(<Harness initial={draft} />)
+    await user.click(screen.getAllByRole('button', { name: /Ccc/ })[0])
+    await waitFor(() => {
+      expect(document.getElementById('builder-field-stats.2.name')).toBe(document.activeElement)
+    })
+
+    await user.click(screen.getByRole('button', { name: t('builder.stats.remove.title', { name: 'Aaa' }) }))
+
+    expect((document.getElementById('builder-field-stats.1.name') as HTMLInputElement).value).toBe('Ccc')
+  })
+
   it('removes the only stat and moves focus to the create button', async () => {
     const user = userEvent.setup()
     render(<Harness initial={baseDraft([stat({ id: 'stat-1', name: 'Reputação' })])} />)
