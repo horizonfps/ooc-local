@@ -4,10 +4,11 @@ import re
 
 from app.cast import MindView
 from app.hud import HudState, stat_views
+from app.lore import render_lore
 from app.media import scan_media
-from app.scenario import Character, LoadedScenario, StartConfig
+from app.scenario import Character, LoadedScenario, LoreEntry, StartConfig
 
-MASTER_PROMPT_VERSION = 11
+MASTER_PROMPT_VERSION = 12
 
 MODE_LABELS: dict[str, dict[str, str]] = {
     "pt-br": {"do": "Ação", "say": "Fala", "story": "Narração"},
@@ -72,6 +73,7 @@ _TEMPLATES = {
             "segunda pessoa, sem falar nem decidir pelo jogador."
         ),
         "world_header": "## MUNDO",
+        "lore_header": "## LORE ATIVA",
         "characters_header": "## PERSONAGENS EM CENA",
         "no_characters": "Nenhum NPC em cena no momento.",
         "role_label": "Papel",
@@ -152,6 +154,7 @@ _TEMPLATES = {
             "the second person, never speaking or deciding for the player."
         ),
         "world_header": "## WORLD",
+        "lore_header": "## ACTIVE LORE",
         "characters_header": "## CHARACTERS IN SCENE",
         "no_characters": "No NPC is in scene right now.",
         "role_label": "Role",
@@ -336,6 +339,7 @@ def build_master_prompt(
     characters: list[Character],
     compact: str | None = None,
     minds: dict[str, MindView] | None = None,
+    lore: list[LoreEntry] | None = None,
 ) -> str:
     template = _TEMPLATES[scenario.meta.locale]
     locale_weather_labels = WEATHER_LABELS[scenario.meta.locale]
@@ -344,6 +348,10 @@ def build_master_prompt(
         f"{template['narrator_header']}\n{template['narrator_body']}",
         f"{template['world_header']}\n{_neutralize_headings(scenario.world)}",
     ]
+
+    lore_body = render_lore(lore)
+    if lore_body is not None:
+        sections.append(f"{template['lore_header']}\n{lore_body}")
 
     if characters:
         characters_body = "\n\n".join(
