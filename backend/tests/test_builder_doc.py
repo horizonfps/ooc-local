@@ -108,6 +108,27 @@ def test_full_scenario_returns_document_with_starts_and_characters(client, scena
     assert "revision" in body and body["revision"]
 
 
+def test_get_returns_conflict_and_mission_when_present(client, scenarios_root):
+    start_with_fields = DEFAULT_START + "conflict: um caderno circula\nmission: descobrir de quem é\n"
+    _write_scenario(scenarios_root, "exemplo-escola", starts={"default.yaml": start_with_fields})
+
+    response = client.get("/api/builder/scenarios/exemplo-escola")
+
+    body = response.json()
+    assert body["starts"]["default"]["conflict"] == "um caderno circula"
+    assert body["starts"]["default"]["mission"] == "descobrir de quem é"
+
+
+def test_get_returns_null_conflict_and_mission_when_absent(client, scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+
+    response = client.get("/api/builder/scenarios/exemplo-escola")
+
+    body = response.json()
+    assert body["starts"]["default"]["conflict"] is None
+    assert body["starts"]["default"]["mission"] is None
+
+
 def test_revision_stable_across_reads(client, scenarios_root):
     _write_scenario(scenarios_root, "exemplo-escola")
 

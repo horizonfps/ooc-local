@@ -96,10 +96,20 @@ class StartConfig(BaseModel):
     name: str
     prologue: str
     opening_scene: str
+    conflict: str | None = None
+    mission: str | None = None
     play_guide: str | None = None
     suggestions: list[str] = []
     hud: HudDefaults
     characters: list[str] | None = None
+
+    @field_validator("conflict", "mission")
+    @classmethod
+    def _strip_optional(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
 
 
 class ScenarioMeta(BaseModel):

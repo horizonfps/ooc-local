@@ -30,22 +30,3 @@ maioria das informações se espalha. Não há personagens sobrenaturais nem
 tecnologia fora do comum: tudo que acontece poderia acontecer numa escola real.
 Professores e direção existem como pano de fundo (autoridade distante,
 raramente presente na cena), nunca como protagonistas da tensão.
-
-## Conflito central
-
-Chloe guarda o caderno original e não decidiu o que fazer com ele: expor tudo,
-usar como proteção, ou simplesmente sumir com ele. Ashlee lidera a turma
-socialmente e teme — com razão — que seu nome apareça em páginas que ela
-preferia esquecer. Entre as duas, sem escolher lado, está Mika, que cresceu com
-o jogador e por isso vira o fio que costura os dois grupos. O jogador chega
-sem saber nada disso e precisa decidir, aos poucos, se investiga, se ignora, ou
-se vira peça no jogo de alguém.
-
-## Papel do jogador
-
-O jogador é o aluno novo do 3º B, chegando no primeiro dia de aula depois de
-uma mudança de cidade. Não tem história prévia com ninguém ali — é o único
-ponto de vista de fora numa rede de relações já formada. Essa posição de
-estranho é o que permite que outros personagens confiem informações a ele que
-não confiariam entre si, e é também o que o torna alvo de desconfiança: gente
-nova pode ser usada por qualquer lado.
