@@ -236,6 +236,32 @@ describe('StartsTab', () => {
     expect(starts.default.conflict).toBeNull()
   })
 
+  it('blanking mission down to whitespace saves it as null', () => {
+    const draft = baseDraft()
+    draft.starts.default.mission = 'Algo'
+    render(<Harness initial={draft} />)
+
+    const mission = screen.getByLabelText(new RegExp(t('builder.starts.mission')))
+    fireEvent.change(mission, { target: { value: '   ' } })
+
+    const starts = JSON.parse(screen.getByTestId('starts-debug').textContent ?? '{}')
+    expect(starts.default.mission).toBeNull()
+  })
+
+  it('keeps conflict and mission as typed, including surrounding whitespace', () => {
+    render(<Harness initial={baseDraft()} />)
+
+    const conflict = screen.getByLabelText(new RegExp(t('builder.starts.conflict')))
+    fireEvent.change(conflict, { target: { value: '  Duas facções  ' } })
+
+    const mission = screen.getByLabelText(new RegExp(t('builder.starts.mission')))
+    fireEvent.change(mission, { target: { value: 'Achar a fonte\n' } })
+
+    const starts = JSON.parse(screen.getByTestId('starts-debug').textContent ?? '{}')
+    expect(starts.default.conflict).toBe('  Duas facções  ')
+    expect(starts.default.mission).toBe('Achar a fonte\n')
+  })
+
   it('a start without conflict or mission opens with empty textareas and no alert', () => {
     render(<Harness initial={baseDraft()} />)
 
@@ -250,13 +276,14 @@ describe('StartsTab', () => {
     const user = userEvent.setup()
     const draft = baseDraft()
     draft.starts.default.conflict = 'First conflict'
+    draft.starts.default.mission = 'First mission'
     draft.starts['start-2'] = {
       id: 'start-2',
       name: 'Second start',
       prologue: 'x',
       opening_scene: 'y',
       conflict: 'Second conflict',
-      mission: null,
+      mission: 'Second mission',
       play_guide: null,
       suggestions: [],
       hud: { location: 'Yard', time: '09:00', weather: 'clear' },
@@ -268,7 +295,9 @@ describe('StartsTab', () => {
 
     await waitFor(() => {
       const conflict = document.getElementById('builder-field-starts.start-2.conflict') as HTMLTextAreaElement
+      const mission = document.getElementById('builder-field-starts.start-2.mission') as HTMLTextAreaElement
       expect(conflict.value).toBe('Second conflict')
+      expect(mission.value).toBe('Second mission')
     })
   })
 
