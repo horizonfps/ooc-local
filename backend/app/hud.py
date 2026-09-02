@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, field_validator
 
 if TYPE_CHECKING:
-    from app.scenario import StartConfig
+    from app.scenario import LoadedScenario, StartConfig
 
 WEATHER_CODES = ("clear", "cloudy", "rain", "storm", "snow", "fog", "night")
 
@@ -31,11 +31,31 @@ def validate_weather(value: str) -> str:
     return value
 
 
+class DynamicStat(BaseModel):
+    name: str
+    value: int
+    min: int = 0
+    max: int
+
+
+class StatView(BaseModel):
+    id: str
+    name: str
+    icon: str | None
+    color: str | None
+    value: int
+    min: int
+    max: int
+    level: str | None
+
+
 class HudState(BaseModel):
     turn: int = 0
     location: str
     time: str
     weather: str
+    stats: dict[str, int] = {}
+    dynamic_stats: dict[str, DynamicStat] = {}
 
     @field_validator("time")
     @classmethod
@@ -46,6 +66,46 @@ class HudState(BaseModel):
     @classmethod
     def _validate_weather(cls, value: str) -> str:
         return validate_weather(value)
+
+
+def stat_views(scenario: "LoadedScenario", hud: HudState) -> list[StatView]:
+    """One StatView per declared stat, in scenario order, followed by dynamic stats
+    in hud.dynamic_stats insertion order."""
+    views: list[StatView] = []
+    for stat in scenario.stats:
+        value = hud.stats.get(stat.id, stat.default)
+        level_text: str | None = None
+        for level in stat.levels:
+            if level.from_ <= value:
+                level_text = level.text
+            else:
+                break
+        views.append(
+            StatView(
+                id=stat.id,
+                name=stat.name,
+                icon=stat.icon,
+                color=stat.color,
+                value=value,
+                min=stat.min,
+                max=stat.max,
+                level=level_text,
+            )
+        )
+    for stat_id, dynamic in hud.dynamic_stats.items():
+        views.append(
+            StatView(
+                id=stat_id,
+                name=dynamic.name,
+                icon=None,
+                color=None,
+                value=dynamic.value,
+                min=dynamic.min,
+                max=dynamic.max,
+                level=None,
+            )
+        )
+    return views
 
 
 def hud_from_start(start: "StartConfig") -> HudState:

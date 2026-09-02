@@ -54,7 +54,39 @@ mind:
 """
 
 
-def _write_scenario(root, scenario_id, *, scenario_yaml=SCENARIO_YAML, world=WORLD_MD, characters=None, starts=None):
+STATS_YAML = """\
+- id: reputacao
+  name: Reputação
+  min: 0
+  max: 100
+  default: 50
+"""
+
+COMMANDS_YAML = """\
+- name: fofoca
+  description: espalha uma fofoca
+  prompt: espalhe uma fofoca
+"""
+
+CADERNO_LORE = """\
+title: O caderno perdido
+keywords: [caderno]
+body: um caderno circula pela escola
+"""
+
+
+def _write_scenario(
+    root,
+    scenario_id,
+    *,
+    scenario_yaml=SCENARIO_YAML,
+    world=WORLD_MD,
+    characters=None,
+    starts=None,
+    stats=None,
+    lorebook=None,
+    commands=None,
+):
     characters = {
         "chloe.yaml": CHLOE_YAML,
         "marco.yaml": MARCO_YAML,
@@ -78,6 +110,18 @@ def _write_scenario(root, scenario_id, *, scenario_yaml=SCENARIO_YAML, world=WOR
     characters_dir.mkdir(exist_ok=True)
     for filename, content in characters.items():
         (characters_dir / filename).write_text(content, encoding="utf-8")
+
+    if stats is not None:
+        (scenario_dir / "stats.yaml").write_text(stats, encoding="utf-8")
+
+    if lorebook is not None:
+        lorebook_dir = scenario_dir / "lorebook"
+        lorebook_dir.mkdir(exist_ok=True)
+        for filename, content in lorebook.items():
+            (lorebook_dir / filename).write_text(content, encoding="utf-8")
+
+    if commands is not None:
+        (scenario_dir / "commands.yaml").write_text(commands, encoding="utf-8")
 
     return scenario_dir
 
@@ -253,3 +297,55 @@ def test_traversal_scenario_id_is_404_or_422(client, scenarios_root):
 
     assert response.status_code in (404, 422)
     assert not (scenarios_root.parent / "etc").exists()
+
+
+def test_get_returns_stats_lorebook_and_commands_in_file_order(client, scenarios_root):
+    _write_scenario(
+        scenarios_root,
+        "exemplo-escola",
+        stats=STATS_YAML,
+        lorebook={"caderno.yaml": CADERNO_LORE},
+        commands=COMMANDS_YAML,
+    )
+
+    response = client.get("/api/builder/scenarios/exemplo-escola")
+
+    body = response.json()
+    assert [s["id"] for s in body["stats"]] == ["reputacao"]
+    assert set(body["lorebook"]) == {"caderno"}
+    assert [c["name"] for c in body["commands"]] == ["fofoca"]
+
+
+def test_get_without_stats_lorebook_commands_returns_empty(client, scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+
+    response = client.get("/api/builder/scenarios/exemplo-escola")
+
+    body = response.json()
+    assert body["stats"] == []
+    assert body["lorebook"] == {}
+    assert body["commands"] == []
+
+
+def test_editing_lorebook_file_on_disk_changes_revision(client, scenarios_root):
+    scenario_dir = _write_scenario(
+        scenarios_root, "exemplo-escola", lorebook={"caderno.yaml": CADERNO_LORE}
+    )
+
+    before = compute_revision("exemplo-escola")
+    (scenario_dir / "lorebook" / "caderno.yaml").write_text(
+        CADERNO_LORE + "priority: 5\n", encoding="utf-8"
+    )
+    after = compute_revision("exemplo-escola")
+
+    assert before != after
+
+
+def test_editing_stats_file_on_disk_changes_revision(client, scenarios_root):
+    scenario_dir = _write_scenario(scenarios_root, "exemplo-escola", stats=STATS_YAML)
+
+    before = compute_revision("exemplo-escola")
+    (scenario_dir / "stats.yaml").write_text(STATS_YAML + "  description: nova\n", encoding="utf-8")
+    after = compute_revision("exemplo-escola")
+
+    assert before != after

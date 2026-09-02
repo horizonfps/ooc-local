@@ -1,5 +1,6 @@
 import json
 import time
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
@@ -38,6 +39,7 @@ app.include_router(media.router)
 
 class ChatRequest(BaseModel):
     message: str
+    mode: Literal["do", "say", "story"] | None = None
 
 
 class CreateSessionRequest(BaseModel):

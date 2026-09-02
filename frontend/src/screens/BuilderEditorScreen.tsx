@@ -40,7 +40,15 @@ const TAB_LABEL_KEY: Record<BuilderTab, StringKey> = {
 }
 
 function draftOf(doc: ScenarioDocument): BuilderDraft {
-  return { meta: doc.meta, world: doc.world, starts: doc.starts, characters: doc.characters }
+  return {
+    meta: doc.meta,
+    world: doc.world,
+    starts: doc.starts,
+    characters: doc.characters,
+    stats: doc.stats,
+    lorebook: doc.lorebook,
+    commands: doc.commands,
+  }
 }
 
 function slice(tab: BuilderTab, draft: BuilderDraft): unknown {

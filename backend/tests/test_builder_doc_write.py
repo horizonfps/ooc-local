@@ -43,7 +43,18 @@ emotions:
 """
 
 
-def _write_scenario(root, scenario_id, *, scenario_yaml=SCENARIO_YAML, world=WORLD_MD, characters=None, starts=None):
+def _write_scenario(
+    root,
+    scenario_id,
+    *,
+    scenario_yaml=SCENARIO_YAML,
+    world=WORLD_MD,
+    characters=None,
+    starts=None,
+    stats=None,
+    lorebook=None,
+    commands=None,
+):
     characters = {"chloe.yaml": CHLOE_YAML} if characters is None else characters
     starts = {"default.yaml": DEFAULT_START} if starts is None else starts
 
@@ -63,6 +74,18 @@ def _write_scenario(root, scenario_id, *, scenario_yaml=SCENARIO_YAML, world=WOR
     characters_dir.mkdir(exist_ok=True)
     for filename, content in characters.items():
         (characters_dir / filename).write_text(content, encoding="utf-8", newline="\n")
+
+    if stats is not None:
+        (scenario_dir / "stats.yaml").write_text(stats, encoding="utf-8", newline="\n")
+
+    if lorebook is not None:
+        lorebook_dir = scenario_dir / "lorebook"
+        lorebook_dir.mkdir(exist_ok=True)
+        for filename, content in lorebook.items():
+            (lorebook_dir / filename).write_text(content, encoding="utf-8", newline="\n")
+
+    if commands is not None:
+        (scenario_dir / "commands.yaml").write_text(commands, encoding="utf-8", newline="\n")
 
     return scenario_dir
 
@@ -356,6 +379,195 @@ def test_put_with_no_starts_returns_422(client, scenarios_root):
     response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
 
     assert response.status_code == 422
+
+
+def test_put_adding_stat_writes_canonical_yaml_with_accent(client, scenarios_root):
+    scenario_dir = _write_scenario(scenarios_root, "exemplo-escola")
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+
+    doc["stats"] = [
+        {
+            "id": "reputacao",
+            "name": "Reputação",
+            "icon": None,
+            "color": None,
+            "min": 0,
+            "max": 100,
+            "default": 50,
+            "description": None,
+            "levels": [],
+        }
+    ]
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 200
+    stats_path = scenario_dir / "stats.yaml"
+    assert stats_path.exists()
+    text = stats_path.read_text(encoding="utf-8")
+    assert "Reputação" in text
+    lines = text.splitlines()
+    assert lines[0] == "- id: reputacao"
+
+
+def test_put_with_stats_and_commands_empty_removes_files_and_counts_deleted(client, scenarios_root):
+    scenario_dir = _write_scenario(
+        scenarios_root,
+        "exemplo-escola",
+        stats="- id: reputacao\n  name: R\n  min: 0\n  max: 10\n  default: 5\n",
+        commands="- name: fofoca\n  description: d\n  prompt: p\n",
+    )
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+    assert doc["stats"] and doc["commands"]
+
+    doc["stats"] = []
+    doc["commands"] = []
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 200
+    assert not (scenario_dir / "stats.yaml").exists()
+    assert not (scenario_dir / "commands.yaml").exists()
+
+
+def test_put_without_a_lorebook_entry_removes_only_that_file(client, scenarios_root):
+    scenario_dir = _write_scenario(
+        scenarios_root,
+        "exemplo-escola",
+        lorebook={
+            "caderno.yaml": "title: T1\nkeywords: [x]\nbody: b1\n",
+            "regras.yaml": "title: T2\nbody: b2\nscope: always\n",
+        },
+    )
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+    assert set(doc["lorebook"]) == {"caderno", "regras"}
+
+    del doc["lorebook"]["caderno"]
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 200
+    assert not (scenario_dir / "lorebook" / "caderno.yaml").exists()
+    assert (scenario_dir / "lorebook" / "regras.yaml").exists()
+
+
+def test_put_lorebook_entry_saved_as_yml_and_yaml_leaves_only_yaml(client, scenarios_root):
+    scenario_dir = _write_scenario(
+        scenarios_root,
+        "exemplo-escola",
+        lorebook={"caderno.yml": "title: T1\nkeywords: [x]\nbody: b1\n"},
+    )
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 200
+    assert (scenario_dir / "lorebook" / "caderno.yaml").exists()
+    assert not (scenario_dir / "lorebook" / "caderno.yml").exists()
+
+
+def test_put_with_stale_revision_after_lorebook_edit_returns_409_and_writes_nothing(
+    client, scenarios_root
+):
+    scenario_dir = _write_scenario(
+        scenarios_root,
+        "exemplo-escola",
+        lorebook={"caderno.yaml": "title: T1\nkeywords: [x]\nbody: b1\n"},
+    )
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+    before = (scenario_dir / "scenario.yaml").read_bytes()
+
+    (scenario_dir / "lorebook" / "caderno.yaml").write_text(
+        "title: T1\nkeywords: [x]\nbody: editado por fora\n", encoding="utf-8"
+    )
+
+    doc["meta"]["name"] = "Tentativa de sobrescrever"
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 409
+    assert (scenario_dir / "scenario.yaml").read_bytes() == before
+
+
+def test_put_with_duplicate_stat_id_returns_422_citing_id_and_writes_nothing(client, scenarios_root):
+    scenario_dir = _write_scenario(scenarios_root, "exemplo-escola")
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+    before = (scenario_dir / "scenario.yaml").read_bytes()
+
+    stat = {
+        "id": "reputacao",
+        "name": "R",
+        "icon": None,
+        "color": None,
+        "min": 0,
+        "max": 10,
+        "default": 5,
+        "description": None,
+        "levels": [],
+    }
+    doc["stats"] = [stat, dict(stat)]
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 422
+    assert "reputacao" in response.json()["detail"]
+    assert (scenario_dir / "scenario.yaml").read_bytes() == before
+
+
+def test_put_with_duplicate_command_name_returns_422_citing_name_and_writes_nothing(
+    client, scenarios_root
+):
+    scenario_dir = _write_scenario(scenarios_root, "exemplo-escola")
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+    before = (scenario_dir / "scenario.yaml").read_bytes()
+
+    command = {"name": "fofoca", "description": "d", "prompt": "p"}
+    doc["commands"] = [command, dict(command)]
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 422
+    assert "fofoca" in response.json()["detail"]
+    assert (scenario_dir / "scenario.yaml").read_bytes() == before
+
+
+def test_put_with_uppercase_lorebook_id_returns_422_citing_id_and_writes_nothing(
+    client, scenarios_root
+):
+    scenario_dir = _write_scenario(scenarios_root, "exemplo-escola")
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+    before = (scenario_dir / "scenario.yaml").read_bytes()
+
+    doc["lorebook"]["Caderno"] = {
+        "title": "T",
+        "keywords": ["x"],
+        "body": "b",
+        "scope": "keyword",
+        "priority": 0,
+        "enabled": True,
+    }
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 422
+    assert "Caderno" in response.json()["detail"]
+    assert (scenario_dir / "scenario.yaml").read_bytes() == before
+
+
+def test_get_put_get_roundtrip_with_stats_lorebook_commands_keeps_revision(client, scenarios_root):
+    _write_scenario(
+        scenarios_root,
+        "exemplo-escola",
+        stats="- id: reputacao\n  name: R\n  min: 0\n  max: 10\n  default: 5\n",
+        lorebook={"caderno.yaml": "title: T1\nkeywords:\n- x\nbody: b1\nscope: keyword\npriority: 0\nenabled: true\n"},
+        commands="- name: fofoca\n  description: d\n  prompt: p\n",
+    )
+
+    first = client.get("/api/builder/scenarios/exemplo-escola").json()
+    put_response = client.put("/api/builder/scenarios/exemplo-escola", json=first)
+    second = client.get("/api/builder/scenarios/exemplo-escola").json()
+
+    assert put_response.json()["revision"] == first["revision"]
+    assert second["revision"] == first["revision"]
 
 
 def test_put_os_replace_failure_returns_500_and_emits_event(client, scenarios_root, monkeypatch):
