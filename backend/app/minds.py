@@ -123,22 +123,40 @@ def parse_minds(raw: str) -> tuple[dict | None, str | None]:
     if not text:
         return None, "invalid_json"
 
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start == -1 or end == -1 or end < start:
-            return None, "invalid_json"
-        try:
-            data = json.loads(text[start : end + 1])
-        except json.JSONDecodeError:
-            return None, "invalid_json"
-
+    data = _loads_tolerant(text)
+    if isinstance(data, list):
+        data = _list_to_map(data)
     if not isinstance(data, dict):
         return None, "invalid_json"
 
     return data, None
+
+
+def _loads_tolerant(text: str) -> object:
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    for opener, closer in (("{", "}"), ("[", "]")):
+        start = text.find(opener)
+        end = text.rfind(closer)
+        if start == -1 or end < start:
+            continue
+        try:
+            return json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            continue
+    return None
+
+
+def _list_to_map(items: list) -> dict | None:
+    """Accepts the list shape local models drift into: one object per NPC with an id field."""
+    out: dict = {}
+    for item in items:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+            return None
+        out[item["id"]] = {key: value for key, value in item.items() if key != "id"}
+    return out
 
 
 def merge_minds(

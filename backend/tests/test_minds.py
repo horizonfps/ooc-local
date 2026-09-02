@@ -165,6 +165,23 @@ def test_parse_minds_empty_object():
     assert parse_minds("{}") == ({}, None)
 
 
+def test_parse_minds_accepts_list_of_objects_keyed_by_id():
+    raw = (
+        "```json\n["
+        '{"id": "chloe", "attitude": "grata", "emoji": "😊", "event": "sorriu"}, '
+        '{"id": "mika", "attitude": "tenso", "emoji": "😬", "event": "recuou"}'
+        "]\n```"
+    )
+
+    data, reason = parse_minds(raw)
+
+    assert data == {
+        "chloe": {"attitude": "grata", "emoji": "😊", "event": "sorriu"},
+        "mika": {"attitude": "tenso", "emoji": "😬", "event": "recuou"},
+    }
+    assert reason is None
+
+
 @pytest.mark.parametrize(
     "raw",
     ["", "   ", "a Chloe ficou desconfiada", '{"chloe": {', '[{"chloe": {}}]'],
