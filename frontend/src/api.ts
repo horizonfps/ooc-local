@@ -118,6 +118,8 @@ export type StartDoc = {
   name: string
   prologue: string
   opening_scene: string
+  conflict: string | null
+  mission: string | null
   play_guide: string | null
   suggestions: string[]
   hud: HudDefaults
