@@ -7,7 +7,12 @@ from app.hud import HudState, stat_views
 from app.media import scan_media
 from app.scenario import Character, LoadedScenario, StartConfig
 
-MASTER_PROMPT_VERSION = 10
+MASTER_PROMPT_VERSION = 11
+
+MODE_LABELS: dict[str, dict[str, str]] = {
+    "pt-br": {"do": "Ação", "say": "Fala", "story": "Narração"},
+    "en": {"do": "Action", "say": "Speech", "story": "Narration"},
+}
 
 WEATHER_LABELS: dict[str, dict[str, str]] = {
     "pt-br": {
@@ -29,6 +34,20 @@ WEATHER_LABELS: dict[str, dict[str, str]] = {
         "night": "Night",
     },
 }
+
+def format_player_message(text: str, mode: str | None, locale: str) -> str:
+    """Labels the player's raw text for the narrator. Unknown or absent mode
+    returns the text unchanged, since old events never carried a mode."""
+    if mode is None:
+        return text
+    labels = MODE_LABELS.get(locale, MODE_LABELS["pt-br"])
+    label = labels.get(mode)
+    if label is None:
+        return text
+    if mode == "say":
+        return f'({label}) "{text}"'
+    return f"({label}) {text}"
+
 
 _HEADING_RE = re.compile(r"^(#{1,6})([ \t].*)$")
 
@@ -98,6 +117,11 @@ _TEMPLATES = {
         "format_header": "## FORMATO DO TURNO",
         "format_body": (
             "Escreva a fala de personagem como `**Nome** | fala`, uma por linha.\n"
+            "A mensagem do jogador chega etiquetada com um destes três rótulos: "
+            "`(Fala)` é o que o jogador diz em voz alta e nunca pode virar ação; "
+            "`(Narração)` é um fato narrado pelo jogador que você deve "
+            "incorporar como já acontecido; `(Ação)` é uma tentativa do "
+            "jogador, e o resultado da tentativa é decisão sua.\n"
             "Mantenha o turno em torno de 350 palavras, nunca passando de 500.\n"
             "Trate o HUD, o relógio e a ficha de status como verdade absoluta: "
             "nunca reescreva HUD, relógio ou ficha de status dentro do texto, "
@@ -172,6 +196,12 @@ _TEMPLATES = {
         "format_header": "## TURN FORMAT",
         "format_body": (
             "Write character speech as `**Name** | line`, one per line.\n"
+            "The player's message arrives tagged with one of three labels: "
+            "`(Speech)` is what the player says out loud and can never become "
+            "an action; `(Narration)` is a fact narrated by the player that "
+            "you must incorporate as already having happened; `(Action)` is "
+            "an attempt by the player, and the outcome of the attempt is "
+            "your call.\n"
             "Keep the turn around 350 words, never exceeding 500.\n"
             "Treat the HUD, clock and status sheet as absolute truth: never "
             "rewrite HUD, clock or status sheet inside the text, that is "

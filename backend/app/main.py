@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app import builder, builder_doc, media
+from app.commands import UnknownCommand, load_global_commands, resolve_command
 from app.config import load_config
 from app.llm.base import ChatMessage
 from app.llm.openai_compat import OpenAICompatProvider
@@ -156,10 +157,24 @@ async def turn_route(session_id: str, req: ChatRequest) -> StreamingResponse:
         emit("turn_rejected", session_id=session_id, reason="message must not be empty")
         raise HTTPException(status_code=422, detail="message must not be empty")
 
+    try:
+        command = resolve_command(req.message, ctx.scenario, load_global_commands())
+    except UnknownCommand as exc:
+        emit(
+            "turn_rejected",
+            session_id=session_id,
+            reason="unknown_command",
+            command=exc.name,
+            prefix=exc.prefix,
+        )
+        raise HTTPException(status_code=422, detail="unknown_command") from None
+
     async def event_stream():
         failed = False
         try:
-            async for event in run_turn(session_id, req.message, ctx=ctx, config=config):
+            async for event in run_turn(
+                session_id, req.message, ctx=ctx, config=config, mode=req.mode, command=command
+            ):
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as exc:
             failed = True

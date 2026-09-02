@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.cast import CAST_EVENT_KIND, MIND_EVENT_KIND, CastMember, MindView, resolve_cast, seed_cast_ids
+from app.commands import command_views, load_global_commands
 from app.config import CONFIG_DIR
 from app.hud import HudState, StatView, hud_from_start, stat_views
 from app.media import SessionAssets, session_assets
@@ -233,6 +234,7 @@ def create_session(
         cast=cast,
         stats=stat_views(scenario, hud),
         minds={},
+        commands=command_views(scenario, load_global_commands(), scenario.meta.locale),
         suggestions=start.suggestions,
     )
 
@@ -299,7 +301,10 @@ def get_session(session_id: str) -> SessionDetail:
     except (ScenarioError, KeyError):
         raise ScenarioNotFound(row.scenario_id) from None
 
-    events = read_events(session_id, kinds=("player_turn", "narrator_turn"))
+    events = read_events(
+        session_id,
+        kinds=("player_turn", "narrator_turn", "meta_player_turn", "meta_narrator_turn"),
+    )
     turns = _build_turns(events)
 
     assets = session_assets(scenario)
@@ -332,6 +337,7 @@ def get_session(session_id: str) -> SessionDetail:
         cast=cast,
         stats=stat_views(scenario, row.hud),
         minds=read_minds(session_id),
+        commands=command_views(scenario, load_global_commands(), scenario.meta.locale),
         suggestions=suggestions,
     )
 
@@ -517,16 +523,48 @@ def read_minds(session_id: str) -> dict[str, MindView]:
 def _build_turns(events: list[Event]) -> list[TurnView]:
     turns: list[TurnView] = []
     index = 0
+    pending_command: str | None = None
     for event in events:
         if event.kind == "player_turn":
             index += 1
-        role: Literal["player", "narrator"] = "player" if event.kind == "player_turn" else "narrator"
-        turns.append(
-            TurnView(
-                index=index,
-                role=role,
-                text=event.payload["text"],
-                suggestions=event.payload.get("suggestions", []),
+            turns.append(
+                TurnView(
+                    index=index,
+                    role="player",
+                    text=event.payload["text"],
+                    mode=event.payload.get("mode"),
+                    suggestions=event.payload.get("suggestions", []),
+                )
             )
-        )
+        elif event.kind == "narrator_turn":
+            turns.append(
+                TurnView(
+                    index=index,
+                    role="narrator",
+                    text=event.payload["text"],
+                    suggestions=event.payload.get("suggestions", []),
+                )
+            )
+        elif event.kind == "meta_player_turn":
+            pending_command = event.payload.get("command")
+            turns.append(
+                TurnView(
+                    index=index,
+                    role="player",
+                    text=event.payload["text"],
+                    meta=True,
+                    command=pending_command,
+                )
+            )
+        elif event.kind == "meta_narrator_turn":
+            turns.append(
+                TurnView(
+                    index=index,
+                    role="narrator",
+                    text=event.payload["text"],
+                    meta=True,
+                    command=pending_command,
+                )
+            )
+            pending_command = None
     return turns
