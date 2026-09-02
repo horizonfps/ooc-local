@@ -182,6 +182,15 @@ def test_parse_minds_accepts_list_of_objects_keyed_by_id():
     assert reason is None
 
 
+def test_parse_minds_accepts_single_flat_object_with_id():
+    raw = '{"id": "chloe", "attitude": "grata", "emoji": "😊", "event": "sorriu"}'
+
+    data, reason = parse_minds(raw)
+
+    assert data == {"chloe": {"attitude": "grata", "emoji": "😊", "event": "sorriu"}}
+    assert reason is None
+
+
 def test_parse_minds_accepts_one_object_per_line_and_skips_truncated_tail():
     raw = (
         '{"id": "chloe", "attitude": "séria", "emoji": "😔", "event": "abre o caderno"}\n'

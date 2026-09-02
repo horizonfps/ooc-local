@@ -124,6 +124,8 @@ def parse_minds(raw: str) -> tuple[dict | None, str | None]:
         return None, "invalid_json"
 
     data = _loads_tolerant(text)
+    if isinstance(data, dict) and isinstance(data.get("id"), str):
+        data = [data]
     if isinstance(data, list):
         data = _list_to_map(data)
     if not isinstance(data, dict):
