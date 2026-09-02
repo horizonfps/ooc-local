@@ -71,7 +71,7 @@ def _field(value: str) -> str:
 
 
 def _clamp_emoji(value: str) -> str:
-    chars = list(value)[:EMOJI_CHARS]
+    chars = list("".join(value.split()))[:EMOJI_CHARS]
     while chars and chars[-1] in (_ZWJ, _VARIATION_SELECTOR):
         chars.pop()
     return "".join(chars)

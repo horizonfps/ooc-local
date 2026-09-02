@@ -226,6 +226,17 @@ def test_merge_minds_clamps_attitude_length():
     assert len(entries["chloe"].attitude) == MIND_FIELD_CHARS
 
 
+def test_merge_minds_blank_fields_count_as_empty_and_emoji_loses_whitespace():
+    blank = {"chloe": {"attitude": "  ", "emoji": " \n", "event": ""}}
+    entries, rejections = merge_minds({}, blank, CAST_IDS)
+    assert entries == {}
+    assert rejections == [MindRejection(id="chloe", reason="empty")]
+
+    wrapped = {"chloe": {"attitude": "a", "emoji": "\n🙂\n", "event": "b"}}
+    entries, _ = merge_minds({}, wrapped, CAST_IDS)
+    assert entries["chloe"].emoji == "🙂"
+
+
 def test_merge_minds_clamps_emoji_to_code_points():
     proposed = {"chloe": {"attitude": "a", "emoji": "🤨🤨🤨🤨🤨", "event": "b"}}
 
