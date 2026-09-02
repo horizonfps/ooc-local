@@ -309,6 +309,19 @@ describe('WorldTab', () => {
     ).toBeInTheDocument()
   })
 
+  it('the token counter follows edits made through the guided fields', () => {
+    const draft = baseDraft()
+    render(<Harness initial={draft} />)
+    const before = Math.ceil(draft.world.length / 4)
+    expect(screen.getByText(t('builder.world.tokens', { count: before }))).toBeInTheDocument()
+
+    const universe = screen.getByLabelText(new RegExp(t('builder.world.universe'))) as HTMLTextAreaElement
+    fireEvent.change(universe, { target: { value: universe.value + 'y'.repeat(400) } })
+
+    expect(screen.queryByText(t('builder.world.tokens', { count: before }))).toBeNull()
+    expect(screen.getByText(t('builder.world.tokens', { count: before + 100 }))).toBeInTheDocument()
+  })
+
   it('the budget warning crosses the limit and does not disable Save', () => {
     const draft = baseDraft()
     draft.meta.world_mode = 'custom'
@@ -316,14 +329,19 @@ describe('WorldTab', () => {
     render(<Harness initial={draft} />)
 
     expect(screen.getByText(t('builder.world.tokens', { count: 1750 }))).toBeInTheDocument()
-    expect(screen.queryByText(t('builder.world.tokens.over', { max: 2000 }))).toBeNull()
+    expect(screen.getByText(t('builder.world.tokens.hint'))).toBeInTheDocument()
+    const statusRegion = document.querySelector('.builder-world-tokens-over') as HTMLElement
+    expect(statusRegion).toHaveAttribute('role', 'status')
+    expect(statusRegion).toHaveTextContent('')
 
     const textarea = screen.getByLabelText(t('builder.world.custom.label')) as HTMLTextAreaElement
     fireEvent.change(textarea, { target: { value: 'x'.repeat(9000) } })
 
     const overWarning = screen.getByText(t('builder.world.tokens.over', { max: 2000 }))
-    expect(overWarning).toBeInTheDocument()
+    expect(overWarning).toBe(statusRegion)
     expect(overWarning).toHaveAttribute('aria-live', 'polite')
+    expect(overWarning).not.toHaveAttribute('role', 'alert')
+    expect(overWarning).not.toHaveAttribute('aria-invalid')
 
     const nextDraft = { ...draft, world: 'x'.repeat(9000) }
     expect(validateDraft(nextDraft).filter((e) => e.tab === 'world')).toHaveLength(0)

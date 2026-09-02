@@ -569,6 +569,17 @@
   margin: 0 0 0.25rem;
 }
 
+.builder-world-tokens {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.builder-world-tokens-over {
+  color: var(--fg);
+}
+
 .builder-world-custom-textarea {
   width: 100%;
   font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
