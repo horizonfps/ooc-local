@@ -51,6 +51,16 @@ export const gameEn = {
   'game.info.pending': 'Nobody read yet. Play a turn and the narrator starts tracking how each one feels.',
   'game.info.unknown': 'Not read yet',
   'game.info.event': 'Last: {event}',
+  'game.commands.palette.label': 'Available commands',
+  'game.commands.noMatch': 'No command with that name. Esc closes this list.',
+  'game.commands.emptyScenario': 'This scenario has no commands. Type / to see the global ones.',
+  'game.commands.emptyGlobal': 'No global commands available. Type ! to see the ones from this scenario.',
+  'game.commands.listLabel': 'Commands',
+  'game.commands.hint': 'Type / or ! in the message box to run one.',
+  'game.commands.turnLabel': 'Command {command}',
+  'game.commands.unknown.title': "That command doesn't exist",
+  'game.commands.unknown.body': 'Nothing was sent to the narrator. Your text was kept — fix the name, or type / or ! to see the list.',
+  'game.guide.label': 'How to play',
 
   // HUD
   'hud.turn': 'Turn',
@@ -134,6 +144,16 @@ export const gamePtBr: Record<keyof typeof gameEn, string> = {
   'game.info.pending': 'Ninguém lido ainda. Jogue um turno e o narrador começa a acompanhar o que cada um sente.',
   'game.info.unknown': 'Ainda não lido',
   'game.info.event': 'Último: {event}',
+  'game.commands.palette.label': 'Comandos disponíveis',
+  'game.commands.noMatch': 'Nenhum comando com esse nome. Esc fecha esta lista.',
+  'game.commands.emptyScenario': 'Este cenário não tem comandos. Digite / para ver os globais.',
+  'game.commands.emptyGlobal': 'Nenhum comando global disponível. Digite ! para ver os deste cenário.',
+  'game.commands.listLabel': 'Comandos',
+  'game.commands.hint': 'Digite / ou ! no campo de mensagem para usar um.',
+  'game.commands.turnLabel': 'Comando {command}',
+  'game.commands.unknown.title': 'Esse comando não existe',
+  'game.commands.unknown.body': 'Nada foi enviado ao narrador. Seu texto foi guardado — corrija o nome, ou digite / ou ! para ver a lista.',
+  'game.guide.label': 'Como jogar',
 
   // HUD
   'hud.turn': 'Turno',

@@ -1,18 +1,22 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
 import { CastRow } from './CastRow'
+import { CommandPalette, GLOBAL_SIGIL, SCENARIO_SIGIL, filterCommands } from './CommandPalette'
 import { ErrorState } from './ErrorState'
 import { Hud } from './Hud'
 import { InfoTracker } from './InfoTracker'
 import { Loading } from './Loading'
 import { ModeSelector } from './ModeSelector'
+import { PlayGuide } from './PlayGuide'
 import { StatBars } from './StatBars'
 import { SuggestionChips } from './SuggestionChips'
 import { TurnText, findUnclosedBracket } from './TurnText'
 import {
+  ApiError,
   fetchSession,
   streamTurn,
   type CastMember,
+  type CommandView,
   type HudState,
   type InputMode,
   type MindView,
@@ -71,10 +75,12 @@ type GameState =
   | { phase: 'notFound' }
   | { phase: 'ready'; session: SessionDetail }
 
+type PendingBase = { index: number; message: string; text: string; commandLabel: string | null }
 type PendingTurn =
-  | { index: number; message: string; text: string; status: 'streaming' }
-  | { index: number; message: string; text: string; status: 'error'; kind: 'stream'; cause: string }
-  | { index: number; message: string; text: string; status: 'error'; kind: ErrorKind; title: string; body: string; cause: string }
+  | (PendingBase & { status: 'streaming' })
+  | (PendingBase & { status: 'error'; kind: 'stream'; cause: string })
+  | (PendingBase & { status: 'error'; kind: ErrorKind; title: string; body: string; cause: string })
+  | (PendingBase & { status: 'error'; kind: 'command'; title: string; body: string; cause: string })
 
 function isReducedMotion(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
@@ -105,6 +111,7 @@ export type GamePanelProps = {
 export function GamePanel(props: GamePanelProps) {
   const { sessionId, onNotFound, onSessionLoaded, onTurnsChanged, regionLabel, autoFocusInput = true } = props
   const inputId = useId()
+  const paletteId = useId()
   const historyRef = useRef<HTMLOListElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const sendingRef = useRef(false)
@@ -128,6 +135,9 @@ export function GamePanel(props: GamePanelProps) {
   const [stats, setStats] = useState<StatView[] | null>(null)
   const [minds, setMinds] = useState<Record<string, MindView> | null>(null)
   const [suggestions, setSuggestions] = useState<string[] | null>(null)
+  const [commands, setCommands] = useState<CommandView[]>([])
+  const [paletteDismissed, setPaletteDismissed] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(0)
   const [mode, setMode] = useState<InputMode>(() => readInputMode(sessionId))
   const [lastMessage, setLastMessage] = useState('')
   const [atBottom, setAtBottom] = useState(true)
@@ -173,6 +183,8 @@ export function GamePanel(props: GamePanelProps) {
     setStats(null)
     setMinds(null)
     setSuggestions(null)
+    setCommands([])
+    setPaletteDismissed(false)
     setMode(readInputMode(sessionId))
     setLastMessage('')
     setDoneAnnouncement('')
@@ -201,6 +213,7 @@ export function GamePanel(props: GamePanelProps) {
       setStats(state.session.stats)
       setMinds(state.session.minds)
       setSuggestions(state.session.suggestions)
+      setCommands(state.session.commands)
     }
   }, [state])
 
@@ -214,8 +227,8 @@ export function GamePanel(props: GamePanelProps) {
 
   useEffect(() => {
     if (state.phase !== 'ready') return
-    const count = Math.floor((state.session.turns.length + extraTurns.length) / 2)
-    onTurnsChangedRef.current?.(count)
+    const playedCount = [...state.session.turns, ...extraTurns].filter((turn) => !turn.meta).length
+    onTurnsChangedRef.current?.(Math.floor(playedCount / 2))
   }, [state, extraTurns.length])
 
   useEffect(() => {
@@ -275,8 +288,15 @@ export function GamePanel(props: GamePanelProps) {
 
   const nextIndex = () => {
     if (state.phase !== 'ready') return 1
-    const turns = [...state.session.turns, ...extraTurns]
-    return turns.length > 0 ? turns[turns.length - 1].index + 1 : 1
+    const played = [...state.session.turns, ...extraTurns].filter((turn) => !turn.meta)
+    return played.length > 0 ? played[played.length - 1].index + 1 : 1
+  }
+
+  const resolveCommandLabel = (name: string | null | undefined): string => {
+    if (!name) return ''
+    const found = commands.find((c) => c.name === name)
+    if (!found) return name
+    return `${found.scope === 'global' ? GLOBAL_SIGIL : SCENARIO_SIGIL}${found.name}`
   }
 
   const runTurn = async (message: string) => {
@@ -284,8 +304,9 @@ export function GamePanel(props: GamePanelProps) {
     sendingRef.current = true
     setTurnPhase('streaming')
     const index = nextIndex()
+    const commandLabel = message[0] === SCENARIO_SIGIL || message[0] === GLOBAL_SIGIL ? message : null
     setLastMessage(message)
-    setPending({ index, message, text: '', status: 'streaming' })
+    setPending({ index, message, text: '', status: 'streaming', commandLabel })
     setSceneAnnouncement('')
     setCastAnnouncement('')
     setStatsAnnouncement('')
@@ -320,7 +341,9 @@ export function GamePanel(props: GamePanelProps) {
           onError: (err) => {
             sawError = true
             setHudStale(true)
-            setPending((p) => (p ? { index: p.index, message: p.message, text: p.text, status: 'error', kind: 'stream', cause: String(err) } : p))
+            setPending((p) =>
+              p ? { index: p.index, message: p.message, text: p.text, commandLabel: p.commandLabel, status: 'error', kind: 'stream', cause: String(err) } : p,
+            )
           },
         },
         { signal: controller.signal, mode },
@@ -331,10 +354,12 @@ export function GamePanel(props: GamePanelProps) {
       if (!sawError) {
         succeeded = true
         if (!sawHud) setHudStale(true)
+        const isMeta = commandLabel !== null
+        const commandName = isMeta ? message.slice(1) : null
         setExtraTurns((prev) => [
           ...prev,
-          { index, role: 'player', text: message, mode },
-          { index, role: 'narrator', text: narratorText },
+          { index, role: 'player', text: message, mode, meta: isMeta, command: commandName },
+          { index, role: 'narrator', text: narratorText, meta: isMeta, command: commandName },
         ])
         setDoneAnnouncement(t('game.turn.done', { index }))
         setPending(null)
@@ -342,10 +367,29 @@ export function GamePanel(props: GamePanelProps) {
       }
     } catch (err) {
       if (controller.signal.aborted) return
+      if (err instanceof ApiError && err.status === 422 && err.detail === 'unknown_command') {
+        setPending((p) =>
+          p
+            ? {
+                index: p.index,
+                message: p.message,
+                text: p.text,
+                commandLabel: p.commandLabel,
+                status: 'error',
+                kind: 'command',
+                title: t('game.commands.unknown.title'),
+                body: t('game.commands.unknown.body'),
+                cause: err.detail ?? '',
+              }
+            : p,
+        )
+        handleDraftChange(message)
+        return
+      }
       const classified = classifyError(err)
       setPending((p) =>
         p
-          ? { index: p.index, message: p.message, text: p.text, status: 'error', kind: classified.kind, title: classified.title, body: classified.body, cause: classified.cause }
+          ? { index: p.index, message: p.message, text: p.text, commandLabel: p.commandLabel, status: 'error', kind: classified.kind, title: classified.title, body: classified.body, cause: classified.cause }
           : p,
       )
       setHudStale(true)
@@ -392,7 +436,61 @@ export function GamePanel(props: GamePanelProps) {
     submit()
   }
 
+  const paletteQuery = draft.startsWith(SCENARIO_SIGIL) || draft.startsWith(GLOBAL_SIGIL) ? draft : null
+  const paletteOpen = paletteQuery !== null && turnPhase !== 'streaming' && !paletteDismissed
+  const filteredCommands = useMemo(
+    () => (paletteQuery === null ? [] : filterCommands(commands, paletteQuery)),
+    [paletteQuery, commands],
+  )
+  const filteredKey = filteredCommands.map((c) => c.name).join('|')
+  const listboxId = `game-palette-${paletteId}`
+  const optionId = (index: number) => `${listboxId}-option-${index}`
+
+  useEffect(() => {
+    setActiveIndex(0)
+  }, [filteredKey])
+
+  const handleDraftChange = (value: string) => {
+    setDraft(value)
+    setPaletteDismissed(false)
+  }
+
+  const pickCommand = (command: CommandView) => {
+    const sigil = command.scope === 'global' ? GLOBAL_SIGIL : SCENARIO_SIGIL
+    setDraft(`${sigil}${command.name}`)
+    setPaletteDismissed(true)
+    setFocusToken((n) => n + 1)
+  }
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (paletteOpen) {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setPaletteDismissed(true)
+        return
+      }
+      if (filteredCommands.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          setActiveIndex((i) => (i + 1) % filteredCommands.length)
+          return
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          setActiveIndex((i) => (i - 1 + filteredCommands.length) % filteredCommands.length)
+          return
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          pickCommand(filteredCommands[activeIndex])
+          return
+        }
+        if (e.key === 'Tab') {
+          setPaletteDismissed(true)
+          return
+        }
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       submit()
@@ -400,6 +498,7 @@ export function GamePanel(props: GamePanelProps) {
   }
 
   const turns = state.phase === 'ready' ? [...state.session.turns, ...extraTurns] : []
+  const playedTurns = turns.filter((turn) => !turn.meta)
   const hudView = state.phase === 'ready' ? (hud ?? state.session.hud) : null
   const castView = state.phase === 'ready' ? (cast ?? state.session.cast) : null
   const suggestionsView = state.phase === 'ready' ? (suggestions ?? state.session.suggestions) : []
@@ -542,6 +641,7 @@ export function GamePanel(props: GamePanelProps) {
       <StatBars stats={statsView} busy={turnPhase === 'streaming'} stale={hudStale} />
       <CastRow cast={castView} busy={turnPhase === 'streaming'} stale={hudStale} />
       <InfoTracker minds={mindsView} cast={castView} busy={turnPhase === 'streaming'} stale={hudStale} />
+      {state.phase === 'ready' ? <PlayGuide playGuide={state.session.playGuide} commands={commands} /> : null}
 
       {state.phase === 'loading' ? (
         <div className="game-history game-history--skeleton" aria-hidden="true">
@@ -566,22 +666,31 @@ export function GamePanel(props: GamePanelProps) {
             <span className="game-turn-label">{t('game.prologue.label')}</span>
             <TurnText text={state.session.prologue} />
           </li>
-          {turns.map((turn) => (
-            <li
-              key={`${turn.index}-${turn.role}`}
-              className={turn.role === 'player' ? 'game-turn game-turn--player' : 'game-turn game-turn--narrator'}
-            >
-              <span className="game-turn-label">
-                {turn.role === 'player' ? t('game.turn.playerLabel') : t('game.turn.narratorLabel')}
-              </span>
-              {turn.role === 'player' && turn.mode ? (
-                <span className="game-turn-mode">{t(`game.mode.${turn.mode}`)}</span>
-              ) : null}
-              {turn.role === 'player' ? <p className="game-turn-text">{turn.text}</p> : <TurnText text={turn.text} />}
-            </li>
-          ))}
+          {turns.map((turn, i) => {
+            const key = `${i}-${turn.index}-${turn.role}`
+            if (turn.meta && turn.role === 'player') return null
+            if (turn.meta) {
+              return (
+                <li key={key} className="game-turn game-turn--meta">
+                  <span className="game-turn-command">{t('game.commands.turnLabel', { command: resolveCommandLabel(turn.command) })}</span>
+                  <TurnText text={turn.text} />
+                </li>
+              )
+            }
+            return (
+              <li key={key} className={turn.role === 'player' ? 'game-turn game-turn--player' : 'game-turn game-turn--narrator'}>
+                <span className="game-turn-label">
+                  {turn.role === 'player' ? t('game.turn.playerLabel') : t('game.turn.narratorLabel')}
+                </span>
+                {turn.role === 'player' && turn.mode ? (
+                  <span className="game-turn-mode">{t(`game.mode.${turn.mode}`)}</span>
+                ) : null}
+                {turn.role === 'player' ? <p className="game-turn-text">{turn.text}</p> : <TurnText text={turn.text} />}
+              </li>
+            )
+          })}
 
-          {pending ? (
+          {pending && pending.commandLabel === null ? (
             <li className="game-turn game-turn--player">
               <span className="game-turn-label">{t('game.turn.playerLabel')}</span>
               <span className="game-turn-mode">{t(`game.mode.${mode}`)}</span>
@@ -590,8 +699,12 @@ export function GamePanel(props: GamePanelProps) {
           ) : null}
 
           {pending ? (
-            <li className="game-turn game-turn--narrator">
-              <span className="game-turn-label">{t('game.turn.narratorLabel')}</span>
+            <li className={pending.commandLabel !== null ? 'game-turn game-turn--meta' : 'game-turn game-turn--narrator'}>
+              {pending.commandLabel !== null ? (
+                <span className="game-turn-command">{t('game.commands.turnLabel', { command: pending.commandLabel })}</span>
+              ) : (
+                <span className="game-turn-label">{t('game.turn.narratorLabel')}</span>
+              )}
 
               {pending.status === 'streaming' && pending.text === '' ? (
                 <p role="status" aria-live="polite">
@@ -631,12 +744,16 @@ export function GamePanel(props: GamePanelProps) {
                   </div>
                 </>
               ) : null}
+
+              {pending.status === 'error' && pending.kind === 'command' ? (
+                <ErrorState title={pending.title} body={pending.body} cause={pending.cause} />
+              ) : null}
             </li>
           ) : null}
         </ol>
       ) : null}
 
-      {state.phase === 'ready' && state.session.turns.length === 0 && extraTurns.length === 0 && !pending ? (
+      {state.phase === 'ready' && playedTurns.length === 0 && !pending ? (
         <p className="game-empty-hint">{t('game.empty.hint')}</p>
       ) : null}
 
@@ -671,9 +788,23 @@ export function GamePanel(props: GamePanelProps) {
             value={draft}
             placeholder={t(`game.input.placeholder.${mode}`)}
             disabled={turnPhase === 'streaming'}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => handleDraftChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            aria-autocomplete="list"
+            aria-expanded={paletteOpen && filteredCommands.length > 0}
+            aria-controls={paletteOpen && filteredCommands.length > 0 ? listboxId : undefined}
+            aria-activedescendant={paletteOpen && filteredCommands.length > 0 ? optionId(activeIndex) : undefined}
           />
+          {paletteOpen ? (
+            <CommandPalette
+              commands={commands}
+              query={paletteQuery ?? ''}
+              activeIndex={activeIndex}
+              listboxId={listboxId}
+              optionId={optionId}
+              onPick={pickCommand}
+            />
+          ) : null}
           <button type="submit" disabled={turnPhase === 'streaming' || draft.trim() === ''} aria-busy={turnPhase === 'streaming'}>
             {turnPhase === 'streaming' ? t('game.input.sending') : t('game.input.send')}
           </button>

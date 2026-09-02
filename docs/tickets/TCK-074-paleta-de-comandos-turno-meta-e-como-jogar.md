@@ -1,7 +1,7 @@
 ---
 id: TCK-074
 title: Paleta de comandos, turno meta no histórico e bloco Como jogar
-status: ready
+status: in_review
 points: 5
 blockedBy: [TCK-060, TCK-071]
 files:
