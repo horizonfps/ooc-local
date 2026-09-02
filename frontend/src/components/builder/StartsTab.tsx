@@ -158,6 +158,8 @@ export function StartsTab(props: TabProps) {
       name: createName.trim(),
       prologue: '',
       opening_scene: '',
+      conflict: null,
+      mission: null,
       play_guide: null,
       suggestions: [],
       hud: baseHud ? { ...baseHud } : { location: '', time: '00:00', weather: 'clear' },
@@ -365,6 +367,40 @@ export function StartsTab(props: TabProps) {
                   {fieldError(`starts.${selectedId}.opening_scene`)}
                 </p>
               ) : null}
+            </div>
+
+            <div className="builder-field">
+              <label htmlFor={`builder-field-starts.${selectedId}.conflict`}>
+                {t('builder.starts.conflict')} <span className="field-hint">({t('common.optional')})</span>
+              </label>
+              <textarea
+                id={`builder-field-starts.${selectedId}.conflict`}
+                className="builder-field-textarea"
+                rows={4}
+                value={selectedStart.conflict ?? ''}
+                onChange={(e) => updateStart(selectedId, { conflict: e.target.value.trim() === '' ? null : e.target.value })}
+                aria-describedby={`builder-field-starts.${selectedId}.conflict-hint`}
+              />
+              <p className="field-hint" id={`builder-field-starts.${selectedId}.conflict-hint`}>
+                {t('builder.starts.conflict.hint')}
+              </p>
+            </div>
+
+            <div className="builder-field">
+              <label htmlFor={`builder-field-starts.${selectedId}.mission`}>
+                {t('builder.starts.mission')} <span className="field-hint">({t('common.optional')})</span>
+              </label>
+              <textarea
+                id={`builder-field-starts.${selectedId}.mission`}
+                className="builder-field-textarea"
+                rows={4}
+                value={selectedStart.mission ?? ''}
+                onChange={(e) => updateStart(selectedId, { mission: e.target.value.trim() === '' ? null : e.target.value })}
+                aria-describedby={`builder-field-starts.${selectedId}.mission-hint`}
+              />
+              <p className="field-hint" id={`builder-field-starts.${selectedId}.mission-hint`}>
+                {t('builder.starts.mission.hint')}
+              </p>
             </div>
 
             <div className="builder-field">

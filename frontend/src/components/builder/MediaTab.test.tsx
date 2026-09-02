@@ -45,6 +45,8 @@ function startFixture(id: string, name: string, location: string) {
     name,
     prologue: 'It begins.',
     opening_scene: 'A hallway.',
+    conflict: null,
+    mission: null,
     play_guide: null,
     suggestions: [],
     hud: { location, time: '08:00', weather: 'clear' },

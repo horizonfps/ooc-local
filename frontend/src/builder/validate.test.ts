@@ -21,6 +21,8 @@ function draft(overrides: Partial<BuilderDraft> = {}): BuilderDraft {
         name: 'Default start',
         prologue: 'It begins in a quiet town.',
         opening_scene: 'The square at dusk.',
+        conflict: null,
+        mission: null,
         play_guide: null,
         suggestions: [],
         hud: { location: 'Town square', time: '08:00', weather: 'clear' },
@@ -132,5 +134,20 @@ describe('validateDraft', () => {
   it('still requires the universe with lore blocks present', () => {
     const errors = validateDraft(draft({ world: '## Rules\n\nNo magic.\n\n## Factions\n\nTwo of them.' }))
     expect(errors.some((e) => e.tab === 'world' && e.field === 'universe')).toBe(true)
+  })
+
+  it('does not require conflict or mission on a start', () => {
+    const errors = validateDraft(draft())
+    expect(errors.some((e) => e.tab === 'starts' && e.field.endsWith('.conflict'))).toBe(false)
+    expect(errors.some((e) => e.tab === 'starts' && e.field.endsWith('.mission'))).toBe(false)
+  })
+
+  it('does not flag a long conflict text as an error', () => {
+    const base = draft()
+    const errors = validateDraft({
+      ...base,
+      starts: { default: { ...base.starts.default, conflict: 'x'.repeat(5000) } },
+    })
+    expect(errors).toEqual([])
   })
 })

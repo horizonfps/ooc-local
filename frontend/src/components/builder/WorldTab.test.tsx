@@ -25,6 +25,8 @@ function baseDraft(): BuilderDraft {
         name: 'Default start',
         prologue: '',
         opening_scene: '',
+        conflict: null,
+        mission: null,
         play_guide: null,
         suggestions: [],
         hud: { location: 'Hallway', time: '08:00', weather: 'clear' },

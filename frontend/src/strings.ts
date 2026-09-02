@@ -291,6 +291,12 @@ const en = {
   'builder.starts.prologue.hint': 'The first text the player reads.',
   'builder.starts.openingScene': 'Opening scene',
   'builder.starts.openingScene.hint': 'Goes to the narrator only — the player never sees it.',
+  'builder.starts.conflict': 'Conflict',
+  'builder.starts.conflict.hint':
+    'The conflict of this start. Optional, and it goes to the narrator only — the player never sees it.',
+  'builder.starts.mission': 'Player mission',
+  'builder.starts.mission.hint':
+    'What the player is chasing in this start. Optional, and it goes to the narrator only — the player never sees it.',
   'builder.starts.playGuide': 'Play guide',
   'builder.starts.playGuide.hint': "Author's note shown to the player, kept out of the prompt.",
   'builder.starts.suggestions.legend': 'Opening suggestions',
@@ -759,6 +765,10 @@ const ptBr: Record<StringKey, string> = {
   'builder.starts.prologue.hint': 'O primeiro texto que o jogador lê.',
   'builder.starts.openingScene': 'Cena inicial',
   'builder.starts.openingScene.hint': 'Vai só para o narrador — o jogador não vê.',
+  'builder.starts.conflict': 'Conflito',
+  'builder.starts.conflict.hint': 'O conflito deste start. Opcional, e vai só para o narrador — o jogador não vê.',
+  'builder.starts.mission': 'Missão do jogador',
+  'builder.starts.mission.hint': 'O que o jogador persegue neste start. Opcional, e vai só para o narrador — o jogador não vê.',
   'builder.starts.playGuide': 'Guia de jogo',
   'builder.starts.playGuide.hint': 'Nota do autor mostrada ao jogador, fora do prompt.',
   'builder.starts.suggestions.legend': 'Sugestões iniciais',
