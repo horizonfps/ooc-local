@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GamePanel } from './GamePanel'
 import { t } from '../i18n'
-import type { SessionDetail, StatView } from '../api'
+import type { CommandView, SessionDetail, StatView } from '../api'
 
 function jsonResponse(body: unknown, status = 200) {
   return {
@@ -816,6 +816,236 @@ describe('GamePanel', () => {
       expect(screen.getByRole('radio', { name: t('game.mode.do') })).toBeChecked()
 
       Object.defineProperty(window, 'localStorage', { configurable: true, value: original })
+    })
+  })
+
+  describe('commands', () => {
+    const commands: CommandView[] = [
+      { name: 'fofoca', description: 'O que andam dizendo pelas costas', scope: 'scenario' },
+      { name: 'inventario', description: 'Seus itens', scope: 'scenario' },
+      { name: 'diary', description: 'Diário do jogador sobre o dia', scope: 'global' },
+    ]
+
+    it('opens the palette when the first character is a sigil', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({ get: () => jsonResponse(session({ commands })), post: () => sseResponse(['[DONE]']) })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, '!')
+
+      const listbox = screen.getByRole('listbox')
+      expect(listbox).toBeInTheDocument()
+      expect(textarea).toHaveAttribute('aria-expanded', 'true')
+      expect(textarea).toHaveAttribute('aria-controls', listbox.id)
+    })
+
+    it('arrow keys move aria-activedescendant and Enter completes the draft', async () => {
+      const user = userEvent.setup()
+      const fetchMock = mockRoutedFetch({ get: () => jsonResponse(session({ commands })), post: () => sseResponse(['[DONE]']) })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, '!')
+      const options = screen.getAllByRole('option')
+      await user.keyboard('{ArrowDown}')
+      expect(textarea).toHaveAttribute('aria-activedescendant', options[1].id)
+
+      await user.keyboard('{Enter}')
+      expect(textarea).toHaveValue('!inventario')
+      expect(screen.queryByRole('listbox')).toBeNull()
+      expect(document.activeElement).toBe(textarea)
+      expect(fetchMock).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'POST' }))
+    })
+
+    it('the second Enter sends the completed command', async () => {
+      const user = userEvent.setup()
+      const fetchMock = mockRoutedFetch({ get: () => jsonResponse(session({ commands })), post: () => sseResponse(['[DONE]']) })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, '!fofoca{Enter}{Enter}')
+
+      await waitFor(() => expect(postBodies(fetchMock)).toHaveLength(1))
+      expect(postBodies(fetchMock)[0].message).toBe('!fofoca')
+    })
+
+    it('renders a meta turn with the command label and its own style', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ commands })),
+        post: () => sseResponse([{ delta: 'Chloe acha que você é estranho.' }, '[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, '!fofoca{Enter}{Enter}')
+
+      await screen.findByText(t('game.commands.turnLabel', { command: '!fofoca' }))
+      expect(document.querySelector('.game-turn--meta')).not.toBeNull()
+      expect(document.querySelectorAll('.game-turn--player')).toHaveLength(0)
+    })
+
+    it('does not open the palette when the sigil is not the first character', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({ get: () => jsonResponse(session({ commands })), post: () => sseResponse(['[DONE]']) })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'vou ver /diary')
+
+      expect(screen.queryByRole('listbox')).toBeNull()
+    })
+
+    it('Esc closes the palette and keeps the text', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({ get: () => jsonResponse(session({ commands })), post: () => sseResponse(['[DONE]']) })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, '!fo')
+      expect(screen.getByRole('listbox')).toBeInTheDocument()
+
+      await user.keyboard('{Escape}')
+      expect(screen.queryByRole('listbox')).toBeNull()
+      expect(textarea).toHaveValue('!fo')
+      expect(document.activeElement).toBe(textarea)
+    })
+
+    it('Esc with the palette closed does not clear the draft', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({ get: () => jsonResponse(session()), post: () => sseResponse(['[DONE]']) })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'hello')
+      await user.keyboard('{Escape}')
+
+      expect(textarea).toHaveValue('hello')
+    })
+
+    it('a meta turn does not increment onTurnsChanged', async () => {
+      const user = userEvent.setup()
+      const onTurnsChanged = vi.fn()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ commands })),
+        post: () => sseResponse([{ delta: 'Chloe acha que você é estranho.' }, '[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" onTurnsChanged={onTurnsChanged} />)
+
+      await screen.findByText('Once upon a time.')
+      expect(onTurnsChanged).toHaveBeenLastCalledWith(0)
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, '!fofoca{Enter}{Enter}')
+
+      await screen.findByText('Chloe acha que você é estranho.')
+      expect(onTurnsChanged).toHaveBeenLastCalledWith(0)
+    })
+
+    it('a session whose only turns are meta still shows game.empty.hint', async () => {
+      mockRoutedFetch({
+        get: () =>
+          jsonResponse(
+            session({
+              commands,
+              turns: [
+                { index: 1, role: 'player', text: '!fofoca', meta: true, command: 'fofoca' },
+                { index: 1, role: 'narrator', text: 'Chloe acha que você é estranho.', meta: true, command: 'fofoca' },
+              ],
+            }),
+          ),
+        post: () => sseResponse(['[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      expect(screen.getByText(t('game.empty.hint'))).toBeInTheDocument()
+    })
+
+    it('two meta turns in a row do not trigger a duplicate key warning', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      mockRoutedFetch({
+        get: () =>
+          jsonResponse(
+            session({
+              commands,
+              turns: [
+                { index: 1, role: 'player', text: '!fofoca', meta: true, command: 'fofoca' },
+                { index: 1, role: 'narrator', text: 'Primeiro.', meta: true, command: 'fofoca' },
+                { index: 1, role: 'player', text: '!fofoca', meta: true, command: 'fofoca' },
+                { index: 1, role: 'narrator', text: 'Segundo.', meta: true, command: 'fofoca' },
+              ],
+            }),
+          ),
+        post: () => sseResponse(['[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Primeiro.')
+      await screen.findByText('Segundo.')
+      expect(errorSpy).not.toHaveBeenCalled()
+      errorSpy.mockRestore()
+    })
+
+    it('the mode badge is absent on a meta turn', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ commands })),
+        post: () => sseResponse([{ delta: 'Chloe acha que você é estranho.' }, '[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, '!fofoca{Enter}{Enter}')
+
+      await screen.findByText('Chloe acha que você é estranho.')
+      const metaTurn = document.querySelector('.game-turn--meta')
+      expect(metaTurn).not.toBeNull()
+      expect(within(metaTurn as HTMLElement).queryByText(t('game.mode.do'))).toBeNull()
+      expect(within(metaTurn as HTMLElement).queryByText(t('game.mode.say'))).toBeNull()
+      expect(within(metaTurn as HTMLElement).queryByText(t('game.mode.story'))).toBeNull()
+    })
+
+    it('a 422 unknown_command shows the command error without a retry button and keeps the text in the textarea', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ commands })),
+        post: () => jsonResponse({ detail: 'unknown_command' }, 422),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, '!naoexiste{Enter}')
+
+      await screen.findByText(t('game.commands.unknown.title'))
+      expect(screen.queryByRole('button', { name: t('common.retry') })).toBeNull()
+      expect(textarea).toHaveValue('!naoexiste')
+      expect(screen.getByText(t('game.commands.noMatch'))).toBeInTheDocument()
+    })
+
+    it('a 500 on a command still shows the generic turn error with retry', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ commands })),
+        post: () => jsonResponse({}, 500),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, '!fofoca{Enter}{Enter}')
+
+      await screen.findByText(t('error.unexpected.title'))
+      expect(screen.getByRole('button', { name: t('common.retry') })).toBeInTheDocument()
     })
   })
 })

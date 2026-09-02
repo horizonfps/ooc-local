@@ -96,6 +96,21 @@
   background: #2b3a55;
 }
 
+.game-turn--meta {
+  width: 100%;
+  align-self: flex-start;
+  background: var(--surface);
+  border: 1px dashed #33363f;
+}
+
+.game-turn-command {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  overflow-wrap: anywhere;
+}
+
 .game-turn-mode {
   display: inline-block;
   margin-left: 0.5rem;
@@ -168,6 +183,7 @@
 }
 
 .game-footer {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
