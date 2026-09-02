@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -94,9 +95,15 @@ def test_example_scenario_files_are_utf8_and_accented():
     import app.scenario as scenario_module
 
     scenario_dir = scenario_module.scenarios_dir() / "exemplo-escola"
-    files = [scenario_dir / "world.md", scenario_dir / "scenario.yaml"]
+    files = [
+        scenario_dir / "world.md",
+        scenario_dir / "scenario.yaml",
+        scenario_dir / "stats.yaml",
+        scenario_dir / "commands.yaml",
+    ]
     files += sorted((scenario_dir / "starts").glob("*.yaml"))
     files += sorted((scenario_dir / "characters").glob("*.yaml"))
+    files += sorted((scenario_dir / "lorebook").glob("*.yaml"))
 
     accented_chars = set("áàâãéêíóôõúüçÁÀÂÃÉÊÍÓÔÕÚÜÇ")
     for path in files:
@@ -133,3 +140,106 @@ def test_get_scenarios_route_includes_exemplo_escola():
     assert {"id": "exemplo-escola", "locale": "pt-br"}.items() <= next(
         item for item in body if item["id"] == "exemplo-escola"
     ).items()
+
+
+def test_example_scenario_stats_ids_and_order():
+    scenario = load_scenario("exemplo-escola")
+    assert [stat.id for stat in scenario.stats] == ["reputacao", "energia"]
+
+
+def test_example_scenario_reputacao_range_default_and_levels():
+    scenario = load_scenario("exemplo-escola")
+    reputacao = next(stat for stat in scenario.stats if stat.id == "reputacao")
+    assert reputacao.min == 0
+    assert reputacao.max == 100
+    assert reputacao.default == 40
+    assert [level.from_ for level in reputacao.levels] == [0, 40, 75]
+
+
+def test_example_scenario_energia_has_no_levels():
+    scenario = load_scenario("exemplo-escola")
+    energia = next(stat for stat in scenario.stats if stat.id == "energia")
+    assert energia.default == 80
+    assert energia.levels == []
+
+
+def test_example_scenario_stats_have_description_icon_and_color():
+    scenario = load_scenario("exemplo-escola")
+    color_re = re.compile(r"^#[0-9a-fA-F]{6}$")
+    for stat in scenario.stats:
+        assert stat.description
+        assert stat.icon
+        assert stat.color
+        assert color_re.match(stat.color)
+
+
+def test_example_scenario_allow_dynamic_stats_is_false():
+    scenario = load_scenario("exemplo-escola")
+    assert scenario.meta.allow_dynamic_stats is False
+
+
+def test_example_scenario_reputacao_levels_from_strictly_increasing_within_range():
+    scenario = load_scenario("exemplo-escola")
+    reputacao = next(stat for stat in scenario.stats if stat.id == "reputacao")
+    previous = None
+    for level in reputacao.levels:
+        assert reputacao.min <= level.from_ <= reputacao.max
+        if previous is not None:
+            assert level.from_ > previous
+        previous = level.from_
+
+
+def test_example_scenario_lorebook_ids_scope_enabled_and_keywords():
+    scenario = load_scenario("exemplo-escola")
+    assert set(scenario.lorebook) == {"caderno", "sala-do-gremio"}
+    for entry in scenario.lorebook.values():
+        assert entry.scope == "keyword"
+        assert entry.enabled is True
+        assert entry.keywords
+
+
+def test_example_scenario_caderno_priority_higher_than_sala_do_gremio():
+    scenario = load_scenario("exemplo-escola")
+    assert scenario.lorebook["caderno"].priority > scenario.lorebook["sala-do-gremio"].priority
+
+
+def test_example_scenario_lore_body_word_count_within_budget():
+    scenario = load_scenario("exemplo-escola")
+    for entry in scenario.lorebook.values():
+        word_count = len(entry.body.split())
+        assert 40 <= word_count <= 200
+
+
+def test_example_scenario_lore_keywords_are_anchored_in_scenario_text():
+    import app.scenario as scenario_module
+
+    scenario = load_scenario("exemplo-escola")
+    scenario_dir = scenario_module.scenarios_dir() / "exemplo-escola"
+
+    texts = [(scenario_dir / "world.md").read_text(encoding="utf-8")]
+    texts += [path.read_text(encoding="utf-8") for path in sorted((scenario_dir / "starts").glob("*.yaml"))]
+    texts += [path.read_text(encoding="utf-8") for path in sorted((scenario_dir / "characters").glob("*.yaml"))]
+    haystack = "\n".join(texts).casefold()
+
+    for entry in scenario.lorebook.values():
+        if entry.scope != "keyword":
+            continue
+        assert any(keyword.casefold() in haystack for keyword in entry.keywords)
+
+
+def test_example_scenario_lorebook_stems_have_no_accent_or_uppercase():
+    import app.scenario as scenario_module
+
+    scenario_dir = scenario_module.scenarios_dir() / "exemplo-escola"
+    stem_re = re.compile(r"^[a-z0-9-]+$")
+    for path in sorted((scenario_dir / "lorebook").glob("*.yaml")):
+        assert stem_re.match(path.stem)
+
+
+def test_example_scenario_commands_include_fofoca():
+    scenario = load_scenario("exemplo-escola")
+    assert [command.name for command in scenario.commands] == ["fofoca"]
+    fofoca = scenario.commands[0]
+    assert fofoca.description
+    assert fofoca.prompt
+    assert "fora da narrativa" in fofoca.prompt.casefold()

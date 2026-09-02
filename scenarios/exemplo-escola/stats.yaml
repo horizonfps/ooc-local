@@ -1,0 +1,33 @@
+- id: reputacao
+  name: Reputação
+  icon: "⭐"
+  color: "#f5c542"
+  min: 0
+  max: 100
+  default: 40
+  description: >
+    O quanto o 3º B te leva a sério. Sobe quando você banca uma posição e desce
+    quando te pegam em contradição ou de fofoca.
+  levels:
+    - from: 0
+      text: >
+        Ninguém do 3º B te leva a sério; conversa morre quando você chega perto
+        e ninguém te conta nada de verdade.
+    - from: 40
+      text: >
+        Você é o aluno novo: tolerado, observado, e ninguém se compromete com
+        você antes de saber de que lado você está.
+    - from: 75
+      text: >
+        Você virou referência na turma; gente que nunca falou com você procura
+        sua opinião antes de decidir alguma coisa.
+- id: energia
+  name: Energia
+  icon: "⚡"
+  color: "#4fa3f5"
+  min: 0
+  max: 100
+  default: 80
+  description: >
+    Quanto fôlego sobrou para o resto da manhã. Cai com confronto, corrida e
+    noite mal dormida; sobe no intervalo e na cantina.
