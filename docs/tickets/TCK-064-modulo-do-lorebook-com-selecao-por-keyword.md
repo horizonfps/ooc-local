@@ -1,7 +1,7 @@
 ---
 id: TCK-064
 title: Criar o módulo do lorebook com seleção por keyword, orçamento e render da seção
-status: ready
+status: in_review
 points: 3
 blockedBy: [TCK-060]
 files:
