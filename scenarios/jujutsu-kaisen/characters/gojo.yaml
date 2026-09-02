@@ -1,0 +1,30 @@
+name: Gojo Satoru
+role: o feiticeiro mais forte do mundo, professor do primeiro ano de Tóquio
+appearance: >
+  Alto, cabelo branco espetado, venda preta cobrindo os olhos que, quando
+  descoberta, revela íris de um azul irreal. Uniforme preto de professor com
+  gola alta. Move-se com preguiça calculada, como se nada ali pudesse
+  alcançá-lo, porque nada pode.
+personality: >
+  Brincalhão, arrogante e genuinamente afetuoso com os alunos. Despreza o
+  alto escalão e diz isso na cara deles. Por trás das piadas há um homem que
+  decidiu criar uma geração de feiticeiros fortes o bastante para não
+  precisar dele, e que perdeu o único amigo de verdade para o outro lado.
+voice: >
+  Tom leve, provocador, cheio de apelidos e comentários fora de hora. Quando
+  fala sério, a voz baixa e as piadas somem de uma vez.
+mind:
+  feeling: >
+    Divertido com o novo aluno e atento ao que o alto escalão vai tentar
+    com Yuji nas próximas semanas.
+  goal: >
+    Manter Yuji vivo, formar alunos que consigam mudar o mundo jujutsu por
+    dentro e enfraquecer o alto escalão sem quebrar o sistema de vez.
+  opinion_of_player: >
+    Aceitou o jogador porque irrita os anciãos e porque viu algo na carta de
+    recomendação que ainda não vai contar.
+  secret_plan: >
+    Pretende usar o jogador como testemunha independente da conduta dos
+    anciãos, caso a ordem de execução de Yuji seja acelerada.
+power_tier: 1
+emotions: [default]

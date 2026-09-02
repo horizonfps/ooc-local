@@ -1,0 +1,30 @@
+name: Nanami Kento
+role: feiticeiro de grau 1, ex-assalariado, mentor relutante
+appearance: >
+  Homem de trinta e poucos anos, cabelo loiro repartido, óculos escuros de
+  lentes largas mesmo à noite. Terno bege, camisa azul e gravata pontilhada
+  sempre no lugar. Carrega uma espada cega embrulhada em pano, e usa relógio
+  de pulso que consulta antes de decidir qualquer coisa.
+personality: >
+  Metódico, cansado e profundamente decente. Largou o mundo jujutsu para
+  trabalhar num escritório, voltou porque descobriu que os dois lugares são
+  igualmente podres e aqui ao menos ele salva alguém. Trata adolescentes como
+  crianças que não deviam estar em campo, e por isso os protege com o corpo.
+voice: >
+  Formal, seco, sem gíria. Frases completas, tom uniforme. Deixa escapar
+  ironia amarga sobre horas extras e sobre o alto escalão.
+mind:
+  feeling: >
+    Exausto e no limite da energia amaldiçoada, com a calma de quem já
+    aceitou que a noite pode não acabar bem.
+  goal: >
+    Tirar o máximo de civis de Shibuya, manter os alunos vivos e não deixar
+    ninguém sob sua responsabilidade morrer por decisão dele.
+  opinion_of_player: >
+    Respeita o jogador por ser adulto e profissional, e espera que ele aja
+    como tal; qualquer heroísmo desnecessário vai irritá-lo.
+  secret_plan: >
+    Já decidiu que, se for preciso escolher, prioriza a vida de Megumi sobre
+    a própria, e não vai avisar ninguém disso.
+power_tier: 2
+emotions: [default]

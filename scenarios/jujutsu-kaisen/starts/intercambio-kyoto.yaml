@@ -1,0 +1,51 @@
+name: Evento de Intercâmbio (lado de Kyoto)
+prologue: >
+  O ônibus de Kyoto para em frente ao prédio principal da escola de Tóquio e
+  você desce por último, como sempre. Segundo ano, grau 3, técnica inata
+  medíocre segundo o diretor Gakuganji e "boa o bastante para o que eu preciso"
+  segundo ele mesmo, ontem à noite, na sala dele, com a porta fechada.
+
+  O que ele precisa é simples e ilegal só na aparência: durante a competição
+  de amanhã, Itadori Yuji, o receptáculo de Sukuna, vai estar em campo. O alto
+  escalão já emitiu a ordem de execução; Gojo a suspendeu na marra. Um
+  acidente em campo de treino não é execução, é acidente. Todo, o gigante do
+  terceiro ano, deu de ombros e disse que só luta com quem vale a pena. Mai,
+  a gêmea Zen'in, ouviu a ordem e ficou quieta demais. E você ainda não
+  respondeu nada.
+
+  Do outro lado do pátio, o pessoal de Tóquio ri de alguma coisa. O garoto de
+  cabelo rosa acena para vocês sem nenhuma desconfiança no rosto.
+opening_scene: >
+  Pátio da escola de Tóquio, tarde do dia anterior ao evento. A delegação de
+  Kyoto acaba de chegar; Todo mede o pessoal de Tóquio de longe, Mai evita
+  olhar para o lado onde Maki está; Yuji acena e vem se aproximando para se
+  apresentar, com Maki logo atrás avaliando a delegação.
+conflict: >
+  O diretor Gakuganji ordenou, em nome do alto escalão, que os alunos de Kyoto
+  matem Itadori Yuji durante o evento e façam parecer acidente. Todo não vai
+  obedecer por vontade própria, Mai está paralisada de medo, e o resto da
+  delegação está dividido. Do lado de Tóquio, Maki já desconfia, e Gojo não
+  vai deixar barato. Quem tocar em Yuji ganha o alto escalão como aliado e
+  Gojo como inimigo; quem se recusar vira alvo de Gakuganji na volta para
+  Kyoto.
+mission: >
+  O jogador é aluno do segundo ano de Kyoto, grau 3, com uma técnica inata
+  modesta, e recebeu a ordem diretamente. Precisa decidir, antes do evento
+  começar, se obedece, se sabota a ordem por dentro, ou se avisa Tóquio. Cada
+  conversa com Todo, Mai, Maki ou Yuji muda o preço da escolha. A lealdade à
+  escola e ao diretor é real, e o jogador tem colegas que vão pagar se ele
+  trair.
+play_guide: >
+  Você tem a tarde e a noite antes do evento. Pode conversar com Todo ou Mai
+  sobre a ordem, se aproximar de Yuji para conhecê-lo, sondar Maki do outro
+  lado, ou procurar Gojo por conta própria. Nada obriga a decidir agora, mas
+  amanhã em campo já será tarde.
+suggestions:
+  - Perguntar a Mai o que ela pretende fazer com a ordem
+  - Cumprimentar Yuji e ver que tipo de pessoa ele é
+  - Sondar Todo sobre o que ele acha do diretor
+hud:
+  location: pátio da escola de Tóquio
+  time: "16:30"
+  weather: cloudy
+characters: [todo, mai, yuji, maki]

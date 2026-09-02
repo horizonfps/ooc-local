@@ -1,0 +1,50 @@
+name: Incidente de Shibuya
+prologue: >
+  Trinta e um de outubro, vinte e duas horas e poucos minutos. Você é
+  feiticeiro de grau 1 auxiliar, contratado por hora, o tipo de gente que o
+  alto escalão chama quando não sobra mais ninguém. Chamaram. Um véu cobriu
+  Shibuya inteira às oito da noite e prendeu milhares de civis lá dentro; as
+  saídas do metrô estão lacradas por dentro, os telefones não funcionam e
+  os poucos relatórios que saíram falam em maldições de grau especial, em
+  Geto Suguru vivo e, há vinte minutos, em algo que nenhum feiticeiro queria
+  ouvir: Gojo Satoru foi selado.
+
+  Nanami Kento te encontra na entrada da Rua Dogenzaka, o paletó rasgado, a
+  gravata ainda no lugar. "O plano era simples e acabou. Agora o plano é tirar
+  o máximo de civis daqui e não morrer no processo." Ao lado dele, Fushiguro
+  Megumi, primeiro ano, olha para o celular sem sinal como se pudesse forçar
+  uma mensagem a chegar. Ele não fala o nome de Yuji, mas é nele que está
+  pensando.
+
+  Ao fundo, do lado da estação, uma pressão de energia amaldiçoada que faz
+  seus dentes doerem. Não é uma maldição. É várias.
+opening_scene: >
+  Entrada da Rua Dogenzaka, Shibuya, noite. Sirenes distantes, luz de
+  emergência nos prédios. Nanami repassa a situação com o jogador em voz
+  baixa; Megumi guarda o celular e espera ordens sem esconder a urgência.
+conflict: >
+  Com Gojo selado, a linha de defesa do mundo jujutsu caiu de uma vez. Geto e
+  as maldições de grau especial controlam a estação, o alto escalão está mudo
+  e os feiticeiros dentro do véu não conseguem se comunicar. Cada grupo age
+  por conta própria: Nanami quer salvar civis e recuar, Megumi quer achar
+  Yuji e a Nobara. Toda escolha entre os dois custa vidas do outro lado, e
+  ninguém sabe quem ainda está vivo.
+mission: >
+  O jogador é feiticeiro de grau 1 auxiliar, adulto, sem vínculo com as
+  escolas, chamado às pressas. Precisa decidir com Nanami a rota pela cidade,
+  manter Megumi vivo apesar da impulsividade dele, tirar civis de dentro do
+  véu e, se sobrar coragem, se aproximar da estação para entender o que
+  aconteceu com Gojo. Não há reforço a caminho.
+play_guide: >
+  Você pode seguir o plano de Nanami, apoiar a urgência de Megumi ou propor
+  uma terceira rota. Shibuya é grande e o véu não vai cair sozinho; cada
+  quadra é uma escolha.
+suggestions:
+  - Perguntar a Nanami qual é a rota mais segura até a saída
+  - Dizer a Megumi que vamos procurar o Yuji juntos
+  - Avaliar a pressão de energia que vem da estação
+hud:
+  location: Rua Dogenzaka, Shibuya
+  time: "22:15"
+  weather: night
+characters: [nanami, megumi]

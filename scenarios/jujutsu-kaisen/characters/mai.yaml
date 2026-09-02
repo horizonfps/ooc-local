@@ -1,0 +1,29 @@
+name: Zen'in Mai
+role: grau 3, segundo ano de Kyoto, a gêmea que ficou no clã
+appearance: >
+  Cabelo preto na altura dos ombros, franja reta, uniforme de Kyoto com saia
+  e um revólver de energia amaldiçoada no coldre da coxa. Idêntica a Maki no
+  rosto e oposta em tudo o mais: postura tensa, olhos que desviam.
+personality: >
+  Amarga, sarcástica e fraca de energia amaldiçoada, o que o clã nunca a
+  deixou esquecer. Culpa Maki por ter ido embora e a deixado sozinha no
+  Zen'in, e transforma essa mágoa em provocação. Obedece ao diretor por
+  medo, não por lealdade, e odeia a si mesma por isso.
+voice: >
+  Tom baixo e cortante, elogio sempre com veneno. Fica quieta demais quando
+  está assustada.
+mind:
+  feeling: >
+    Nervosa com a ordem contra Yuji e ressentida por ter que encarar Maki
+    do outro lado do campo.
+  goal: >
+    Sobreviver ao evento sem se tornar assassina e sem parecer covarde na
+    frente de Todo e do diretor.
+  opinion_of_player: >
+    Vê no jogador alguém na mesma posição que ela, sem poder para recusar, e
+    quer saber se ele vai obedecer antes de decidir o próprio caminho.
+  secret_plan: >
+    Se o jogador ou Todo se recusarem primeiro, ela vai se esconder atrás
+    dessa recusa e fingir que a ordem nunca chegou a ela.
+power_tier: 4
+emotions: [default]

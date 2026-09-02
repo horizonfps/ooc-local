@@ -1,0 +1,50 @@
+name: Primeiro dia em Tóquio
+prologue: >
+  O carro de Ijichi sobe a estrada de terra por vinte minutos antes de o portão
+  da escola aparecer entre os cedros. Você chegou a Tóquio ontem, com uma mala
+  e uma carta de recomendação assinada por um feiticeiro que jurou que "o Gojo
+  vai te aceitar, ele aceita qualquer coisa que irrite os anciãos". Você viu
+  maldições a vida inteira e nunca soube o nome delas até três meses atrás.
+
+  No pátio, três alunos do primeiro ano esperam em posições que dizem tudo:
+  um garoto de cabelo rosa sentado no chão comendo pão de melão, um garoto de
+  cabelo preto espetado encostado na parede fingindo que não te viu, e uma
+  garota de cabelo ruivo curto com um martelo pendurado na cintura que te
+  olha de cima a baixo sem esconder. Atrás deles, com uma venda preta sobre
+  os olhos e um sorriso largo demais, o professor Gojo Satoru acena como se
+  vocês fossem velhos amigos.
+
+  "Você é o quarto", ele diz. "Ótimo. Agora dá pra dividir em duplas. Tem
+  uma maldição de grau 2 num prédio abandonado em Nishi-Tokyo e o pessoal do
+  alto escalão está impaciente." Ninguém te disse que a primeira aula seria
+  uma missão de verdade.
+opening_scene: >
+  Pátio da escola de Tóquio, manhã. Gojo acaba de anunciar a missão e observa
+  a reação de todos; Yuji se levanta animado; Megumi avalia o jogador em
+  silêncio; Nobara cruza os braços e espera que alguém a impressione.
+conflict: >
+  O alto escalão quer Itadori Yuji executado e só aceita adiar porque Gojo
+  bancou a proposta de reunir todos os dedos de Sukuna nele antes. Cada missão
+  em que Yuji vai é um teste: se Sukuna aparecer, os anciãos têm o pretexto
+  que querem. Gojo aceitou o jogador na escola justamente para ter mais um par
+  de olhos que não responde aos anciãos, e ainda não disse isso a ninguém.
+mission: >
+  O jogador é aluno novo do primeiro ano, recém-chegado de fora, sem clã, sem
+  técnica inata conhecida e sem histórico com a turma. Precisa sobreviver à
+  primeira missão, provar para os colegas (e principalmente para Megumi) que
+  não é peso morto, e descobrir aos poucos por que Gojo o aceitou tão rápido.
+  Ganhar a confiança de Yuji é fácil; a de Nobara custa; a de Megumi custa
+  caro.
+play_guide: >
+  Você pode puxar conversa com qualquer um dos três antes de sair, perguntar a
+  Gojo o que ele espera de você, ou apenas entrar no carro. As duplas são
+  decididas na cena; escolha com quem quer ir.
+suggestions:
+  - Se apresentar a Yuji e perguntar sobre a missão
+  - Perguntar a Gojo por que me aceitou tão rápido
+  - Observar Megumi e esperar que ele fale primeiro
+hud:
+  location: pátio da escola de Tóquio
+  time: "09:10"
+  weather: clear
+characters: [yuji, megumi, nobara, gojo]

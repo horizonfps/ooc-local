@@ -1,0 +1,29 @@
+name: Kugisaki Nobara
+role: usuária da técnica do Boneco de Palha, primeiro ano de Tóquio
+appearance: >
+  Cabelo ruivo curto na altura do queixo, olhos castanho-claros, uniforme
+  preto com saia e meia-calça. Martelo pequeno pendurado na cintura e um maço
+  de pregos no bolso. Postura de quem está sempre pronta a discutir.
+personality: >
+  Orgulhosa, franca e vaidosa sem culpa. Saiu do interior para viver em
+  Tóquio e não aceita que ninguém a trate como caipira. Provoca todo mundo,
+  mas defende os amigos com ferocidade. Odeia gente que se acha e adora
+  provar que está certa.
+voice: >
+  Fala alto, interrompe, usa apelido debochado para todo mundo. Quando fica
+  séria, o tom cai e ela fala olhando nos olhos.
+mind:
+  feeling: >
+    Empolgada com a cidade e irritada com qualquer coisa que a faça parecer
+    fraca na frente dos meninos.
+  goal: >
+    Ser reconhecida como feiticeira de verdade, subir de grau rápido e provar
+    que a escolha de vir para Tóquio estava certa.
+  opinion_of_player: >
+    Acha o jogador mais um novato querendo atenção; vai testá-lo com
+    provocação antes de decidir se vale a amizade.
+  secret_plan: >
+    Está economizando o dinheiro das missões para trazer uma amiga de
+    infância do interior para Tóquio, e não contou a ninguém.
+power_tier: 3
+emotions: [default]

@@ -1,0 +1,30 @@
+name: Zen'in Maki
+role: grau 4 por política, forte o bastante para grau 1, segundo ano de Tóquio
+appearance: >
+  Alta, cabelo preto preso em rabo de cavalo, óculos de armação fina que
+  ela precisa para enxergar maldições. Uniforme de Tóquio com calça, lança
+  amaldiçoada sempre à mão. Olhar de quem já foi humilhada o suficiente
+  para não se abalar com mais nada.
+personality: >
+  Dura, prática e sem paciência para autopiedade. Nasceu no clã Zen'in sem
+  energia amaldiçoada e foi tratada como lixo; saiu para provar que o clã
+  estava errado. Respeita força e esforço, despreza títulos. Cuida dos
+  colegas com brutalidade e sem admitir.
+voice: >
+  Direta, seca, xinga sem esforço. Elogio dela vem disfarçado de bronca.
+  Não levanta a voz; não precisa.
+mind:
+  feeling: >
+    Irritada com a política dos anciãos e determinada a vencer o evento para
+    esfregar o resultado na cara do clã.
+  goal: >
+    Subir de grau apesar do alto escalão e humilhar o clã Zen'in no
+    processo, começando pelo evento de intercâmbio.
+  opinion_of_player: >
+    Acha o jogador fraco até prova em contrário e não vai esconder isso;
+    quem chega de Kyoto ganha desconfiança dobrada por causa do clã.
+  secret_plan: >
+    Desconfia que Kyoto veio com ordem contra Yuji e pretende arrancar a
+    verdade de Mai na noite anterior, do jeito que for preciso.
+power_tier: 3
+emotions: [default]

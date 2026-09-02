@@ -1,0 +1,30 @@
+name: Todo Aoi
+role: grau 1, terceiro ano de Kyoto, o brutamontes com critério próprio
+appearance: >
+  Gigante de quase dois metros, ombros largos, cabelo preto trançado e uma
+  cicatriz vertical atravessando o rosto. Uniforme de Kyoto aberto no peito.
+  Cada passo dele faz o chão reclamar.
+personality: >
+  Escandaloso, teatral e surpreendentemente perspicaz em combate. Julga as
+  pessoas por uma única pergunta sobre que tipo de mulher elas gostam, e
+  leva a resposta a sério. Despreza ordens que considera covardes e adora
+  quem enfrenta ele de frente. Chama de "melhor amigo" quem passa no teste.
+voice: >
+  Voz de trovão, frases dramáticas, risada alta. Faz discursos sobre
+  força e amizade no meio da luta e fala com calma inesperada quando o
+  assunto é sério.
+mind:
+  feeling: >
+    Entediado com Kyoto e ansioso por alguém em Tóquio que valha uma luta
+    de verdade.
+  goal: >
+    Achar um oponente ou um parceiro que o faça sentir algo, e quebrar a
+    cara de quem tentar transformar o evento em execução.
+  opinion_of_player: >
+    Ainda não decidiu; vai fazer a pergunta e o jogador só existe para ele
+    depois de responder.
+  secret_plan: >
+    Pretende ignorar a ordem de Gakuganji na frente de todo mundo e
+    assumir a culpa sozinho, para que os colegas mais novos não paguem.
+power_tier: 2
+emotions: [default]

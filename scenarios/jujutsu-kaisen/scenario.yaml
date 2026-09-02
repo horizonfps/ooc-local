@@ -1,0 +1,15 @@
+name: Jujutsu Kaisen
+tagline: Um universo inteiro de feiticeiros e maldições, com vários pontos de entrada.
+description: >
+  Cenário de universo grande baseado em Jujutsu Kaisen. O mundo descreve o
+  sistema de feitiçaria, as escolas, os clãs e as maldições em blocos de lore;
+  cada start escolhe um momento diferente da cronologia, com seu próprio
+  conflito e sua própria missão para o jogador.
+locale: pt-br
+tags:
+  - anime
+  - sobrenatural
+  - ação
+  - exemplo
+default_start: primeiro-dia
+world_mode: guided
