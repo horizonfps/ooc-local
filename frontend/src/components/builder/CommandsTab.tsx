@@ -7,7 +7,8 @@ import '../../screens/builderEditor.css'
 
 function nextSuggestedCommandName(existing: readonly string[]): string {
   let n = 1
-  while (existing.includes(`command-${n}`)) n += 1
+  const taken = existing.map((name) => name.trim())
+  while (taken.includes(`command-${n}`)) n += 1
   return `command-${n}`
 }
 
@@ -82,9 +83,16 @@ export function CommandsTab(props: TabProps) {
       return
     }
     const focusIndex = index < nextCommands.length ? index : nextCommands.length - 1
-    setSelectedIndex(focusIndex)
+    // Removing another command keeps the current one selected; only then the focus
+    // goes to the list item that took the slot instead of the detail form.
+    const removedSelected = index === selectedIndex
+    if (index < selectedIndex) setSelectedIndex(selectedIndex - 1)
+    else if (removedSelected) setSelectedIndex(focusIndex)
     requestAnimationFrame(() => {
-      document.getElementById(`builder-field-commands.${focusIndex}.name`)?.focus()
+      const target = removedSelected
+        ? `builder-field-commands.${focusIndex}.name`
+        : `builder-commands-listItem-${focusIndex}`
+      document.getElementById(target)?.focus()
     })
   }
 

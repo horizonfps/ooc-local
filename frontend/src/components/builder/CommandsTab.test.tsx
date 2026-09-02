@@ -132,8 +132,9 @@ describe('CommandsTab', () => {
 
     expect(commandsDebug()).toEqual([command({ name: 'a' }), command({ name: 'c' })])
     await waitFor(() => {
-      expect(document.getElementById('builder-field-commands.1.name')).toBe(document.activeElement)
+      expect(document.getElementById('builder-commands-listItem-1')).toBe(document.activeElement)
     })
+    expect((document.getElementById('builder-field-commands.0.name') as HTMLInputElement).value).toBe('a')
     expect(screen.getByText(t('builder.commands.removed', { name: 'b' }))).toBeInTheDocument()
   })
 
