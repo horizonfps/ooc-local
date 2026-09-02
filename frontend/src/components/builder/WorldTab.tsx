@@ -8,6 +8,9 @@ const EMPTY_GUIDED: GuidedWorld = { universe: '', tone: '', rules: '', lore: [] 
 
 const KNOWN_VARIABLES = ['player', 'start', 'scenario'] as const
 
+// Mirrors backend/app/compact.py estimate_tokens (math.ceil(len(text) / 4)).
+const WORLD_TOKEN_WARN = 2000
+
 const GUIDED_FIELDS: readonly {
   key: 'universe' | 'tone' | 'rules'
   labelKey: 'builder.world.universe' | 'builder.world.tone' | 'builder.world.rules'
@@ -181,6 +184,7 @@ export function WorldTab(props: TabProps) {
     })
   }
 
+  const worldTokens = Math.ceil(draft.world.length / 4)
   const worldError = fieldError('world')
   const universeError = fieldError('universe')
   const unknownVariables = extractVariableNames(draft.world).filter(
@@ -216,6 +220,12 @@ export function WorldTab(props: TabProps) {
           </button>
         </div>
       ) : null}
+
+      <p className="field-hint">{t('builder.world.tokens', { count: worldTokens })}</p>
+      <p className="field-hint">{t('builder.world.tokens.hint')}</p>
+      <p role="status" aria-live="polite">
+        {worldTokens > WORLD_TOKEN_WARN ? t('builder.world.tokens.over', { max: WORLD_TOKEN_WARN }) : ''}
+      </p>
 
       {mode === 'guided' ? (
         <div className="builder-world-guided">

@@ -261,6 +261,10 @@ const en = {
   'builder.world.guided.goToStarts': 'Open the Starts tab',
   'builder.world.custom.label': 'Narrator prompt',
   'builder.world.custom.hint': 'The whole narrator prompt, in markdown. Saved as world.md.',
+  'builder.world.tokens': '≈{count} tokens in world.md',
+  'builder.world.tokens.hint': 'Rough estimate: about 4 characters per token.',
+  'builder.world.tokens.over':
+    "Past ~{max} tokens. The whole world goes into the prompt on every turn and shares a limited budget with the scene, the cast and the history. You can still save — just know what you're spending.",
   'builder.world.variables.title': 'Available variables',
   'builder.world.variables.insert': 'Insert {name}',
   'builder.world.variables.player': "The player's name.",
@@ -735,6 +739,10 @@ const ptBr: Record<StringKey, string> = {
   'builder.world.guided.goToStarts': 'Abrir a aba Starts',
   'builder.world.custom.label': 'Prompt do narrador',
   'builder.world.custom.hint': 'O prompt do narrador inteiro, em markdown. Salvo como world.md.',
+  'builder.world.tokens': '≈{count} tokens no world.md',
+  'builder.world.tokens.hint': 'Estimativa grosseira: cerca de 4 caracteres por token.',
+  'builder.world.tokens.over':
+    'Passou de ~{max} tokens. O mundo inteiro entra no prompt em todo turno e divide um orçamento limitado com a cena, o elenco e o histórico. Dá para salvar assim mesmo — só saiba o que está gastando.',
   'builder.world.variables.title': 'Variáveis disponíveis',
   'builder.world.variables.insert': 'Inserir {name}',
   'builder.world.variables.player': 'O nome do jogador.',
