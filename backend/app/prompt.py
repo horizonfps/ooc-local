@@ -276,12 +276,12 @@ def _status(scenario: LoadedScenario, hud: HudState, template: dict[str, str]) -
     descriptions = {stat.id: stat.description for stat in scenario.stats}
     lines = []
     for view in views:
-        line = f"{view.name}: {view.value}/{view.max}"
+        line = f"{view.name} (id: {view.id}): {view.value}/{view.max}"
         description = descriptions.get(view.id)
         if description:
             line += f" — {' '.join(description.split())}"
         if view.level is not None:
-            line += f" {template['status_level_label']}: {' '.join(view.level.split())}"
+            line += f" ({template['status_level_label']}: {' '.join(view.level.split())})"
         lines.append(line)
     return "\n".join(lines)
 

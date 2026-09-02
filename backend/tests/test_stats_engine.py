@@ -91,6 +91,16 @@ def test_ensure_stats_fills_only_missing_and_preserves_existing_value():
     assert filled.stats == {"reputacao": 55, "energia": 5}
 
 
+def test_ensure_stats_reclamps_value_left_outside_an_edited_range():
+    hud = _hud(reputacao=80)
+    narrowed = StatDef(id="reputacao", name="Reputação", min=0, max=50, default=40)
+
+    filled = ensure_stats(hud, [narrowed])
+
+    assert filled.stats == {"reputacao": 50}
+    assert hud.stats == {"reputacao": 80}
+
+
 def test_ensure_stats_returns_same_object_when_nothing_to_fill():
     hud = _hud(reputacao=55)
 
@@ -198,7 +208,7 @@ def test_prompt_status_section_appears_between_hud_and_opening_with_one_line_per
 
     status_section = prompt[status_pos:opening_pos]
     lines = [line for line in status_section.split("\n") if line and not line.startswith("#")]
-    assert lines == ["Reputação: 55/100", "Energia: 80/100"]
+    assert lines == ["Reputação (id: reputacao): 55/100", "Energia (id: energia): 80/100"]
 
 
 def test_prompt_status_line_with_description_and_level_vs_without(tmp_path, monkeypatch):
@@ -224,10 +234,10 @@ def test_prompt_status_line_with_description_and_level_vs_without(tmp_path, monk
     prompt = build_master_prompt(scenario, start, hud, [])
 
     assert (
-        "Reputação: 55/100 — Quanto a escola te respeita. "
-        "Nível atual: Você é um aluno comum." in prompt
+        "Reputação (id: reputacao): 55/100 — Quanto a escola te respeita. "
+        "(Nível atual: Você é um aluno comum.)" in prompt
     )
-    assert "Energia: 80/100" in prompt
+    assert "Energia (id: energia): 80/100" in prompt
 
 
 def test_prompt_status_section_uses_en_locale_headers(tmp_path, monkeypatch):
@@ -266,7 +276,7 @@ def test_prompt_status_description_multiline_yaml_block_collapses_to_one_line(tm
 
     prompt = build_master_prompt(scenario, start, hud, [])
 
-    assert "Reputação: 40/100 — Quanto a escola te respeita." in prompt
+    assert "Reputação (id: reputacao): 40/100 — Quanto a escola te respeita." in prompt
     assert "Quanto a\nescola" not in prompt
 
 
@@ -420,7 +430,7 @@ def test_route_stat_tag_updates_sse_event_and_next_turn_prompt(scenarios_root, m
         _stream_events(response)
 
     system_prompt = captured[0][0].content
-    assert "Reputação: 45/100" in system_prompt
+    assert "Reputação (id: reputacao): 45/100" in system_prompt
 
 
 def test_route_stat_tag_with_unknown_id_is_invalid_and_no_stat_event(scenarios_root, monkeypatch):

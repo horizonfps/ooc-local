@@ -148,11 +148,23 @@ def stat_ids(hud: HudState, stats: list["StatDef"]) -> set[str]:
 
 
 def ensure_stats(hud: HudState, stats: list["StatDef"]) -> HudState:
-    """Fills in missing declared stat keys with their default; never removes a key the author dropped."""
-    missing = {stat.id: stat.default for stat in stats if stat.id not in hud.stats}
-    if not missing:
+    """Fills in missing declared stat keys with their default and re-clamps values left outside an
+    edited range; never removes a key the author dropped."""
+    updated = dict(hud.stats)
+    changed = False
+    for stat in stats:
+        current = updated.get(stat.id)
+        if current is None:
+            updated[stat.id] = stat.default
+            changed = True
+            continue
+        clamped = min(max(current, stat.min), stat.max)
+        if clamped != current:
+            updated[stat.id] = clamped
+            changed = True
+    if not changed:
         return hud
-    return hud.model_copy(update={"stats": {**hud.stats, **missing}})
+    return hud.model_copy(update={"stats": updated})
 
 
 def apply_stat(
