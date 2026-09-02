@@ -1,7 +1,7 @@
 ---
 id: TCK-056
 title: Adicionar conflito e missão opcionais ao start e injetá-los no prompt do narrador
-status: in_review
+status: done
 points: 3
 blockedBy: []
 files:

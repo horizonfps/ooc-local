@@ -1,7 +1,7 @@
 ---
 id: TCK-058
 title: Blocos de lore no modo guiado da aba Mundo
-status: in_review
+status: done
 points: 5
 blockedBy: []
 files:
