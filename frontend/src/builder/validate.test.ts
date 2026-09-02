@@ -1,8 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import type { BuilderDraft } from '../screens/BuilderEditorScreen'
-import type { StatDef } from '../api'
+import type { LoreEntryDoc, StatDef } from '../api'
 import { validateDraft } from './validate'
 import { t } from '../i18n'
+
+function loreEntry(overrides: Partial<LoreEntryDoc> = {}): LoreEntryDoc {
+  return {
+    title: 'O caderno',
+    keywords: ['caderno'],
+    body: 'Um caderno preto.',
+    scope: 'keyword',
+    priority: 0,
+    enabled: true,
+    ...overrides,
+  }
+}
 
 function stat(overrides: Partial<StatDef> = {}): StatDef {
   return {
@@ -230,5 +242,50 @@ describe('validateDraft', () => {
 
     const unnamed = validateDraft(draft({ stats: [stat({ name: '', id: 'rep' })] }))
     expect(unnamed.find((e) => e.tab === 'stats' && e.field === 'stats.0.name')?.label.startsWith('rep')).toBe(true)
+  })
+
+  it('does not complain about an empty lorebook', () => {
+    const errors = validateDraft(draft({ lorebook: {} }))
+    expect(errors.some((e) => e.tab === 'lorebook')).toBe(false)
+  })
+
+  it('flags a keyword-scoped entry with no keyword', () => {
+    const errors = validateDraft(draft({ lorebook: { caderno: loreEntry({ keywords: [] }) } }))
+    expect(
+      errors.some(
+        (e) =>
+          e.tab === 'lorebook' &&
+          e.field === 'lorebook.caderno.keywords' &&
+          e.message === t('builder.validate.loreKeywordRequired'),
+      ),
+    ).toBe(true)
+  })
+
+  it('does not require a keyword on an always-scoped entry', () => {
+    const errors = validateDraft(draft({ lorebook: { caderno: loreEntry({ keywords: [], scope: 'always' }) } }))
+    expect(errors.some((e) => e.tab === 'lorebook' && e.field === 'lorebook.caderno.keywords')).toBe(false)
+  })
+
+  it('flags an empty title', () => {
+    const errors = validateDraft(draft({ lorebook: { caderno: loreEntry({ title: '' }) } }))
+    expect(
+      errors.some(
+        (e) => e.tab === 'lorebook' && e.field === 'lorebook.caderno.title' && e.message === t('builder.field.required'),
+      ),
+    ).toBe(true)
+  })
+
+  it('flags an id outside [a-z0-9-]', () => {
+    const errors = validateDraft(draft({ lorebook: { 'Caderno Preto': loreEntry() } }))
+    expect(
+      errors.some(
+        (e) => e.tab === 'lorebook' && e.field === 'lorebook.Caderno Preto' && e.message === t('builder.field.slugInvalid'),
+      ),
+    ).toBe(true)
+  })
+
+  it('accepts an empty body', () => {
+    const errors = validateDraft(draft({ lorebook: { caderno: loreEntry({ body: '' }) } }))
+    expect(errors.some((e) => e.tab === 'lorebook' && e.field.startsWith('lorebook.caderno'))).toBe(false)
   })
 })

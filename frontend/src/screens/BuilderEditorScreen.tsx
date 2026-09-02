@@ -4,6 +4,7 @@ import { deepEqual, validateDraft } from '../builder/validate'
 import { BuilderPreview } from '../components/builder/BuilderPreview'
 import { CharactersTab } from '../components/builder/CharactersTab'
 import { IdentityTab } from '../components/builder/IdentityTab'
+import { LorebookTab } from '../components/builder/LorebookTab'
 import { MediaTab } from '../components/builder/MediaTab'
 import { StartsTab } from '../components/builder/StartsTab'
 import { StatsTab } from '../components/builder/StatsTab'
@@ -30,7 +31,7 @@ export type TabProps = {
   goToTab: (tab: BuilderTab) => void
 }
 
-const TAB_ORDER: readonly BuilderTab[] = ['identity', 'world', 'starts', 'characters', 'stats', 'media']
+const TAB_ORDER: readonly BuilderTab[] = ['identity', 'world', 'starts', 'characters', 'stats', 'lorebook', 'media']
 
 const TAB_LABEL_KEY: Record<BuilderTab, StringKey> = {
   identity: 'builder.editor.tab.identity',
@@ -38,6 +39,7 @@ const TAB_LABEL_KEY: Record<BuilderTab, StringKey> = {
   starts: 'builder.editor.tab.starts',
   characters: 'builder.editor.tab.characters',
   stats: 'builder.editor.tab.stats',
+  lorebook: 'builder.editor.tab.lorebook',
   media: 'builder.editor.tab.media',
 }
 
@@ -68,6 +70,8 @@ function slice(tab: BuilderTab, draft: BuilderDraft): unknown {
       return draft.characters
     case 'stats':
       return { stats: draft.stats, allow_dynamic_stats: draft.meta.allow_dynamic_stats }
+    case 'lorebook':
+      return draft.lorebook
     case 'media':
       return null
   }
@@ -105,6 +109,14 @@ function demoEdit(tab: BuilderTab, draft: BuilderDraft): BuilderDraft {
       const [first, ...rest] = draft.stats
       const nextName = first.name.endsWith(DEMO_MARK) ? first.name.slice(0, -DEMO_MARK.length) : first.name + DEMO_MARK
       return { ...draft, stats: [{ ...first, name: nextName }, ...rest] }
+    }
+    case 'lorebook': {
+      const ids = Object.keys(draft.lorebook)
+      if (ids.length === 0) return draft
+      const id = ids[0]
+      const entry = draft.lorebook[id]
+      const nextTitle = entry.title.endsWith(DEMO_MARK) ? entry.title.slice(0, -DEMO_MARK.length) : entry.title + DEMO_MARK
+      return { ...draft, lorebook: { ...draft.lorebook, [id]: { ...entry, title: nextTitle } } }
     }
     case 'media':
       return draft
@@ -624,6 +636,8 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
                   <CharactersTab {...tabProps} />
                 ) : activeTab === 'stats' ? (
                   <StatsTab {...tabProps} />
+                ) : activeTab === 'lorebook' ? (
+                  <LorebookTab {...tabProps} />
                 ) : activeTab === 'media' ? (
                   <MediaTab {...tabProps} />
                 ) : (

@@ -362,5 +362,48 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
     })
   })
 
+  const lorebookIds = Object.keys(draft.lorebook)
+  for (const loreId of lorebookIds) {
+    const entry = draft.lorebook[loreId]
+    const entryLabel = entry.title.trim() || loreId
+    const withEntry = (label: string) => `${entryLabel} — ${label}`
+
+    if (!ID_RE.test(loreId)) {
+      errors.push(error('lorebook', `lorebook.${loreId}`, withEntry(t('builder.field.label.loreId')), t('builder.field.slugInvalid')))
+    }
+
+    if (!entry.title.trim()) {
+      errors.push(error('lorebook', `lorebook.${loreId}.title`, withEntry(t('builder.lorebook.title')), t('builder.field.required')))
+    } else if (entry.title.length > 80) {
+      errors.push(
+        error('lorebook', `lorebook.${loreId}.title`, withEntry(t('builder.lorebook.title')), t('builder.field.tooLong', { max: 80 })),
+      )
+    }
+
+    if (entry.scope === 'keyword' && !entry.keywords.some((keyword) => keyword.trim() !== '')) {
+      errors.push(
+        error(
+          'lorebook',
+          `lorebook.${loreId}.keywords`,
+          withEntry(t('builder.lorebook.keywords.add')),
+          t('builder.validate.loreKeywordRequired'),
+        ),
+      )
+    }
+
+    entry.keywords.forEach((keyword) => {
+      if (keyword.length > 60) {
+        errors.push(
+          error(
+            'lorebook',
+            `lorebook.${loreId}.keywords`,
+            withEntry(t('builder.lorebook.keywords.add')),
+            t('builder.field.tooLong', { max: 60 }),
+          ),
+        )
+      }
+    })
+  }
+
   return errors
 }

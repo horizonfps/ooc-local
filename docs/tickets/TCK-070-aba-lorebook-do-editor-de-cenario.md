@@ -1,7 +1,7 @@
 ---
 id: TCK-070
 title: Aba Lorebook do editor de cenário com quebra do mundo em entradas
-status: ready
+status: in_review
 points: 5
 blockedBy: [TCK-060, TCK-066]
 files:
