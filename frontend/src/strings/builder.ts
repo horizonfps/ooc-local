@@ -75,6 +75,7 @@ export const builderEn = {
   'builder.editor.tab.characters': 'Characters',
   'builder.editor.tab.stats': 'Stats',
   'builder.editor.tab.lorebook': 'Lorebook',
+  'builder.editor.tab.commands': 'Commands',
   'builder.editor.tab.media': 'Media',
   'builder.editor.tab.dirty': 'has unsaved changes',
   'builder.editor.tab.invalid': 'has a field to fix',
@@ -433,6 +434,31 @@ export const builderEn = {
   'builder.validate.loreKeywordRequired':
     'An entry scoped by keyword needs at least one keyword — or switch it to every turn.',
 
+  // Builder commands tab
+  'builder.commands.heading': 'Commands',
+  'builder.commands.listLabel': 'Commands in this scenario',
+  'builder.commands.create': 'New command',
+  'builder.commands.added': 'Command {name} added',
+  'builder.commands.removed': 'Command {name} removed. Discard or reload brings it back.',
+  'builder.commands.remove.title': 'Remove the command {name}',
+  'builder.commands.unnamed': 'Unnamed command',
+  'builder.commands.empty.title': 'No commands yet',
+  'builder.commands.empty.body':
+    'A command is a question the player can ask outside the story: the gossip going around, a recap, what an NPC is thinking. It answers without advancing the turn.',
+  'builder.commands.playGuideHint':
+    'Commands of this scenario show up in the Play Guide and in the palette the player opens by typing !.',
+  'builder.commands.globalsHint': "Global commands (/name) live in ~/.ooc-local/commands.yaml and aren't edited here.",
+  'builder.commands.name': 'Name',
+  'builder.commands.name.hint': 'The player calls it by typing ! and this name. Lowercase letters, numbers, hyphen and underscore.',
+  'builder.commands.invocation': '!{name}',
+  'builder.commands.invocation.empty': 'Name it and the player will be able to call it.',
+  'builder.commands.description': 'Description',
+  'builder.commands.description.hint': 'One line, read by the player in the Play Guide and in the palette. Empty leaves only the name there.',
+  'builder.commands.prompt': 'Prompt',
+  'builder.commands.prompt.hint':
+    "What the narrator is asked, outside the narrative. The turn doesn't advance, and the answer stays out of the memory of the session.",
+  'builder.field.label.commandName': 'Command name',
+
   // Builder media tab
   'builder.media.heading': 'Media',
   'builder.media.hint': 'Images are written to disk the moment you upload them, outside the save button.',
@@ -551,6 +577,7 @@ export const builderPtBr: Record<keyof typeof builderEn, string> = {
   'builder.editor.tab.characters': 'Personagens',
   'builder.editor.tab.stats': 'Stats',
   'builder.editor.tab.lorebook': 'Lorebook',
+  'builder.editor.tab.commands': 'Comandos',
   'builder.editor.tab.media': 'Mídia',
   'builder.editor.tab.dirty': 'tem mudanças não salvas',
   'builder.editor.tab.invalid': 'tem campo para consertar',
@@ -907,6 +934,31 @@ export const builderPtBr: Record<keyof typeof builderEn, string> = {
   'builder.field.label.loreId': 'Id da entrada',
   'builder.validate.loreKeywordRequired':
     'Uma entrada com escopo por palavra-chave precisa de pelo menos uma palavra-chave — ou troque o escopo para todo turno.',
+
+  // Builder commands tab
+  'builder.commands.heading': 'Comandos',
+  'builder.commands.listLabel': 'Comandos deste cenário',
+  'builder.commands.create': 'Novo comando',
+  'builder.commands.added': 'Comando {name} adicionado',
+  'builder.commands.removed': 'Comando {name} removido. Descartar ou recarregar traz de volta.',
+  'builder.commands.remove.title': 'Remover o comando {name}',
+  'builder.commands.unnamed': 'Comando sem nome',
+  'builder.commands.empty.title': 'Nenhum comando ainda',
+  'builder.commands.empty.body':
+    'Um comando é uma pergunta que o jogador faz fora da história: a fofoca que corre, uma recapitulação, o que um NPC está pensando. Ele responde sem avançar o turno.',
+  'builder.commands.playGuideHint':
+    'Os comandos deste cenário aparecem no Guia de jogo e na paleta que o jogador abre digitando !.',
+  'builder.commands.globalsHint': 'Os comandos globais (/nome) ficam em ~/.ooc-local/commands.yaml e não são editados aqui.',
+  'builder.commands.name': 'Nome',
+  'builder.commands.name.hint': 'O jogador chama digitando ! e este nome. Letras minúsculas, números, hífen e underscore.',
+  'builder.commands.invocation': '!{name}',
+  'builder.commands.invocation.empty': 'Dê um nome e o jogador vai poder chamar.',
+  'builder.commands.description': 'Descrição',
+  'builder.commands.description.hint': 'Uma linha, lida pelo jogador no Guia de jogo e na paleta. Vazia deixa só o nome lá.',
+  'builder.commands.prompt': 'Prompt',
+  'builder.commands.prompt.hint':
+    'O que é pedido ao narrador, fora da narrativa. O turno não avança, e a resposta fica fora da memória da sessão.',
+  'builder.field.label.commandName': 'Nome do comando',
 
   // Builder media tab
   'builder.media.heading': 'Mídia',

@@ -1,7 +1,7 @@
 ---
 id: TCK-073
 title: Aba Comandos do editor de cenário
-status: ready
+status: in_review
 points: 5
 blockedBy: [TCK-060, TCK-066, TCK-070]
 files:

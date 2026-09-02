@@ -16,6 +16,11 @@ export const MAX_STAT_NAME = 40
 export const MAX_STAT_ICON = 4
 export const MAX_STAT_DESCRIPTION = 200
 
+// Same character class as a stat id.
+export const COMMAND_NAME_RE = STAT_ID_RE
+export const MAX_COMMAND_NAME = 32
+export const MAX_COMMAND_DESCRIPTION = 140
+
 function hasUnbalancedVariable(text: string): boolean {
   return text.split('\n').some((line) => {
     let open = false
@@ -404,6 +409,67 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
       }
     })
   }
+
+  const seenCommandNames = new Set<string>()
+  draft.commands.forEach((command, i) => {
+    const commandLabel = command.name.trim() || t('builder.commands.unnamed')
+    const withCommand = (label: string) => `${commandLabel} — ${label}`
+
+    const trimmedName = command.name.trim()
+    if (!trimmedName) {
+      errors.push(
+        error('commands', `commands.${i}.name`, withCommand(t('builder.field.label.commandName')), t('builder.field.required')),
+      )
+    } else if (!COMMAND_NAME_RE.test(trimmedName)) {
+      errors.push(
+        error(
+          'commands',
+          `commands.${i}.name`,
+          withCommand(t('builder.field.label.commandName')),
+          t('builder.field.slugUnderscoreInvalid'),
+        ),
+      )
+    } else if (trimmedName.length > MAX_COMMAND_NAME) {
+      errors.push(
+        error(
+          'commands',
+          `commands.${i}.name`,
+          withCommand(t('builder.field.label.commandName')),
+          t('builder.field.tooLong', { max: MAX_COMMAND_NAME }),
+        ),
+      )
+    }
+
+    if (trimmedName !== '') {
+      if (seenCommandNames.has(trimmedName)) {
+        errors.push(
+          error(
+            'commands',
+            `commands.${i}.name`,
+            withCommand(t('builder.field.label.commandName')),
+            t('builder.field.slugTaken', { slug: trimmedName }),
+          ),
+        )
+      } else {
+        seenCommandNames.add(trimmedName)
+      }
+    }
+
+    if (command.description.length > MAX_COMMAND_DESCRIPTION) {
+      errors.push(
+        error(
+          'commands',
+          `commands.${i}.description`,
+          withCommand(t('builder.commands.description')),
+          t('builder.field.tooLong', { max: MAX_COMMAND_DESCRIPTION }),
+        ),
+      )
+    }
+
+    if (!command.prompt.trim()) {
+      errors.push(error('commands', `commands.${i}.prompt`, withCommand(t('builder.commands.prompt')), t('builder.field.required')))
+    }
+  })
 
   return errors
 }

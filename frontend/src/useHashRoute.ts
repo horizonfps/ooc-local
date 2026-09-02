@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
-export type BuilderTab = 'identity' | 'world' | 'starts' | 'characters' | 'stats' | 'lorebook' | 'media'
-const BUILDER_TABS: readonly BuilderTab[] = ['identity', 'world', 'starts', 'characters', 'stats', 'lorebook', 'media']
+export type BuilderTab = 'identity' | 'world' | 'starts' | 'characters' | 'stats' | 'lorebook' | 'commands' | 'media'
+const BUILDER_TABS: readonly BuilderTab[] = ['identity', 'world', 'starts', 'characters', 'stats', 'lorebook', 'commands', 'media']
 
 export type Route =
   | { name: 'sessions' }

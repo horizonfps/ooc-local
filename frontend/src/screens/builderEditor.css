@@ -1159,3 +1159,26 @@
   flex-direction: column;
   gap: 0.4rem;
 }
+
+.builder-commands-tab {
+  display: flex;
+  flex-direction: column;
+}
+
+.builder-commands-listItemText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.builder-commands-listItemText .field-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.builder-commands-invocation {
+  font-family: monospace;
+  margin: 0;
+}

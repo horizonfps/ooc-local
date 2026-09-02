@@ -44,6 +44,7 @@ const DOCUMENT = {
   },
   stats: [],
   lorebook: {},
+  commands: [],
 }
 
 function jsonResponse(body: unknown, status = 200) {
@@ -92,7 +93,7 @@ describe('BuilderEditorScreen', () => {
     expect(await screen.findByRole('heading', { name: 'The School' })).toBeInTheDocument()
     const tablist = screen.getByRole('tablist', { name: t('builder.editor.tabs.label') })
     const tabs = within(tablist).getAllByRole('tab')
-    expect(tabs).toHaveLength(7)
+    expect(tabs).toHaveLength(8)
     const worldTab = within(tablist).getByRole('tab', { name: t('builder.editor.tab.world') })
     expect(worldTab).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText(t('builder.editor.clean'))).toBeInTheDocument()
@@ -104,7 +105,7 @@ describe('BuilderEditorScreen', () => {
 
     const tablist = await screen.findByRole('tablist', { name: t('builder.editor.tabs.label') })
     const tabs = within(tablist).getAllByRole('tab')
-    expect(tabs).toHaveLength(7)
+    expect(tabs).toHaveLength(8)
     expect(tabs[4]).toHaveTextContent(t('builder.editor.tab.stats'))
   })
 
@@ -462,7 +463,7 @@ describe('BuilderEditorScreen', () => {
 
     const tablist = await screen.findByRole('tablist', { name: t('builder.editor.tabs.label') })
     const tabs = within(tablist).getAllByRole('tab')
-    expect(tabs).toHaveLength(7)
+    expect(tabs).toHaveLength(8)
     expect(tabs[5]).toHaveTextContent(t('builder.editor.tab.lorebook'))
   })
 
@@ -510,5 +511,61 @@ describe('BuilderEditorScreen', () => {
 
     const nameInput = document.getElementById('builder-field-stats.0.name')
     expect(document.activeElement).toBe(nameInput)
+  })
+
+  it('shows the eight tabs in the final order', async () => {
+    mockFetch(() => jsonResponse(DOCUMENT))
+    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
+
+    const tablist = await screen.findByRole('tablist', { name: t('builder.editor.tabs.label') })
+    const tabs = within(tablist).getAllByRole('tab')
+    expect(tabs.map((el) => el.textContent)).toEqual([
+      t('builder.editor.tab.identity'),
+      t('builder.editor.tab.world'),
+      t('builder.editor.tab.starts'),
+      t('builder.editor.tab.characters'),
+      t('builder.editor.tab.stats'),
+      t('builder.editor.tab.lorebook'),
+      t('builder.editor.tab.commands'),
+      t('builder.editor.tab.media'),
+    ])
+  })
+
+  it('marks only the Commands tab dirty when editing a prompt', async () => {
+    const doc = { ...DOCUMENT, commands: [{ name: 'fofoca', description: '', prompt: 'What is going around?' }] }
+    mockFetch(() => jsonResponse(doc))
+    render(<BuilderEditorScreen scenarioId="school" tab="commands" />)
+
+    const promptField = await screen.findByLabelText(t('builder.commands.prompt'))
+    const tablist = screen.getByRole('tablist', { name: t('builder.editor.tabs.label') })
+    const commandsTab = within(tablist).getByRole('tab', { name: t('builder.editor.tab.commands') })
+    const identityTab = within(tablist).getByRole('tab', { name: t('builder.editor.tab.identity') })
+
+    fireEvent.change(promptField, { target: { value: 'What is going around now?' } })
+
+    expect(commandsTab.className).toContain('is-dirty')
+    expect(identityTab.className).not.toContain('is-dirty')
+  })
+
+  it('"go to field" leads to the command field', async () => {
+    const user = userEvent.setup()
+    const invalidDocument = { ...DOCUMENT, commands: [{ name: 'fofoca', description: '', prompt: '' }] }
+    mockFetch(() => jsonResponse(invalidDocument))
+    render(<BuilderEditorScreen scenarioId="school" tab="commands" />)
+
+    const descriptionField = await screen.findByLabelText(t('builder.commands.description'))
+    fireEvent.change(descriptionField, { target: { value: 'gossip' } })
+    await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
+
+    const summary = await screen.findByText(t('builder.editor.validation.summaryTitle'))
+    const panel = summary.closest('.builder-editor-validation') as HTMLElement
+    const promptJump = within(panel)
+      .getAllByRole('button')
+      .find((btn) => btn.textContent?.includes(t('builder.commands.prompt')))
+    expect(promptJump).toBeTruthy()
+    await user.click(promptJump as HTMLElement)
+
+    const promptInput = document.getElementById('builder-field-commands.0.prompt')
+    expect(document.activeElement).toBe(promptInput)
   })
 })
