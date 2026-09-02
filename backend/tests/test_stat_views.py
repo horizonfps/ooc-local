@@ -190,7 +190,8 @@ def test_session_detail_defaults_for_minds_commands_suggestions_and_turn_view(cl
 
     body = response.json()
     assert body["minds"] == {}
-    assert body["commands"] == []
+    assert [c["name"] for c in body["commands"]] == ["diary", "inner", "recap"]
+    assert all(c["scope"] == "global" for c in body["commands"])
     assert body["suggestions"] == []
 
 

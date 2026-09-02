@@ -621,7 +621,7 @@ def test_build_master_prompt_opening_section_has_single_blank_line_between_parts
     assert opening.endswith("descobrir de quem é")
 
 
-def test_master_prompt_version_is_ten():
+def test_master_prompt_version_is_eleven():
     from app.prompt import MASTER_PROMPT_VERSION
 
-    assert MASTER_PROMPT_VERSION == 10
+    assert MASTER_PROMPT_VERSION == 11

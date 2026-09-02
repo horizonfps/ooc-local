@@ -1,7 +1,7 @@
 ---
 id: TCK-072
 title: Aplicar modo de input no contexto e rodar o turno meta dos comandos
-status: ready
+status: in_review
 points: 5
 blockedBy: [TCK-060, TCK-065, TCK-069]
 files:

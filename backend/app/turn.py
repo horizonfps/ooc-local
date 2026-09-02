@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.cast import MindView, cast_event, minds_event, resolve_cast, seed_cast_ids
 from app.cleanup import strip_engine_echo
+from app.commands import ResolvedCommand, build_meta_user_message
 from app.compact import (
     COMPACT_KEEP_TURNS,
     CompactError,
@@ -17,13 +18,22 @@ from app.compact import (
 )
 from app.config import Config, load_config
 from app.director import DIRECTOR_RAW_LOG_CHARS, DIRECTOR_WINDOW_TURNS, DirectorError, decide_scene
-from app.hud import advance, apply_location, apply_stat, ensure_stats, stat_event, stat_ids, stat_views
+from app.hud import (
+    HudState,
+    advance,
+    apply_location,
+    apply_stat,
+    ensure_stats,
+    stat_event,
+    stat_ids,
+    stat_views,
+)
 from app.judge import JUDGE_RAW_LOG_CHARS, JudgeError, apply_judgement, judge_turn
 from app.llm.base import ChatMessage
 from app.llm.openai_compat import OpenAICompatProvider
 from app.minds import MINDS_RAW_LOG_CHARS, MindsError, merge_minds, think_minds
 from app.observability import emit
-from app.prompt import MASTER_PROMPT_VERSION, build_master_prompt
+from app.prompt import MASTER_PROMPT_VERSION, build_master_prompt, format_player_message
 from app.scenario import Character, LoadedScenario, ScenarioError, StartConfig, load_scenario
 from app.sessions import (
     Event,
@@ -82,13 +92,27 @@ def history_events(session_id: str, compact_seq: int | None) -> list[Event]:
     return [event for event in events if event.seq > compact_seq]
 
 
-def events_to_messages(events: list[Event]) -> list[ChatMessage]:
+def events_to_messages(events: list[Event], locale: str = "pt-br") -> list[ChatMessage]:
     """1:1, order-preserving mapping: player_turn -> user, narrator_turn -> assistant."""
     messages = []
     for event in events:
-        role = "user" if event.kind == "player_turn" else "assistant"
-        messages.append(ChatMessage(role=role, content=event.payload["text"]))
+        if event.kind == "player_turn":
+            text = format_player_message(event.payload["text"], event.payload.get("mode"), locale)
+            messages.append(ChatMessage(role="user", content=text))
+        else:
+            messages.append(ChatMessage(role="assistant", content=event.payload["text"]))
     return messages
+
+
+def hud_payload(ctx: TurnContext, hud: HudState) -> dict:
+    """The dict shape both the normal and the meta turn send in their final `hud` event."""
+    cast = [member.model_dump() for member in resolve_cast(ctx.scenario, ctx.cast_ids)]
+    return {
+        **hud.model_dump(exclude={"stats", "dynamic_stats"}),
+        "cast": cast,
+        "stats": [view.model_dump() for view in stat_views(ctx.scenario, hud)],
+        "minds": {char_id: view.model_dump() for char_id, view in ctx.minds.items()},
+    }
 
 
 def build_context(
@@ -112,7 +136,7 @@ def build_context(
         windowed = history
 
     messages = [ChatMessage(role="system", content=system)]
-    messages.extend(events_to_messages(windowed))
+    messages.extend(events_to_messages(windowed, ctx.scenario.meta.locale))
     messages.append(ChatMessage(role="user", content=message))
     return messages
 
@@ -194,6 +218,8 @@ async def run_turn(
     *,
     ctx: TurnContext | None = None,
     config: Config | None = None,
+    mode: str | None = None,
+    command: ResolvedCommand | None = None,
 ) -> AsyncIterator[dict]:
     """Async generator; the entire body up to persistence is guarded so any exception
     still reaches `game_turn` before propagating to the caller's stream wrapper."""
@@ -224,6 +250,8 @@ async def run_turn(
             cast=len(ctx.cast_ids) if ctx is not None else None,
             stats=stat_change_count if ctx is not None else None,
             suggestions=suggestion_count if ctx is not None else None,
+            mode=mode,
+            command=command.name if command is not None else None,
         )
 
     pending_cast_event: tuple[str, dict] | None = None
@@ -238,12 +266,71 @@ async def run_turn(
         role_model = role.model
         provider = OpenAICompatProvider(config.providers[role.provider])
 
+        if command is not None:
+            hud = ctx.row.hud
+            compact, compact_seq = get_compact(session_id)
+            system = build_master_prompt(
+                ctx.scenario, ctx.start, ctx.row.hud, ctx.characters, compact, minds=ctx.minds
+            )
+            # Turns already folded into the summary stay out of the meta window too.
+            window = events_to_messages(
+                history_events(session_id, compact_seq)[-(WINDOW_TURNS * 2) :], ctx.scenario.meta.locale
+            )
+            messages = [
+                ChatMessage(role="system", content=system),
+                *window,
+                ChatMessage(
+                    role="user", content=build_meta_user_message(command, ctx.scenario.meta.locale)
+                ),
+            ]
+
+            async for delta in provider.stream_chat(messages, role.model):
+                raw_text += delta
+                yield {"delta": delta}
+
+            clean_text, _ = parse_tags(raw_text)
+            clean_text, stripped_lines = strip_engine_echo(clean_text)
+            if not clean_text.strip():
+                emit(
+                    "meta_turn",
+                    session_id=session_id,
+                    command=command.name,
+                    scope=command.scope,
+                    chars=len(raw_text),
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                    model=role.model,
+                    error="empty turn",
+                )
+                yield {"error": "empty turn"}
+                return
+
+            append_events(
+                session_id,
+                [
+                    ("meta_player_turn", {"text": message, "command": command.name}),
+                    ("meta_narrator_turn", {"text": clean_text}),
+                ],
+            )
+            yield {"hud": hud_payload(ctx, ctx.row.hud)}
+            emit(
+                "meta_turn",
+                session_id=session_id,
+                command=command.name,
+                scope=command.scope,
+                chars=len(raw_text),
+                duration_ms=int((time.monotonic() - started) * 1000),
+                model=role.model,
+                error=None,
+            )
+            return
+
         if config.flag("director"):
             director_started = time.monotonic()
             decision = None
             try:
                 window = events_to_messages(
-                    history_events(session_id, None)[-(DIRECTOR_WINDOW_TURNS * 2) :]
+                    history_events(session_id, None)[-(DIRECTOR_WINDOW_TURNS * 2) :],
+                    ctx.scenario.meta.locale,
                 )
                 decision = await decide_scene(
                     ctx.scenario, ctx.row.hud, ctx.cast_ids, message, window, config
@@ -299,8 +386,9 @@ async def run_turn(
                         duration_ms=director_duration_ms,
                     )
 
+        prompt_message = format_player_message(message, mode, ctx.scenario.meta.locale)
         messages, _compact_error = await _maybe_compact(
-            session_id, message, config, ctx.scenario.meta.locale, ctx
+            session_id, prompt_message, config, ctx.scenario.meta.locale, ctx
         )
         hud = ctx.row.hud
 
@@ -351,7 +439,7 @@ async def run_turn(
         # The narrator turn is persisted before the utility calls: a client that leaves
         # during the judge or minds window must not lose the turn it already read.
         events = [
-            ("player_turn", {"text": message}),
+            ("player_turn", {"text": message, "mode": mode} if mode else {"text": message}),
             ("narrator_turn", {"text": clean_text, "suggestions": suggestions}),
         ]
         for tag in tags:
@@ -485,15 +573,7 @@ async def run_turn(
             append_events(session_id, post_events, hud=new_hud)
 
         hud = new_hud
-        cast = [member.model_dump() for member in resolve_cast(ctx.scenario, ctx.cast_ids)]
-        yield {
-            "hud": {
-                **new_hud.model_dump(exclude={"stats", "dynamic_stats"}),
-                "cast": cast,
-                "stats": [view.model_dump() for view in stat_views(ctx.scenario, new_hud)],
-                "minds": {char_id: view.model_dump() for char_id, view in ctx.minds.items()},
-            }
-        }
+        yield {"hud": hud_payload(ctx, new_hud)}
         emit_game_turn(None)
     except Exception as exc:
         emit_game_turn(str(exc))
