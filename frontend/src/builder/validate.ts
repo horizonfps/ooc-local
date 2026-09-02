@@ -225,8 +225,26 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
     errors.push(error('world', 'world', t('builder.world.custom.label'), t('builder.field.required')))
   } else if (draft.meta.world_mode === 'guided') {
     const guided = parseGuidedWorld(draft.world)
-    if (guided && !guided.universe.trim()) {
-      errors.push(error('world', 'universe', t('builder.world.universe'), t('builder.field.required')))
+    if (guided) {
+      if (!guided.universe.trim()) {
+        errors.push(error('world', 'universe', t('builder.world.universe'), t('builder.field.required')))
+      }
+
+      const seenTitles = new Set<string>()
+      guided.lore.forEach((block, index) => {
+        const label = t('builder.world.lore.titleLabel', { index: index + 1 })
+        const title = block.title.trim()
+        if (!title) {
+          errors.push(error('world', `world.lore.${index}.title`, label, t('builder.world.lore.title.required')))
+          return
+        }
+        const key = title.toLowerCase()
+        if (seenTitles.has(key)) {
+          errors.push(error('world', `world.lore.${index}.title`, label, t('builder.world.lore.title.duplicate')))
+        } else {
+          seenTitles.add(key)
+        }
+      })
     }
   }
 

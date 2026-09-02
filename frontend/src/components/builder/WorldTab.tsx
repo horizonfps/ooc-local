@@ -1,34 +1,56 @@
 import { useEffect, useRef, useState } from 'react'
 import type { TabProps } from '../../screens/BuilderEditorScreen'
 import { t } from '../../i18n'
-import { parseGuidedWorld, serializeGuidedWorld, type GuidedWorld } from '../../builder/worldMarkdown'
+import { parseGuidedWorld, serializeGuidedWorld, WORLD_HEADINGS, type GuidedWorld } from '../../builder/worldMarkdown'
 import '../../screens/builderEditor.css'
 
-const EMPTY_GUIDED: GuidedWorld = { universe: '', tone: '', rules: '', conflict: '', mission: '' }
+const EMPTY_GUIDED: GuidedWorld = { universe: '', tone: '', rules: '', lore: [] }
 
 const KNOWN_VARIABLES = ['player', 'start', 'scenario'] as const
 
-const GUIDED_FIELDS: readonly { key: keyof GuidedWorld; labelKey: 'builder.world.universe' | 'builder.world.tone' | 'builder.world.rules' | 'builder.world.conflict' | 'builder.world.mission'; hintKey: 'builder.world.universe.hint' | 'builder.world.tone.hint' | 'builder.world.rules.hint' | 'builder.world.conflict.hint' | 'builder.world.mission.hint'; required: boolean }[] = [
+const GUIDED_FIELDS: readonly {
+  key: 'universe' | 'tone' | 'rules'
+  labelKey: 'builder.world.universe' | 'builder.world.tone' | 'builder.world.rules'
+  hintKey: 'builder.world.universe.hint' | 'builder.world.tone.hint' | 'builder.world.rules.hint'
+  required: boolean
+}[] = [
   { key: 'universe', labelKey: 'builder.world.universe', hintKey: 'builder.world.universe.hint', required: true },
   { key: 'tone', labelKey: 'builder.world.tone', hintKey: 'builder.world.tone.hint', required: false },
   { key: 'rules', labelKey: 'builder.world.rules', hintKey: 'builder.world.rules.hint', required: false },
-  { key: 'conflict', labelKey: 'builder.world.conflict', hintKey: 'builder.world.conflict.hint', required: false },
-  { key: 'mission', labelKey: 'builder.world.mission', hintKey: 'builder.world.mission.hint', required: false },
 ]
+
+const RESERVED_TITLES = new Set<string>((WORLD_HEADINGS as readonly string[]).map((h) => h.toLowerCase()))
+
+function isReservedTitle(title: string): boolean {
+  return RESERVED_TITLES.has(title.trim().toLowerCase())
+}
+
+function shiftPendingTitlesAfterRemoval(pending: Record<number, string>, removedIndex: number): Record<number, string> {
+  const next: Record<number, string> = {}
+  for (const [key, value] of Object.entries(pending)) {
+    const index = Number(key)
+    if (index < removedIndex) next[index] = value
+    else if (index > removedIndex) next[index - 1] = value
+  }
+  return next
+}
 
 function extractVariableNames(text: string): string[] {
   return Array.from(new Set(Array.from(text.matchAll(/\{\{\s*(\w+)\s*\}\}/g), (m) => m[1])))
 }
 
 export function WorldTab(props: TabProps) {
-  const { draft, onChange, errors } = props
+  const { draft, onChange, errors, goToTab } = props
   const meta = draft.meta
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const addLoreButtonRef = useRef<HTMLButtonElement>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [switchedNotice, setSwitchedNotice] = useState(false)
   const dialogRef = useRef<HTMLDialogElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
+  const [pendingTitles, setPendingTitles] = useState<Record<number, string>>({})
+  const [announcement, setAnnouncement] = useState('')
 
   const parsedGuided = parseGuidedWorld(draft.world)
   const isFallback = meta.world_mode === 'guided' && parsedGuided === null
@@ -48,13 +70,67 @@ export function WorldTab(props: TabProps) {
     return errors.find((e) => e.tab === 'world' && e.field === field)?.message ?? null
   }
 
+  function loreTitleError(index: number, savedTitle: string): string | null {
+    if (savedTitle === '' && index in pendingTitles) {
+      return t('builder.world.lore.title.reserved', { title: pendingTitles[index].trim() })
+    }
+    return fieldError(`world.lore.${index}.title`)
+  }
+
   function updateMeta(patch: Partial<typeof meta>) {
     onChange({ ...draft, meta: { ...meta, ...patch } })
   }
 
-  function updateGuidedField(field: keyof GuidedWorld, value: string) {
+  function updateGuidedField(field: 'universe' | 'tone' | 'rules', value: string) {
     const next = { ...guidedFields, [field]: value }
     onChange({ ...draft, world: serializeGuidedWorld(next) })
+  }
+
+  function updateLoreTitle(index: number, value: string) {
+    if (isReservedTitle(value)) {
+      setPendingTitles((prev) => ({ ...prev, [index]: value }))
+      const nextLore = guidedFields.lore.map((block, i) => (i === index ? { ...block, title: '' } : block))
+      onChange({ ...draft, world: serializeGuidedWorld({ ...guidedFields, lore: nextLore }) })
+      return
+    }
+    setPendingTitles((prev) => {
+      if (!(index in prev)) return prev
+      const next = { ...prev }
+      delete next[index]
+      return next
+    })
+    const nextLore = guidedFields.lore.map((block, i) => (i === index ? { ...block, title: value } : block))
+    onChange({ ...draft, world: serializeGuidedWorld({ ...guidedFields, lore: nextLore }) })
+  }
+
+  function updateLoreBody(index: number, value: string) {
+    const nextLore = guidedFields.lore.map((block, i) => (i === index ? { ...block, body: value } : block))
+    onChange({ ...draft, world: serializeGuidedWorld({ ...guidedFields, lore: nextLore }) })
+  }
+
+  function addLore() {
+    const nextLore = [...guidedFields.lore, { title: '', body: '' }]
+    const newIndex = nextLore.length - 1
+    onChange({ ...draft, world: serializeGuidedWorld({ ...guidedFields, lore: nextLore }) })
+    setAnnouncement(t('builder.world.lore.added', { index: newIndex + 1 }))
+    requestAnimationFrame(() => {
+      document.getElementById(`builder-field-world.lore.${newIndex}.title`)?.focus()
+    })
+  }
+
+  function removeLore(index: number) {
+    const nextLore = guidedFields.lore.filter((_, i) => i !== index)
+    onChange({ ...draft, world: serializeGuidedWorld({ ...guidedFields, lore: nextLore }) })
+    setPendingTitles((prev) => shiftPendingTitlesAfterRemoval(prev, index))
+    setAnnouncement(t('builder.world.lore.removed', { index: index + 1 }))
+    requestAnimationFrame(() => {
+      if (nextLore.length === 0) {
+        addLoreButtonRef.current?.focus()
+        return
+      }
+      const focusIndex = index < nextLore.length ? index : nextLore.length - 1
+      document.getElementById(`builder-field-world.lore.${focusIndex}.title`)?.focus()
+    })
   }
 
   function updateCustomText(value: string) {
@@ -63,6 +139,7 @@ export function WorldTab(props: TabProps) {
 
   function handleSelectCustom() {
     if (mode === 'custom') return
+    setPendingTitles({})
     setSwitchedNotice(true)
     updateMeta({ world_mode: 'custom' })
   }
@@ -77,6 +154,7 @@ export function WorldTab(props: TabProps) {
     const fields = parsed ?? EMPTY_GUIDED
     setConfirmOpen(false)
     setSwitchedNotice(false)
+    setPendingTitles({})
     onChange({ ...draft, world: serializeGuidedWorld(fields), meta: { ...meta, world_mode: 'guided' } })
   }
 
@@ -112,6 +190,10 @@ export function WorldTab(props: TabProps) {
   return (
     <div className="builder-world-tab">
       <h2>{t('builder.world.heading')}</h2>
+
+      <div role="status" aria-live="polite" className="visually-hidden">
+        {announcement}
+      </div>
 
       <div className="builder-field">
         <p id="builder-world-mode-label">{t('builder.world.mode.label')}</p>
@@ -165,6 +247,72 @@ export function WorldTab(props: TabProps) {
               </div>
             )
           })}
+
+          <p className="field-hint">{t('builder.world.guided.movedHint')}</p>
+          <button type="button" className="builder-linkButton" onClick={() => goToTab('starts')}>
+            {t('builder.world.guided.goToStarts')}
+          </button>
+
+          <fieldset className="builder-world-lore">
+            <legend>{t('builder.world.lore.legend')}</legend>
+            <p className="field-hint">{t('builder.world.lore.hint')}</p>
+            {guidedFields.lore.length === 0 ? (
+              <p className="field-hint">{t('builder.world.lore.empty')}</p>
+            ) : (
+              guidedFields.lore.map((block, index) => {
+                const titleId = `builder-field-world.lore.${index}.title`
+                const titleHintId = `${titleId}-hint`
+                const titleErrorId = `${titleId}-error`
+                const bodyId = `builder-field-world.lore.${index}.body`
+                const displayedTitle = block.title === '' ? (pendingTitles[index] ?? '') : block.title
+                const titleErrorMessage = loreTitleError(index, block.title)
+                return (
+                  <div className="builder-world-lore-block" key={index}>
+                    <div className="builder-field builder-world-lore-titleField">
+                      <label htmlFor={titleId}>{t('builder.world.lore.titleLabel', { index: index + 1 })}</label>
+                      <input
+                        id={titleId}
+                        type="text"
+                        value={displayedTitle}
+                        onChange={(e) => updateLoreTitle(index, e.target.value)}
+                        aria-invalid={titleErrorMessage ? 'true' : undefined}
+                        aria-describedby={[titleHintId, titleErrorMessage ? titleErrorId : null].filter(Boolean).join(' ')}
+                      />
+                      <p className="field-hint" id={titleHintId}>
+                        {t('builder.world.lore.title.hint')}
+                      </p>
+                      {titleErrorMessage ? (
+                        <p role="alert" id={titleErrorId} className="field-error">
+                          {titleErrorMessage}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="builder-field builder-world-lore-bodyField">
+                      <label htmlFor={bodyId}>{t('builder.world.lore.bodyLabel', { index: index + 1 })}</label>
+                      <textarea
+                        id={bodyId}
+                        className="builder-field-textarea"
+                        rows={6}
+                        value={block.body}
+                        onChange={(e) => updateLoreBody(index, e.target.value)}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="builder-world-lore-removeButton"
+                      aria-label={t('builder.world.lore.remove', { index: index + 1 })}
+                      onClick={() => removeLore(index)}
+                    >
+                      {t('common.remove')}
+                    </button>
+                  </div>
+                )
+              })
+            )}
+            <button type="button" ref={addLoreButtonRef} onClick={addLore}>
+              {t('builder.world.lore.add')}
+            </button>
+          </fieldset>
         </div>
       ) : (
         <div className="builder-world-custom">

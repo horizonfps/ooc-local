@@ -87,4 +87,50 @@ describe('validateDraft', () => {
     const errors = validateDraft(draft({ world: '## Universe\n\n}} text {{' }))
     expect(errors.some((e) => e.tab === 'world' && e.message === t('builder.world.variables.unbalanced'))).toBe(true)
   })
+
+  it('flags an empty lore block title and blocks saving', () => {
+    const errors = validateDraft(draft({ world: '## Universe\n\nA quiet town.\n\n## \n\nSome written body.' }))
+    expect(
+      errors.some(
+        (e) => e.tab === 'world' && e.field === 'world.lore.0.title' && e.message === t('builder.world.lore.title.required'),
+      ),
+    ).toBe(true)
+  })
+
+  it('does not flag an oversized world.md as an error', () => {
+    const errors = validateDraft(draft({ world: '## Universe\n\n' + 'x'.repeat(20000) }))
+    expect(errors.some((e) => e.tab === 'world')).toBe(false)
+  })
+
+  it('flags a duplicated lore block title only on the second occurrence', () => {
+    const errors = validateDraft(
+      draft({ world: '## Universe\n\nA quiet town.\n\n## Notas\n\nOne.\n\n## notas\n\nTwo.' }),
+    )
+    expect(errors.some((e) => e.tab === 'world' && e.field === 'world.lore.0.title')).toBe(false)
+    expect(
+      errors.some(
+        (e) => e.tab === 'world' && e.field === 'world.lore.1.title' && e.message === t('builder.world.lore.title.duplicate'),
+      ),
+    ).toBe(true)
+  })
+
+  it('does not validate lore blocks in custom mode', () => {
+    const errors = validateDraft(
+      draft({
+        meta: { ...draft().meta, world_mode: 'custom' },
+        world: '## Universe\n\nA quiet town.\n\n## \n\nBody.',
+      }),
+    )
+    expect(errors.some((e) => e.tab === 'world' && e.field.startsWith('world.lore.'))).toBe(false)
+  })
+
+  it('does not validate lore blocks when the world.md falls back to custom mode', () => {
+    const errors = validateDraft(draft({ world: 'Just some free-form prose, no headings.' }))
+    expect(errors.some((e) => e.tab === 'world' && e.field.startsWith('world.lore.'))).toBe(false)
+  })
+
+  it('still requires the universe with lore blocks present', () => {
+    const errors = validateDraft(draft({ world: '## Rules\n\nNo magic.\n\n## Factions\n\nTwo of them.' }))
+    expect(errors.some((e) => e.tab === 'world' && e.field === 'universe')).toBe(true)
+  })
 })
