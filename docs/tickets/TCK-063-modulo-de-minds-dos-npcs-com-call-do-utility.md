@@ -1,7 +1,7 @@
 ---
 id: TCK-063
 title: Criar o módulo de minds dos NPCs com o call do utility e o merge determinístico
-status: ready
+status: in_review
 points: 3
 blockedBy: [TCK-060]
 files:
