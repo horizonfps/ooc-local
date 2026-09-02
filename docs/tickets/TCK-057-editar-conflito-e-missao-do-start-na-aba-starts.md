@@ -1,7 +1,7 @@
 ---
 id: TCK-057
 title: Editar conflito e missão do start na aba Starts
-status: in_review
+status: done
 points: 3
 blockedBy: [TCK-056]
 files:
