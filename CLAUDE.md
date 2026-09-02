@@ -18,7 +18,9 @@ de verdade e tag `fase-N`.
 - Manifesto: `.claude/pipeline.json`. Tickets: `docs/tickets/` (convenção no
   README de lá). Métricas: `docs/pipeline-metrics.csv`.
 - Pre-commit roda o mesmo `verify` do CI. **Worktree novo não herda a config**:
-  rode `git config core.hooksPath .githooks` em cada worktree.
+  rode `git config core.hooksPath .githooks` em cada worktree, e
+  `npm ci --prefix frontend` antes do primeiro commit (o hook roda o `verify`,
+  que falha sem `node_modules`).
 - Toda wave parte de `origin/main` atualizada; merge é gate humano. Combinação
   dos PRs de uma wave é testada por `scripts/integration-check.mjs`
   (branch `integration/wave-N`, CI dispara no push).
