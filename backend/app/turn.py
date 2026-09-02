@@ -341,7 +341,29 @@ async def run_turn(
                     stat_events.append(stat_event(tag.args[0], delta, value, "tag"))
             resolved_tags.append(tag)
         tags = resolved_tags
-        touched_ids = [payload["id"] for _kind, payload in stat_events]
+        touched_ids = [tag.args[0] for tag in tags if tag.kind == "STAT" and tag.valid]
+
+        suggestions = [
+            ":".join(tag.args).strip() for tag in tags if tag.kind == "SUGGEST" and tag.valid
+        ][:3]
+        suggestion_count = len(suggestions)
+
+        # The narrator turn is persisted before the utility calls: a client that leaves
+        # during the judge or minds window must not lose the turn it already read.
+        events = [
+            ("player_turn", {"text": message}),
+            ("narrator_turn", {"text": clean_text, "suggestions": suggestions}),
+        ]
+        for tag in tags:
+            events.append(("tag", {"kind": tag.kind, "args": tag.args, "raw": tag.raw, "valid": tag.valid}))
+        events.extend(stat_events)
+        if pending_cast_event is not None:
+            events.append(pending_cast_event)
+        append_events(session_id, events, hud=new_hud)
+        if suggestions:
+            yield {"suggestions": suggestions}
+
+        post_events: list[tuple[str, dict]] = []
 
         if config.flag("hud_judge"):
             judge_started = time.monotonic()
@@ -371,10 +393,12 @@ async def run_turn(
                     new_hud, changes, rejections = apply_judgement(
                         ctx.scenario, new_hud, judgement, touched_ids
                     )
-                    stat_events += [
+                    judge_events = [
                         stat_event(change.id, change.delta, change.value, change.source)
                         for change in changes
                     ]
+                    stat_events += judge_events
+                    post_events.extend(judge_events)
                     emit(
                         "judge_applied",
                         session_id=session_id,
@@ -432,6 +456,7 @@ async def run_turn(
                     ]
                     if entries != ctx.minds:
                         pending_minds_event = minds_event(entries)
+                        post_events.append(pending_minds_event)
                         ctx = ctx.model_copy(update={"minds": entries})
                     emit(
                         "minds_applied",
@@ -456,28 +481,11 @@ async def run_turn(
                     )
 
         stat_change_count = len(stat_events)
-        suggestions = [
-            ":".join(tag.args).strip() for tag in tags if tag.kind == "SUGGEST" and tag.valid
-        ][:3]
-        suggestion_count = len(suggestions)
-
-        events = [
-            ("player_turn", {"text": message}),
-            ("narrator_turn", {"text": clean_text, "suggestions": suggestions}),
-        ]
-        for tag in tags:
-            events.append(("tag", {"kind": tag.kind, "args": tag.args, "raw": tag.raw, "valid": tag.valid}))
-        events.extend(stat_events)
-        if pending_cast_event is not None:
-            events.append(pending_cast_event)
-        if pending_minds_event is not None:
-            events.append(pending_minds_event)
-        append_events(session_id, events, hud=new_hud)
+        if post_events:
+            append_events(session_id, post_events, hud=new_hud)
 
         hud = new_hud
         cast = [member.model_dump() for member in resolve_cast(ctx.scenario, ctx.cast_ids)]
-        if suggestions:
-            yield {"suggestions": suggestions}
         yield {
             "hud": {
                 **new_hud.model_dump(exclude={"stats", "dynamic_stats"}),
