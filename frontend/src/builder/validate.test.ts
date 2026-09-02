@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import type { BuilderDraft } from '../screens/BuilderEditorScreen'
+import type { StatDef } from '../api'
 import { validateDraft } from './validate'
 import { t } from '../i18n'
+
+function stat(overrides: Partial<StatDef> = {}): StatDef {
+  return {
+    id: 'rep',
+    name: 'Reputação',
+    icon: null,
+    color: null,
+    min: 0,
+    max: 100,
+    default: 40,
+    description: null,
+    levels: [],
+    ...overrides,
+  }
+}
 
 function draft(overrides: Partial<BuilderDraft> = {}): BuilderDraft {
   return {
@@ -153,5 +169,66 @@ describe('validateDraft', () => {
       starts: { default: { ...base.starts.default, conflict: 'x'.repeat(5000) } },
     })
     expect(errors).toEqual([])
+  })
+
+  it('does not flag a scenario with no stats at all', () => {
+    const errors = validateDraft(draft({ stats: [] }))
+    expect(errors.some((e) => e.tab === 'stats')).toBe(false)
+  })
+
+  it('flags a stat id outside the pattern, and allows underscores', () => {
+    const errors = validateDraft(draft({ stats: [stat({ id: 'Vida Total' })] }))
+    expect(
+      errors.some(
+        (e) => e.tab === 'stats' && e.field === 'stats.0.id' && e.message === t('builder.field.slugUnderscoreInvalid'),
+      ),
+    ).toBe(true)
+
+    const okErrors = validateDraft(draft({ stats: [stat({ id: 'vida_total' })] }))
+    expect(okErrors.some((e) => e.tab === 'stats' && e.field === 'stats.0.id')).toBe(false)
+  })
+
+  it('flags a starting value outside the min/max range', () => {
+    const errors = validateDraft(draft({ stats: [stat({ min: 0, max: 10, default: 50 })] }))
+    expect(
+      errors.some(
+        (e) => e.tab === 'stats' && e.field === 'stats.0.default' && e.message === t('builder.validate.statDefaultRange', { min: 0, max: 10 }),
+      ),
+    ).toBe(true)
+  })
+
+  it('silences the derived rules when the range itself is broken', () => {
+    const errors = validateDraft(draft({ stats: [stat({ min: 10, max: 5, default: 7 })] }))
+    expect(errors.some((e) => e.tab === 'stats' && e.field === 'stats.0.max')).toBe(true)
+    expect(errors.some((e) => e.tab === 'stats' && e.field === 'stats.0.default')).toBe(false)
+  })
+
+  it('flags levels out of ascending order', () => {
+    const errors = validateDraft(
+      draft({ stats: [stat({ levels: [{ from: 40, text: 'a' }, { from: 40, text: 'b' }] })] }),
+    )
+    expect(
+      errors.some(
+        (e) => e.tab === 'stats' && e.field === 'stats.0.levels.1.from' && e.message === t('builder.validate.levelFromOrder'),
+      ),
+    ).toBe(true)
+    expect(errors.some((e) => e.tab === 'stats' && e.field === 'stats.0.levels.0.from')).toBe(false)
+  })
+
+  it('flags an empty level text', () => {
+    const errors = validateDraft(draft({ stats: [stat({ levels: [{ from: 0, text: '' }] })] }))
+    expect(
+      errors.some(
+        (e) => e.tab === 'stats' && e.field === 'stats.0.levels.0.text' && e.message === t('builder.field.required'),
+      ),
+    ).toBe(true)
+  })
+
+  it('composes the error label from the stat name, falling back to the id', () => {
+    const named = validateDraft(draft({ stats: [stat({ name: 'Reputação', icon: 'too-long' })] }))
+    expect(named.find((e) => e.tab === 'stats' && e.field === 'stats.0.icon')?.label.startsWith('Reputação')).toBe(true)
+
+    const unnamed = validateDraft(draft({ stats: [stat({ name: '', id: 'rep' })] }))
+    expect(unnamed.find((e) => e.tab === 'stats' && e.field === 'stats.0.name')?.label.startsWith('rep')).toBe(true)
   })
 })
