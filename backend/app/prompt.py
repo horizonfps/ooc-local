@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import re
 
+from app.cast import MindView
 from app.hud import HudState, stat_views
 from app.media import scan_media
 from app.scenario import Character, LoadedScenario, StartConfig
 
-MASTER_PROMPT_VERSION = 9
+MASTER_PROMPT_VERSION = 10
 
 WEATHER_LABELS: dict[str, dict[str, str]] = {
     "pt-br": {
@@ -63,6 +64,7 @@ _TEMPLATES = {
         "goal_label": "Objetivo",
         "opinion_label": "Opinião sobre o jogador",
         "secret_label": "Segredo (o jogador não sabe)",
+        "current_state_label": "Estado atual",
         "roster_header": "## ELENCO FORA DE CENA",
         "roster_intro": (
             "Estes personagens existem no mundo e não estão na cena agora. "
@@ -113,6 +115,9 @@ _TEMPLATES = {
             "aparece na tela.\n"
             "Nunca repita a ação do jogador como fala: a linha **Você** | ... "
             "é proibida.\n"
+            "Termine cada turno com exatamente três linhas [SUGGEST:...], cada "
+            "uma uma ação curta em segunda pessoa, no máximo 120 caracteres, "
+            "uma por linha, sem nada depois delas.\n"
             "Responda em português do Brasil."
         ),
     },
@@ -134,6 +139,7 @@ _TEMPLATES = {
         "goal_label": "Goal",
         "opinion_label": "Opinion of the player",
         "secret_label": "Secret (the player does not know)",
+        "current_state_label": "Current state",
         "roster_header": "## CAST OFF SCENE",
         "roster_intro": (
             "These characters exist in the world and are not in the scene "
@@ -183,13 +189,18 @@ _TEMPLATES = {
             "and is already on screen.\n"
             "Never repeat the player's action as speech: the line "
             "**You** | ... is forbidden.\n"
+            "End every turn with exactly three [SUGGEST:...] lines, each a "
+            "short second-person action, at most 120 characters, one per "
+            "line, nothing after them.\n"
             "Respond in English."
         ),
     },
 }
 
 
-def _format_character(character: Character, template: dict[str, str]) -> str:
+def _format_character(
+    character: Character, template: dict[str, str], mind: MindView | None = None
+) -> str:
     lines = [
         f"### {character.name}",
         f"{template['role_label']}: {character.role}",
@@ -207,6 +218,8 @@ def _format_character(character: Character, template: dict[str, str]) -> str:
         lines.append(f"{template['opinion_label']}: {character.mind.opinion_of_player}")
     if character.mind.secret_plan is not None:
         lines.append(f"{template['secret_label']}: {character.mind.secret_plan}")
+    if mind is not None and mind.attitude:
+        lines.append(f"{template['current_state_label']}: {mind.attitude}")
     return "\n".join(lines)
 
 
@@ -292,6 +305,7 @@ def build_master_prompt(
     hud: HudState,
     characters: list[Character],
     compact: str | None = None,
+    minds: dict[str, MindView] | None = None,
 ) -> str:
     template = _TEMPLATES[scenario.meta.locale]
     locale_weather_labels = WEATHER_LABELS[scenario.meta.locale]
@@ -303,7 +317,8 @@ def build_master_prompt(
 
     if characters:
         characters_body = "\n\n".join(
-            _format_character(character, template) for character in characters
+            _format_character(character, template, (minds or {}).get(_character_id(scenario, character)))
+            for character in characters
         )
     else:
         characters_body = template["no_characters"]

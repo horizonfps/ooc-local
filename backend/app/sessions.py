@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.cast import CAST_EVENT_KIND, CastMember, MindView, resolve_cast, seed_cast_ids
+from app.cast import CAST_EVENT_KIND, MIND_EVENT_KIND, CastMember, MindView, resolve_cast, seed_cast_ids
 from app.config import CONFIG_DIR
 from app.hud import HudState, StatView, hud_from_start, stat_views
 from app.media import SessionAssets, session_assets
@@ -232,6 +232,8 @@ def create_session(
         assets=assets,
         cast=cast,
         stats=stat_views(scenario, hud),
+        minds={},
+        suggestions=start.suggestions,
     )
 
 
@@ -308,6 +310,16 @@ def get_session(session_id: str) -> SessionDetail:
         ids = seed_cast_ids(scenario, start)
     cast = resolve_cast(scenario, ids)
 
+    narrator_events = [event for event in events if event.kind == "narrator_turn"]
+    if narrator_events:
+        raw_suggestions = narrator_events[-1].payload.get("suggestions")
+        if isinstance(raw_suggestions, list) and all(isinstance(item, str) for item in raw_suggestions):
+            suggestions = raw_suggestions
+        else:
+            suggestions = []
+    else:
+        suggestions = start.suggestions
+
     return SessionDetail(
         id=row.id,
         scenario_id=row.scenario_id,
@@ -319,6 +331,8 @@ def get_session(session_id: str) -> SessionDetail:
         assets=assets,
         cast=cast,
         stats=stat_views(scenario, row.hud),
+        minds=read_minds(session_id),
+        suggestions=suggestions,
     )
 
 
@@ -481,6 +495,25 @@ def read_cast_ids(session_id: str) -> list[str] | None:
     return ids
 
 
+def read_minds(session_id: str) -> dict[str, MindView]:
+    """Last minds event's entries, validated item by item. Same defense as
+    read_cast_ids: a payload without the key, not a dict, or with a malformed
+    entry can't take down GET /api/sessions/{id}."""
+    events = read_events(session_id, kinds=(MIND_EVENT_KIND,))
+    if not events:
+        return {}
+    entries = events[-1].payload.get("entries")
+    if not isinstance(entries, dict):
+        return {}
+    result: dict[str, MindView] = {}
+    for char_id, value in entries.items():
+        try:
+            result[char_id] = MindView.model_validate(value)
+        except Exception:
+            return {}
+    return result
+
+
 def _build_turns(events: list[Event]) -> list[TurnView]:
     turns: list[TurnView] = []
     index = 0
@@ -488,5 +521,12 @@ def _build_turns(events: list[Event]) -> list[TurnView]:
         if event.kind == "player_turn":
             index += 1
         role: Literal["player", "narrator"] = "player" if event.kind == "player_turn" else "narrator"
-        turns.append(TurnView(index=index, role=role, text=event.payload["text"]))
+        turns.append(
+            TurnView(
+                index=index,
+                role=role,
+                text=event.payload["text"],
+                suggestions=event.payload.get("suggestions", []),
+            )
+        )
     return turns

@@ -4,6 +4,8 @@ from pydantic import BaseModel
 
 TAG_RE = re.compile(r"\[([A-Z][A-Z0-9_]*):([^\[\]\n]*)\]")
 
+SUGGEST_MAX_CHARS = 120
+
 _TRAILING_WHITESPACE_RE = re.compile(r"[ \t]+")
 _SPACE_BEFORE_PUNCT_RE = re.compile(r"[ \t]+([.,;:!?…])")
 _WORD_CHAR_RE = re.compile(r"[^\W_]", re.UNICODE)
@@ -25,6 +27,9 @@ def _validate(kind: str, args: list[str]) -> bool:
         return len(args) == 1 and bool(args[0])
     if kind == "LOC":
         return len(args) == 1 and bool(args[0])
+    if kind == "SUGGEST":
+        text = ":".join(args).strip()
+        return bool(text) and len(text) <= SUGGEST_MAX_CHARS
     return True
 
 

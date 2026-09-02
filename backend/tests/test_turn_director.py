@@ -98,7 +98,7 @@ def _config(flags=None):
                 "narrator": {"provider": "local", "model": "narrator-model"},
                 "utility": {"provider": "local", "model": "utility-model"},
             },
-            "flags": flags or {},
+            "flags": {"hud_judge": False, "minds": False, **(flags or {})},
         }
     )
 
