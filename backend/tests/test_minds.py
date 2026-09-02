@@ -182,6 +182,22 @@ def test_parse_minds_accepts_list_of_objects_keyed_by_id():
     assert reason is None
 
 
+def test_parse_minds_accepts_one_object_per_line_and_skips_truncated_tail():
+    raw = (
+        '{"id": "chloe", "attitude": "séria", "emoji": "😔", "event": "abre o caderno"}\n'
+        '{"id": "mika", "attitude": "tenso", "emoji": "😬", "event": "fecha a porta"},\n'
+        '{"id": "ashlee", "attitude":'
+    )
+
+    data, reason = parse_minds(raw)
+
+    assert data == {
+        "chloe": {"attitude": "séria", "emoji": "😔", "event": "abre o caderno"},
+        "mika": {"attitude": "tenso", "emoji": "😬", "event": "fecha a porta"},
+    }
+    assert reason is None
+
+
 @pytest.mark.parametrize(
     "raw",
     ["", "   ", "a Chloe ficou desconfiada", '{"chloe": {', '[{"chloe": {}}]'],

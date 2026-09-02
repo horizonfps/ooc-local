@@ -146,7 +146,20 @@ def _loads_tolerant(text: str) -> object:
             return json.loads(text[start : end + 1])
         except json.JSONDecodeError:
             continue
-    return None
+    return _loads_object_per_line(text)
+
+
+def _loads_object_per_line(text: str) -> list | None:
+    items: list = []
+    for line in text.splitlines():
+        line = line.strip().rstrip(",")
+        if not line.startswith("{"):
+            continue
+        try:
+            items.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return items or None
 
 
 def _list_to_map(items: list) -> dict | None:
