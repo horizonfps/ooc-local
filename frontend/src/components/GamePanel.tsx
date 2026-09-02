@@ -3,9 +3,21 @@ import type { FormEvent, KeyboardEvent } from 'react'
 import { CastRow } from './CastRow'
 import { ErrorState } from './ErrorState'
 import { Hud } from './Hud'
+import { InfoTracker } from './InfoTracker'
 import { Loading } from './Loading'
+import { StatBars } from './StatBars'
 import { TurnText, findUnclosedBracket } from './TurnText'
-import { fetchSession, streamTurn, type CastMember, type HudState, type SessionAssets, type SessionDetail, type TurnView } from '../api'
+import {
+  fetchSession,
+  streamTurn,
+  type CastMember,
+  type HudState,
+  type MindView,
+  type SessionAssets,
+  type SessionDetail,
+  type StatView,
+  type TurnView,
+} from '../api'
 import { classifyError, describeError, type ErrorKind } from '../errors'
 import { t } from '../i18n'
 import { navigate } from '../useHashRoute'
@@ -91,17 +103,21 @@ export function GamePanel(props: GamePanelProps) {
   const [hud, setHud] = useState<HudState | null>(null)
   const [hudStale, setHudStale] = useState(false)
   const [cast, setCast] = useState<CastMember[] | null>(null)
+  const [stats, setStats] = useState<StatView[] | null>(null)
+  const [minds, setMinds] = useState<Record<string, MindView> | null>(null)
   const [lastMessage, setLastMessage] = useState('')
   const [atBottom, setAtBottom] = useState(true)
   const [doneAnnouncement, setDoneAnnouncement] = useState('')
   const [sceneAnnouncement, setSceneAnnouncement] = useState('')
   const [castAnnouncement, setCastAnnouncement] = useState('')
+  const [statsAnnouncement, setStatsAnnouncement] = useState('')
   const [focusToken, setFocusToken] = useState(0)
   const [stageEnabled, setStageEnabled] = useState(readStagePreference)
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null)
   const [brokenSpriteUrls, setBrokenSpriteUrls] = useState<Set<string>>(new Set())
   const prevAnnounceRef = useRef<{ background: string | null; charactersKey: string } | null>(null)
   const prevCastKeyRef = useRef<string | null>(null)
+  const prevStatsKeyRef = useRef<string | null>(null)
 
   const load = () => {
     setState({ phase: 'loading' })
@@ -130,14 +146,18 @@ export function GamePanel(props: GamePanelProps) {
     setExtraTurns([])
     setHudStale(false)
     setCast(null)
+    setStats(null)
+    setMinds(null)
     setLastMessage('')
     setDoneAnnouncement('')
     setSceneAnnouncement('')
     setCastAnnouncement('')
+    setStatsAnnouncement('')
     setBackgroundUrl(null)
     setBrokenSpriteUrls(new Set())
     prevAnnounceRef.current = null
     prevCastKeyRef.current = null
+    prevStatsKeyRef.current = null
   }, [sessionId])
 
   useEffect(
@@ -152,6 +172,8 @@ export function GamePanel(props: GamePanelProps) {
     if (state.phase === 'ready') {
       setHud(state.session.hud)
       setCast(state.session.cast)
+      setStats(state.session.stats)
+      setMinds(state.session.minds)
     }
   }, [state])
 
@@ -236,6 +258,7 @@ export function GamePanel(props: GamePanelProps) {
     setPending({ index, message, text: '', status: 'streaming' })
     setSceneAnnouncement('')
     setCastAnnouncement('')
+    setStatsAnnouncement('')
 
     const controller = new AbortController()
     abortRef.current = controller
@@ -258,6 +281,8 @@ export function GamePanel(props: GamePanelProps) {
             setHud(newHud)
             setHudStale(false)
             if (newHud.cast != null) setCast(newHud.cast)
+            if (newHud.stats != null) setStats(newHud.stats)
+            if (newHud.minds != null) setMinds(newHud.minds)
           },
           onError: (err) => {
             sawError = true
@@ -329,6 +354,8 @@ export function GamePanel(props: GamePanelProps) {
   const turns = state.phase === 'ready' ? [...state.session.turns, ...extraTurns] : []
   const hudView = state.phase === 'ready' ? (hud ?? state.session.hud) : null
   const castView = state.phase === 'ready' ? (cast ?? state.session.cast) : null
+  const statsView = state.phase === 'ready' ? (stats ?? state.session.stats) : null
+  const mindsView = state.phase === 'ready' ? (minds ?? state.session.minds) : null
   const inputId_ = `game-input-${inputId}`
 
   const sceneText = useMemo(() => {
@@ -406,6 +433,24 @@ export function GamePanel(props: GamePanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [castKey])
 
+  const statsKey = stats === null ? '\0null' : stats.map((s) => `${s.id}:${s.value}`).join('|')
+
+  useEffect(() => {
+    const prev = prevStatsKeyRef.current
+    prevStatsKeyRef.current = statsKey
+    if (prev === null || prev === '\0null') return
+    if (prev === statsKey) return
+    if (stats === null) return
+
+    const prevValues = new Map(prev.split('|').filter(Boolean).map((entry) => entry.split(':') as [string, string]))
+    const changed = stats.filter((s) => prevValues.has(s.id) && prevValues.get(s.id) !== String(s.value))
+    if (changed.length === 0) return
+
+    const changes = changed.map((s) => t('hud.stats.change', { name: s.name, value: s.value })).join(', ')
+    setStatsAnnouncement(t('hud.stats.announce', { changes }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statsKey])
+
   const handleToggleStage = () => {
     setStageEnabled((prev) => {
       const next = !prev
@@ -445,7 +490,9 @@ export function GamePanel(props: GamePanelProps) {
       ) : null}
 
       <Hud hud={hudView} busy={turnPhase === 'streaming'} stale={hudStale} />
+      <StatBars stats={statsView} busy={turnPhase === 'streaming'} stale={hudStale} />
       <CastRow cast={castView} busy={turnPhase === 'streaming'} stale={hudStale} />
+      <InfoTracker minds={mindsView} cast={castView} busy={turnPhase === 'streaming'} stale={hudStale} />
 
       {state.phase === 'loading' ? (
         <div className="game-history game-history--skeleton" aria-hidden="true">
@@ -545,7 +592,7 @@ export function GamePanel(props: GamePanelProps) {
       </p>
 
       <p className="visually-hidden" aria-live="polite" role="status">
-        {[sceneAnnouncement, castAnnouncement].filter(Boolean).join(' ')}
+        {[sceneAnnouncement, castAnnouncement, statsAnnouncement].filter(Boolean).join(' ')}
       </p>
 
       {state.phase === 'ready' && !atBottom ? (
