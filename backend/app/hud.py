@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, field_validator
 
 if TYPE_CHECKING:
-    from app.scenario import LoadedScenario, StartConfig
+    from app.scenario import LoadedScenario, StartConfig, StatDef
 
 WEATHER_CODES = ("clear", "cloudy", "rain", "storm", "snow", "fog", "night")
 
@@ -137,3 +137,62 @@ def apply_location(hud: HudState, raw: str) -> HudState:
     if normalized == hud.location:
         return hud
     return hud.model_copy(update={"location": normalized})
+
+
+STAT_EVENT_KIND = "stat"
+
+
+def stat_ids(hud: HudState, stats: list["StatDef"]) -> set[str]:
+    """Union of declared stat ids and dynamic stat ids: the source of truth for "does this id exist?"."""
+    return {stat.id for stat in stats} | set(hud.dynamic_stats)
+
+
+def ensure_stats(hud: HudState, stats: list["StatDef"]) -> HudState:
+    """Fills in missing declared stat keys with their default and re-clamps values left outside an
+    edited range; never removes a key the author dropped."""
+    updated = dict(hud.stats)
+    changed = False
+    for stat in stats:
+        current = updated.get(stat.id)
+        if current is None:
+            updated[stat.id] = stat.default
+            changed = True
+            continue
+        clamped = min(max(current, stat.min), stat.max)
+        if clamped != current:
+            updated[stat.id] = clamped
+            changed = True
+    if not changed:
+        return hud
+    return hud.model_copy(update={"stats": updated})
+
+
+def apply_stat(
+    hud: HudState, stats: list["StatDef"], stat_id: str, delta: int
+) -> tuple[HudState, tuple[int, int] | None]:
+    """Clamped delta on a declared or dynamic stat. Unknown id or a clamp that didn't
+    move returns (hud, None); otherwise (hud novo, (delta efetivo, valor novo))."""
+    if stat_id not in stat_ids(hud, stats):
+        return hud, None
+
+    declared = next((stat for stat in stats if stat.id == stat_id), None)
+    if declared is not None:
+        current = hud.stats.get(stat_id, declared.default)
+        new_value = min(max(current + delta, declared.min), declared.max)
+        if new_value == current:
+            return hud, None
+        new_hud = hud.model_copy(update={"stats": {**hud.stats, stat_id: new_value}})
+        return new_hud, (new_value - current, new_value)
+
+    dynamic = hud.dynamic_stats[stat_id]
+    current = dynamic.value
+    new_value = min(max(current + delta, dynamic.min), dynamic.max)
+    if new_value == current:
+        return hud, None
+    new_dynamic = dynamic.model_copy(update={"value": new_value})
+    new_hud = hud.model_copy(update={"dynamic_stats": {**hud.dynamic_stats, stat_id: new_dynamic}})
+    return new_hud, (new_value - current, new_value)
+
+
+def stat_event(stat_id: str, delta: int, value: int, source: str) -> tuple[str, dict]:
+    return STAT_EVENT_KIND, {"id": stat_id, "delta": delta, "value": value, "source": source}

@@ -1,7 +1,7 @@
 ---
 id: TCK-061
 title: Aplicar a tag STAT no HUD e levar status com nível ao prompt do narrador
-status: ready
+status: in_review
 points: 4
 blockedBy: [TCK-060]
 files:
