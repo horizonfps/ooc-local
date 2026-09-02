@@ -1,7 +1,7 @@
 ---
 id: TCK-060
 title: Congelar o contrato da Fase 3 — stats, lorebook, comandos e campos novos da sessão
-status: in_review
+status: done
 points: 5
 blockedBy: []
 files:
