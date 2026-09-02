@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 
 from pydantic import BaseModel
 
-from app.cast import cast_event, resolve_cast, seed_cast_ids
+from app.cast import MindView, cast_event, minds_event, resolve_cast, seed_cast_ids
 from app.cleanup import strip_engine_echo
 from app.compact import (
     COMPACT_KEEP_TURNS,
@@ -18,8 +18,10 @@ from app.compact import (
 from app.config import Config, load_config
 from app.director import DIRECTOR_RAW_LOG_CHARS, DIRECTOR_WINDOW_TURNS, DirectorError, decide_scene
 from app.hud import advance, apply_location, apply_stat, ensure_stats, stat_event, stat_ids, stat_views
+from app.judge import JUDGE_RAW_LOG_CHARS, JudgeError, apply_judgement, judge_turn
 from app.llm.base import ChatMessage
 from app.llm.openai_compat import OpenAICompatProvider
+from app.minds import MINDS_RAW_LOG_CHARS, MindsError, merge_minds, think_minds
 from app.observability import emit
 from app.prompt import MASTER_PROMPT_VERSION, build_master_prompt
 from app.scenario import Character, LoadedScenario, ScenarioError, StartConfig, load_scenario
@@ -32,6 +34,7 @@ from app.sessions import (
     get_session_row,
     read_cast_ids,
     read_events,
+    read_minds,
     set_compact,
 )
 from app.tags import Tag, parse_tags
@@ -46,6 +49,7 @@ class TurnContext(BaseModel):
     start: StartConfig
     characters: list[Character]
     cast_ids: list[str]
+    minds: dict[str, MindView] = {}
 
 
 def load_turn_context(session_id: str) -> TurnContext:
@@ -64,7 +68,10 @@ def load_turn_context(session_id: str) -> TurnContext:
         ids = [char_id for char_id in ids if char_id in scenario.characters]
     characters = [scenario.characters[char_id] for char_id in ids]
     row = row.model_copy(update={"hud": ensure_stats(row.hud, scenario.stats)})
-    return TurnContext(row=row, scenario=scenario, start=start, characters=characters, cast_ids=ids)
+    minds = read_minds(session_id)
+    return TurnContext(
+        row=row, scenario=scenario, start=start, characters=characters, cast_ids=ids, minds=minds
+    )
 
 
 def history_events(session_id: str, compact_seq: int | None) -> list[Event]:
@@ -96,7 +103,7 @@ def build_context(
     if ctx is None:
         ctx = load_turn_context(session_id)
 
-    system = build_master_prompt(ctx.scenario, ctx.start, ctx.row.hud, ctx.characters, compact)
+    system = build_master_prompt(ctx.scenario, ctx.start, ctx.row.hud, ctx.characters, compact, ctx.minds)
 
     if history is None:
         events = history_events(session_id, None)
@@ -198,6 +205,7 @@ async def run_turn(
     stripped_lines = 0
     location_changed = False
     stat_change_count = 0
+    suggestion_count = 0
 
     def emit_game_turn(error: str | None) -> None:
         emit(
@@ -215,9 +223,11 @@ async def run_turn(
             error=error,
             cast=len(ctx.cast_ids) if ctx is not None else None,
             stats=stat_change_count if ctx is not None else None,
+            suggestions=suggestion_count if ctx is not None else None,
         )
 
     pending_cast_event: tuple[str, dict] | None = None
+    pending_minds_event: tuple[str, dict] | None = None
 
     try:
         if config is None:
@@ -331,11 +341,18 @@ async def run_turn(
                     stat_events.append(stat_event(tag.args[0], delta, value, "tag"))
             resolved_tags.append(tag)
         tags = resolved_tags
-        stat_change_count = len(stat_events)
+        touched_ids = [tag.args[0] for tag in tags if tag.kind == "STAT" and tag.valid]
 
+        suggestions = [
+            ":".join(tag.args).strip() for tag in tags if tag.kind == "SUGGEST" and tag.valid
+        ][:3]
+        suggestion_count = len(suggestions)
+
+        # The narrator turn is persisted before the utility calls: a client that leaves
+        # during the judge or minds window must not lose the turn it already read.
         events = [
             ("player_turn", {"text": message}),
-            ("narrator_turn", {"text": clean_text}),
+            ("narrator_turn", {"text": clean_text, "suggestions": suggestions}),
         ]
         for tag in tags:
             events.append(("tag", {"kind": tag.kind, "args": tag.args, "raw": tag.raw, "valid": tag.valid}))
@@ -343,6 +360,129 @@ async def run_turn(
         if pending_cast_event is not None:
             events.append(pending_cast_event)
         append_events(session_id, events, hud=new_hud)
+        if suggestions:
+            yield {"suggestions": suggestions}
+
+        post_events: list[tuple[str, dict]] = []
+
+        if config.flag("hud_judge"):
+            judge_started = time.monotonic()
+            try:
+                judgement, judge_reason, judge_raw = await judge_turn(
+                    ctx.scenario, new_hud, message, clean_text, touched_ids, config
+                )
+            except JudgeError as exc:
+                emit(
+                    "judge_failed",
+                    session_id=session_id,
+                    turn=new_hud.turn,
+                    error=str(exc),
+                    duration_ms=int((time.monotonic() - judge_started) * 1000),
+                )
+            except Exception as exc:  # defensive: local providers return creative garbage
+                emit(
+                    "judge_failed",
+                    session_id=session_id,
+                    turn=new_hud.turn,
+                    error=str(exc),
+                    duration_ms=int((time.monotonic() - judge_started) * 1000),
+                )
+            else:
+                judge_duration_ms = int((time.monotonic() - judge_started) * 1000)
+                if judgement is not None:
+                    new_hud, changes, rejections = apply_judgement(
+                        ctx.scenario, new_hud, judgement, touched_ids
+                    )
+                    judge_events = [
+                        stat_event(change.id, change.delta, change.value, change.source)
+                        for change in changes
+                    ]
+                    stat_events += judge_events
+                    post_events.extend(judge_events)
+                    emit(
+                        "judge_applied",
+                        session_id=session_id,
+                        turn=new_hud.turn,
+                        changes=[
+                            {"id": change.id, "delta": change.delta, "value": change.value}
+                            for change in changes
+                        ],
+                        rejected=[
+                            {"id": rejection.id, "reason": rejection.reason} for rejection in rejections
+                        ],
+                        duration_ms=judge_duration_ms,
+                        model=config.models["utility"].model,
+                    )
+                else:
+                    emit(
+                        "judge_rejected",
+                        session_id=session_id,
+                        turn=new_hud.turn,
+                        reason=judge_reason,
+                        raw=judge_raw[:JUDGE_RAW_LOG_CHARS],
+                        duration_ms=judge_duration_ms,
+                    )
+
+        if config.flag("minds"):
+            minds_started = time.monotonic()
+            try:
+                proposed, minds_reason, minds_raw = await think_minds(
+                    ctx.scenario, ctx.cast_ids, ctx.minds, message, clean_text, config
+                )
+            except MindsError as exc:
+                emit(
+                    "minds_failed",
+                    session_id=session_id,
+                    turn=new_hud.turn,
+                    error=str(exc),
+                    duration_ms=int((time.monotonic() - minds_started) * 1000),
+                )
+            except Exception as exc:  # defensive: local providers return creative garbage
+                emit(
+                    "minds_failed",
+                    session_id=session_id,
+                    turn=new_hud.turn,
+                    error=str(exc),
+                    duration_ms=int((time.monotonic() - minds_started) * 1000),
+                )
+            else:
+                minds_duration_ms = int((time.monotonic() - minds_started) * 1000)
+                if proposed is not None:
+                    entries, rejections = merge_minds(ctx.minds, proposed, ctx.cast_ids)
+                    changed_ids = [
+                        char_id
+                        for char_id, view in entries.items()
+                        if ctx.minds.get(char_id) != view
+                    ]
+                    if entries != ctx.minds:
+                        pending_minds_event = minds_event(entries)
+                        post_events.append(pending_minds_event)
+                        ctx = ctx.model_copy(update={"minds": entries})
+                    emit(
+                        "minds_applied",
+                        session_id=session_id,
+                        turn=new_hud.turn,
+                        ids=list(entries.keys()),
+                        changed=changed_ids,
+                        rejected=[
+                            {"id": rejection.id, "reason": rejection.reason} for rejection in rejections
+                        ],
+                        duration_ms=minds_duration_ms,
+                        model=config.models["utility"].model,
+                    )
+                else:
+                    emit(
+                        "minds_rejected",
+                        session_id=session_id,
+                        turn=new_hud.turn,
+                        reason=minds_reason,
+                        raw=minds_raw[:MINDS_RAW_LOG_CHARS],
+                        duration_ms=minds_duration_ms,
+                    )
+
+        stat_change_count = len(stat_events)
+        if post_events:
+            append_events(session_id, post_events, hud=new_hud)
 
         hud = new_hud
         cast = [member.model_dump() for member in resolve_cast(ctx.scenario, ctx.cast_ids)]
@@ -351,6 +491,7 @@ async def run_turn(
                 **new_hud.model_dump(exclude={"stats", "dynamic_stats"}),
                 "cast": cast,
                 "stats": [view.model_dump() for view in stat_views(ctx.scenario, new_hud)],
+                "minds": {char_id: view.model_dump() for char_id, view in ctx.minds.items()},
             }
         }
         emit_game_turn(None)
