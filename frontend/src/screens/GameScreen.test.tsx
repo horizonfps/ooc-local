@@ -39,6 +39,10 @@ function session(overrides: Partial<SessionDetail> = {}): SessionDetail {
     hud: { turn: 0, location: 'Hallway', time: 'Night', weather: 'clear' },
     assets: { sprites: {}, backgrounds: {} },
     cast: [],
+    stats: [],
+    minds: {},
+    commands: [],
+    suggestions: [],
     ...overrides,
   }
 }

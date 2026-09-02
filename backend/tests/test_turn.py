@@ -119,6 +119,8 @@ def test_turn_happy_path_emits_deltas_hud_then_done(scenarios_root, monkeypatch)
     assert events[0] == {"delta": "voce anda"}
     assert events[1] == {"delta": " ate a Chloe."}
     assert events[-1]["hud"]["turn"] == 1
+    assert "dynamic_stats" not in events[-1]["hud"]
+    assert not isinstance(events[-1]["hud"].get("stats"), dict)
 
     detail = client.get(f"/api/sessions/{session['id']}").json()
     assert len(detail["turns"]) == 2

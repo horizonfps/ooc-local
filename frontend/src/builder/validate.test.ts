@@ -13,6 +13,7 @@ function draft(overrides: Partial<BuilderDraft> = {}): BuilderDraft {
       tags: [],
       default_start: 'default',
       world_mode: 'guided',
+      allow_dynamic_stats: false,
     },
     world: '## Universe\n\nA quiet town.',
     starts: {
@@ -42,6 +43,9 @@ function draft(overrides: Partial<BuilderDraft> = {}): BuilderDraft {
         emotions: ['default'],
       },
     },
+    stats: [],
+    lorebook: {},
+    commands: [],
     ...overrides,
   }
 }

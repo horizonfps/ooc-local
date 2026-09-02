@@ -10,12 +10,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.cast import CAST_EVENT_KIND, CastMember, resolve_cast, seed_cast_ids
+from app.cast import CAST_EVENT_KIND, CastMember, MindView, resolve_cast, seed_cast_ids
 from app.config import CONFIG_DIR
-from app.hud import HudState, hud_from_start
+from app.hud import HudState, StatView, hud_from_start, stat_views
 from app.media import SessionAssets, session_assets
 from app.observability import emit
-from app.scenario import ScenarioError, load_scenario
+from app.scenario import CommandView, ScenarioError, load_scenario
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -67,6 +67,10 @@ class TurnView(BaseModel):
     index: int
     role: Literal["player", "narrator"]
     text: str
+    mode: Literal["do", "say", "story"] | None = None
+    meta: bool = False
+    suggestions: list[str] = []
+    command: str | None = None
 
 
 class SessionSummary(BaseModel):
@@ -92,6 +96,10 @@ class SessionDetail(BaseModel):
     hud: HudState
     assets: SessionAssets
     cast: list[CastMember]
+    stats: list[StatView] = []
+    minds: dict[str, MindView] = {}
+    commands: list[CommandView] = []
+    suggestions: list[str] = []
 
 
 class SessionRow(BaseModel):
@@ -173,6 +181,7 @@ def create_session(
         raise StartNotFound(start_id or scenario.meta.default_start) from None
 
     hud = hud_from_start(start)
+    hud = hud.model_copy(update={"stats": {stat.id: stat.default for stat in scenario.stats}})
     session_id = uuid.uuid4().hex
     now = _now_iso()
 
@@ -222,6 +231,7 @@ def create_session(
         hud=hud,
         assets=assets,
         cast=cast,
+        stats=stat_views(scenario, hud),
     )
 
 
@@ -308,6 +318,7 @@ def get_session(session_id: str) -> SessionDetail:
         hud=row.hud,
         assets=assets,
         cast=cast,
+        stats=stat_views(scenario, row.hud),
     )
 
 

@@ -31,7 +31,7 @@ function sseResponse(events: Array<Record<string, unknown> | '[DONE]'>, status =
 
 function draft(overrides: Partial<BuilderDraft> = {}): BuilderDraft {
   return {
-    meta: { name: 'The School', tagline: null, description: null, locale: 'en', tags: [], default_start: 'default', world_mode: 'guided' },
+    meta: { name: 'The School', tagline: null, description: null, locale: 'en', tags: [], default_start: 'default', world_mode: 'guided', allow_dynamic_stats: false },
     world: '',
     starts: {
       default: {
@@ -60,6 +60,9 @@ function draft(overrides: Partial<BuilderDraft> = {}): BuilderDraft {
       },
     },
     characters: {},
+    stats: [],
+    lorebook: {},
+    commands: [],
     ...overrides,
   }
 }
@@ -75,6 +78,10 @@ function session(overrides: Partial<SessionDetail> = {}): SessionDetail {
     hud: { turn: 0, location: 'Hallway', time: '08:00', weather: 'clear' },
     assets: { sprites: {}, backgrounds: {} },
     cast: [],
+    stats: [],
+    minds: {},
+    commands: [],
+    suggestions: [],
     ...overrides,
   }
 }

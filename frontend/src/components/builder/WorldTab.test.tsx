@@ -17,6 +17,7 @@ function baseDraft(): BuilderDraft {
       tags: [],
       default_start: 'default',
       world_mode: 'guided',
+      allow_dynamic_stats: false,
     },
     world: '## Universe\n\nA dusty old school.',
     starts: {
@@ -34,6 +35,9 @@ function baseDraft(): BuilderDraft {
       },
     },
     characters: {},
+    stats: [],
+    lorebook: {},
+    commands: [],
   }
 }
 

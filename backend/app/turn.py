@@ -326,7 +326,7 @@ async def run_turn(
 
         hud = new_hud
         cast = [member.model_dump() for member in resolve_cast(ctx.scenario, ctx.cast_ids)]
-        yield {"hud": {**new_hud.model_dump(), "cast": cast}}
+        yield {"hud": {**new_hud.model_dump(exclude={"stats", "dynamic_stats"}), "cast": cast}}
         emit_game_turn(None)
     except Exception as exc:
         emit_game_turn(str(exc))

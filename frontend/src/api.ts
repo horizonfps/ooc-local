@@ -23,7 +23,15 @@ async function detailOf(response: Response): Promise<string | null> {
 
 export type ScenarioSummary = { id: string; name: string; tagline: string | null; locale: string }
 export type HudState = { turn: number; location: string; time: string; weather: string }
-export type TurnView = { index: number; role: 'player' | 'narrator'; text: string }
+export type TurnView = {
+  index: number
+  role: 'player' | 'narrator'
+  text: string
+  mode?: InputMode | null
+  meta?: boolean
+  suggestions?: string[]
+  command?: string | null
+}
 export type SessionSummary = {
   id: string
   scenarioId: string
@@ -37,6 +45,13 @@ export type SessionAssets = {
   backgrounds: Record<string, string>
 }
 export type CastMember = { id: string; name: string }
+export type StatView = {
+  id: string; name: string; icon: string | null; color: string | null
+  value: number; min: number; max: number; level: string | null
+}
+export type MindView = { attitude: string; emoji: string; event: string }
+export type CommandView = { name: string; description: string; scope: 'scenario' | 'global' }
+export type InputMode = 'do' | 'say' | 'story'
 export type SessionDetail = {
   id: string
   scenarioId: string
@@ -47,6 +62,10 @@ export type SessionDetail = {
   hud: HudState
   assets: SessionAssets
   cast: CastMember[]
+  stats: StatView[]
+  minds: Record<string, MindView>
+  commands: CommandView[]
+  suggestions: string[]
 }
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
@@ -109,7 +128,20 @@ export type ScenarioMeta = {
   tags: string[]
   default_start: string
   world_mode: 'guided' | 'custom'
+  allow_dynamic_stats: boolean
 }
+
+export type StatLevel = { from: number; text: string }
+export type StatDef = {
+  id: string; name: string; icon: string | null; color: string | null
+  min: number; max: number; default: number
+  description: string | null; levels: StatLevel[]
+}
+export type LoreEntryDoc = {
+  title: string; keywords: string[]; body: string
+  scope: 'keyword' | 'always'; priority: number; enabled: boolean
+}
+export type CommandDoc = { name: string; description: string; prompt: string }
 
 export type HudDefaults = { location: string; time: string; weather: string }
 
@@ -151,6 +183,9 @@ export type ScenarioDocument = {
   world: string
   starts: Record<string, StartDoc>
   characters: Record<string, CharacterDoc>
+  stats: StatDef[]
+  lorebook: Record<string, LoreEntryDoc>
+  commands: CommandDoc[]
 }
 
 export function fetchScenarioDocument(id: string): Promise<ScenarioDocument> {
@@ -226,7 +261,11 @@ export async function deleteSession(id: string, opts?: { keepalive?: boolean }):
   }
 }
 
-export type TurnHudPayload = HudState & { cast?: CastMember[] }
+export type TurnHudPayload = HudState & {
+  cast?: CastMember[]
+  stats?: StatView[]
+  minds?: Record<string, MindView>
+}
 
 export type TurnHandlers = {
   onDelta: (delta: string) => void
@@ -236,7 +275,7 @@ export type TurnHandlers = {
 
 type TurnEvent = { delta?: string; hud?: TurnHudPayload; error?: string }
 
-export type TurnOptions = { signal?: AbortSignal }
+export type TurnOptions = { signal?: AbortSignal; mode?: InputMode }
 
 export async function streamTurn(sessionId: string, message: string, h: TurnHandlers, options?: TurnOptions): Promise<void> {
   const signal = options?.signal

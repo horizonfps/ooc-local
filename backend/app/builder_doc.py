@@ -13,7 +13,15 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from app import scenario as scenario_module
 from app.config import load_config
 from app.observability import emit
-from app.scenario import Character, ScenarioError, ScenarioMeta, StartConfig
+from app.scenario import (
+    Character,
+    CommandDef,
+    LoreEntry,
+    ScenarioError,
+    ScenarioMeta,
+    StartConfig,
+    StatDef,
+)
 
 router = APIRouter()
 
@@ -28,11 +36,18 @@ class ScenarioDocument(BaseModel):
     world: str
     starts: dict[str, StartConfig]
     characters: dict[str, Character]
+    stats: list[StatDef] = []
+    lorebook: dict[str, LoreEntry] = {}
+    commands: list[CommandDef] = []
 
 
 class ScenarioDocumentWrite(ScenarioDocument):
     model_config = ConfigDict(extra="forbid")
 
+    # Required on write: a client that omits them would otherwise wipe the files.
+    stats: list[StatDef]
+    lorebook: dict[str, LoreEntry]
+    commands: list[CommandDef]
     force: bool = False
 
 
@@ -101,12 +116,41 @@ def _load_dir(scenario_dir: Path, subdir: str, model: type[BaseModel], inject_id
     return result
 
 
+def _load_list(scenario_dir: Path, filename: str, model: type[BaseModel]) -> list[BaseModel]:
+    """Missing file or empty (null) YAML document is a valid empty list, never an error."""
+    path = scenario_dir / filename
+    if not path.exists():
+        return []
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return []
+    try:
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError as exc:
+        raise ScenarioError(path, f"invalid yaml: {exc}") from exc
+    if data is None:
+        return []
+    if not isinstance(data, list):
+        raise ScenarioError(path, "expected a list")
+    items: list[BaseModel] = []
+    for entry in data:
+        try:
+            items.append(model.model_validate(entry))
+        except ValidationError as exc:
+            raise ScenarioError(path, scenario_module._summarize(exc), details=str(exc)) from exc
+    return items
+
+
 def read_document(scenario_id: str) -> ScenarioDocument:
     scenario_dir = scenario_module.scenario_path(scenario_id)
     meta = _load_meta(scenario_dir)
     world = _load_world(scenario_dir)
     starts = _load_dir(scenario_dir, "starts", StartConfig, inject_id=True)
     characters = _load_dir(scenario_dir, "characters", Character, inject_id=False)
+    stats = _load_list(scenario_dir, "stats.yaml", StatDef)
+    lorebook = _load_dir(scenario_dir, "lorebook", LoreEntry, inject_id=False)
+    commands = _load_list(scenario_dir, "commands.yaml", CommandDef)
     revision = compute_revision(scenario_id)
     return ScenarioDocument(
         revision=revision,
@@ -114,6 +158,9 @@ def read_document(scenario_id: str) -> ScenarioDocument:
         world=world,
         starts=starts,
         characters=characters,
+        stats=stats,
+        lorebook=lorebook,
+        commands=commands,
     )
 
 
@@ -131,6 +178,15 @@ def compute_revision(scenario_id: str) -> str:
         dir_path = scenario_dir / subdir
         if dir_path.is_dir():
             files.extend([*dir_path.glob("*.yaml"), *dir_path.glob("*.yml")])
+    stats_path = scenario_dir / "stats.yaml"
+    if stats_path.exists():
+        files.append(stats_path)
+    commands_path = scenario_dir / "commands.yaml"
+    if commands_path.exists():
+        files.append(commands_path)
+    lorebook_dir = scenario_dir / "lorebook"
+    if lorebook_dir.is_dir():
+        files.extend([*lorebook_dir.glob("*.yaml"), *lorebook_dir.glob("*.yml")])
 
     def relkey(path: Path) -> str:
         return path.relative_to(scenario_dir).as_posix()
@@ -165,11 +221,24 @@ def _validate_document(doc: ScenarioDocument) -> None:
     for char_id in doc.characters:
         if not _ID_RE.match(char_id):
             errors.append(f"invalid character id '{char_id}', expected [a-z0-9-]+")
+    for lore_id in doc.lorebook:
+        if not _ID_RE.match(lore_id):
+            errors.append(f"invalid lorebook id '{lore_id}', expected [a-z0-9-]+")
+    seen_stat_ids: set[str] = set()
+    for stat in doc.stats:
+        if stat.id in seen_stat_ids:
+            errors.append(f"duplicate stat id '{stat.id}'")
+        seen_stat_ids.add(stat.id)
+    seen_command_names: set[str] = set()
+    for command in doc.commands:
+        if command.name in seen_command_names:
+            errors.append(f"duplicate command name '{command.name}'")
+        seen_command_names.add(command.name)
     if errors:
         raise ScenarioDocumentInvalid(errors)
 
 
-def _dump_yaml(data: dict) -> bytes:
+def _dump_yaml(data: dict | list) -> bytes:
     text = yaml.safe_dump(data, allow_unicode=True, sort_keys=False, default_flow_style=False)
     if not text.endswith("\n"):
         text += "\n"
@@ -244,6 +313,45 @@ def _serialize_character(character: Character) -> bytes:
     return _dump_yaml(data)
 
 
+def _serialize_stat_def(stat: StatDef) -> dict:
+    data: dict = {"id": stat.id, "name": stat.name}
+    if stat.icon is not None:
+        data["icon"] = stat.icon
+    if stat.color is not None:
+        data["color"] = stat.color
+    data["min"] = stat.min
+    data["max"] = stat.max
+    data["default"] = stat.default
+    if stat.description is not None:
+        data["description"] = stat.description
+    if stat.levels:
+        data["levels"] = [{"from": level.from_, "text": level.text} for level in stat.levels]
+    return data
+
+
+def _serialize_stats(stats: list[StatDef]) -> bytes:
+    return _dump_yaml([_serialize_stat_def(stat) for stat in stats])
+
+
+def _serialize_lore_entry(entry: LoreEntry) -> bytes:
+    data: dict = {"title": entry.title}
+    if entry.keywords:
+        data["keywords"] = entry.keywords
+    data["body"] = entry.body
+    data["scope"] = entry.scope
+    data["priority"] = entry.priority
+    data["enabled"] = entry.enabled
+    return _dump_yaml(data)
+
+
+def _serialize_command_def(command: CommandDef) -> dict:
+    return {"name": command.name, "description": command.description, "prompt": command.prompt}
+
+
+def _serialize_commands(commands: list[CommandDef]) -> bytes:
+    return _dump_yaml([_serialize_command_def(command) for command in commands])
+
+
 def _atomic_write(path: Path, content: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.parent / f".{path.name}.tmp-{uuid.uuid4().hex}"
@@ -286,6 +394,12 @@ def write_document(scenario_id: str, doc: ScenarioDocument, *, force: bool) -> s
         targets[scenario_dir / "starts" / f"{start_id}.yaml"] = _serialize_start(start)
     for char_id, character in doc.characters.items():
         targets[scenario_dir / "characters" / f"{char_id}.yaml"] = _serialize_character(character)
+    if doc.stats:
+        targets[scenario_dir / "stats.yaml"] = _serialize_stats(doc.stats)
+    if doc.commands:
+        targets[scenario_dir / "commands.yaml"] = _serialize_commands(doc.commands)
+    for lore_id, entry in doc.lorebook.items():
+        targets[scenario_dir / "lorebook" / f"{lore_id}.yaml"] = _serialize_lore_entry(entry)
 
     try:
         files_written = 0
@@ -297,6 +411,16 @@ def write_document(scenario_id: str, doc: ScenarioDocument, *, force: bool) -> s
 
         files_deleted = _prune_dir(scenario_dir / "starts", set(doc.starts))
         files_deleted += _prune_dir(scenario_dir / "characters", set(doc.characters))
+        files_deleted += _prune_dir(scenario_dir / "lorebook", set(doc.lorebook))
+
+        stats_path = scenario_dir / "stats.yaml"
+        if not doc.stats and stats_path.exists():
+            stats_path.unlink()
+            files_deleted += 1
+        commands_path = scenario_dir / "commands.yaml"
+        if not doc.commands and commands_path.exists():
+            commands_path.unlink()
+            files_deleted += 1
     except OSError as exc:
         path = Path(exc.filename) if exc.filename else scenario_dir
         emit("builder_doc_write_failed", scenario_id=scenario_id, path=str(path), error=str(exc))
@@ -335,6 +459,9 @@ async def get_builder_document_route(scenario_id: str) -> ScenarioDocument:
         scenario_id=scenario_id,
         starts=len(document.starts),
         characters=len(document.characters),
+        stats=len(document.stats),
+        lore=len(document.lorebook),
+        commands=len(document.commands),
         revision=document.revision,
     )
     return document
@@ -360,6 +487,9 @@ async def put_builder_document_route(scenario_id: str, req: ScenarioDocumentWrit
         world=req.world,
         starts=req.starts,
         characters=req.characters,
+        stats=req.stats,
+        lorebook=req.lorebook,
+        commands=req.commands,
     )
 
     try:

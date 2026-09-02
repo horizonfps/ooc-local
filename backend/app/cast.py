@@ -5,12 +5,23 @@ from pydantic import BaseModel
 from app.scenario import LoadedScenario, StartConfig
 
 CAST_EVENT_KIND = "cast"
+MIND_EVENT_KIND = "minds"
 MAX_CAST_IN_SCENE = 6
 
 
 class CastMember(BaseModel):
     id: str
     name: str
+
+
+class MindView(BaseModel):
+    attitude: str
+    emoji: str
+    event: str
+
+
+def minds_event(entries: dict[str, "MindView"]) -> tuple[str, dict]:
+    return MIND_EVENT_KIND, {"entries": {id_: entry.model_dump() for id_, entry in entries.items()}}
 
 
 def seed_cast_ids(scenario: LoadedScenario, start: StartConfig) -> list[str]:
