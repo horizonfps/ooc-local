@@ -279,7 +279,7 @@ def test_render_lore_heading_level_saturates_at_six():
 def test_render_lore_empty_body_has_no_trailing_blank_line():
     entry = _entry(body="")
     rendered = render_lore([entry])
-    assert rendered == "### t\n"
+    assert rendered == "### t"
 
 
 # --- build_scan_text ---------------------------------------------------------

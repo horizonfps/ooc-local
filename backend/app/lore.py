@@ -48,7 +48,7 @@ def _neutralize_headings(text: str) -> str:
 def _render_one(entry: LoreEntry) -> str:
     title = " ".join(entry.title.split())
     body = _neutralize_headings(entry.body.strip())
-    return f"### {title}\n{body}"
+    return f"### {title}\n{body}" if body else f"### {title}"
 
 
 def select_lore(scenario: LoadedScenario, scan_text: str) -> list[LoreEntry]:
@@ -63,13 +63,15 @@ def select_lore(scenario: LoadedScenario, scan_text: str) -> list[LoreEntry]:
 
     selected.sort(key=lambda pair: (-pair[1].priority, pair[0]))
 
+    # Budget is measured on the rendered section, separators included, so it matches
+    # estimate_tokens(render_lore(result)).
     result: list[LoreEntry] = []
-    used_tokens = 0
+    rendered_parts: list[str] = []
     for _entry_id, entry in selected:
-        cost = estimate_tokens(_render_one(entry))
-        if used_tokens + cost > LORE_BUDGET_TOKENS:
+        candidate = "\n\n".join([*rendered_parts, _render_one(entry)])
+        if estimate_tokens(candidate) > LORE_BUDGET_TOKENS:
             break
-        used_tokens += cost
+        rendered_parts.append(_render_one(entry))
         result.append(entry)
 
     return result
