@@ -37,5 +37,8 @@ de verdade e tag `fase-N`.
 
 - Comentários e identificadores em inglês, mínimos. UI e prompts nascem i18n
   (en/pt-br).
+- Strings do frontend vivem em `frontend/src/strings/{common,builder,game}.ts`
+  (`strings.ts` só compõe). Ticket de UI do builder toca só `builder.ts`; do
+  jogo, só `game.ts`. É o que permite um ticket de cada na mesma wave.
 - Tudo que é sistema (HUD, stats, tags, comandos) é determinístico no engine; o
   LLM só narra e emite tags.
