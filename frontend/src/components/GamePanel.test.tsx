@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GamePanel } from './GamePanel'
 import { t } from '../i18n'
-import type { SessionDetail } from '../api'
+import type { SessionDetail, StatView } from '../api'
 
 function jsonResponse(body: unknown, status = 200) {
   return {
@@ -389,6 +389,223 @@ describe('GamePanel', () => {
 
       releaseStream?.()
       await screen.findByText('They stay.')
+    })
+  })
+
+  describe('stats and minds', () => {
+    function statView(overrides: Partial<StatView> = {}): StatView {
+      return { id: 'reputacao', name: 'Reputação', icon: '⭐', color: null, value: 55, min: 0, max: 100, level: null, ...overrides }
+    }
+
+    it('an SSE hud event with stats updates the bars and announces the change once', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ stats: [statView({ value: 55 })] })),
+        post: () =>
+          sseResponse([
+            { delta: 'Time passes.' },
+            {
+              hud: {
+                turn: 1,
+                location: 'Yard',
+                time: 'Day',
+                weather: 'clear',
+                stats: [statView({ value: 60 })],
+              },
+            },
+            '[DONE]',
+          ]),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      expect(screen.getByText(t('hud.stat.value', { value: 55, max: 100 }))).toBeInTheDocument()
+
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      await screen.findByText(t('hud.stat.value', { value: 60, max: 100 }))
+      const announcement = t('hud.stats.announce', { changes: t('hud.stats.change', { name: 'Reputação', value: 60 }) })
+      await screen.findByText(announcement)
+      expect(screen.getAllByText(announcement)).toHaveLength(1)
+    })
+
+    it('an SSE hud event with minds fills the INFO rows', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ cast: [{ id: 'chloe', name: 'Chloe' }] })),
+        post: () =>
+          sseResponse([
+            { delta: 'She watches.' },
+            {
+              hud: {
+                turn: 1,
+                location: 'Yard',
+                time: 'Day',
+                weather: 'clear',
+                minds: { chloe: { attitude: 'desconfiada', emoji: '🤨', event: 'viu você chegar' } },
+              },
+            },
+            '[DONE]',
+          ]),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      await screen.findByText('desconfiada')
+      expect(screen.getByText(t('game.info.event', { event: 'viu você chegar' }))).toBeInTheDocument()
+    })
+
+    it('loading a session does not announce stats', async () => {
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ stats: [statView({ value: 55 })] })),
+        post: () => sseResponse(['[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const announcement = t('hud.stats.announce', { changes: t('hud.stats.change', { name: 'Reputação', value: 55 }) })
+      expect(screen.queryByText(announcement)).toBeNull()
+    })
+
+    it('a hud event without stats keeps the previous bars, and without minds keeps the previous INFO rows', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () =>
+          jsonResponse(
+            session({
+              cast: [{ id: 'chloe', name: 'Chloe' }],
+              stats: [statView({ value: 55 })],
+              minds: { chloe: { attitude: 'desconfiada', emoji: '🤨', event: 'viu você chegar' } },
+            }),
+          ),
+        post: () =>
+          sseResponse([
+            { delta: 'Nothing changes.' },
+            { hud: { turn: 1, location: 'Yard', time: 'Day', weather: 'clear' } },
+            '[DONE]',
+          ]),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      await screen.findByText('Yard')
+      expect(screen.getByText(t('hud.stat.value', { value: 55, max: 100 }))).toBeInTheDocument()
+      expect(screen.getByText('desconfiada')).toBeInTheDocument()
+    })
+
+    it('only the changed stat appears in the announcement', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () =>
+          jsonResponse(
+            session({
+              stats: [statView({ id: 'reputacao', name: 'Reputação', value: 55 }), statView({ id: 'energia', name: 'Energia', value: 80 })],
+            }),
+          ),
+        post: () =>
+          sseResponse([
+            { delta: 'Time passes.' },
+            {
+              hud: {
+                turn: 1,
+                location: 'Yard',
+                time: 'Day',
+                weather: 'clear',
+                stats: [statView({ id: 'reputacao', name: 'Reputação', value: 60 }), statView({ id: 'energia', name: 'Energia', value: 80 })],
+              },
+            },
+            '[DONE]',
+          ]),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      const announcement = t('hud.stats.announce', { changes: t('hud.stats.change', { name: 'Reputação', value: 60 }) })
+      await screen.findByText(announcement)
+      expect(screen.queryByText(t('hud.stats.change', { name: 'Energia', value: 80 }), { exact: false })).toBeNull()
+    })
+
+    it('during the stream both blocks keep the previous values with aria-busy', async () => {
+      const user = userEvent.setup()
+      let releaseStream: (() => void) | undefined
+      const streamGate = new Promise<void>((resolve) => {
+        releaseStream = resolve
+      })
+      mockRoutedFetch({
+        get: () =>
+          jsonResponse(
+            session({
+              cast: [{ id: 'chloe', name: 'Chloe' }],
+              stats: [statView({ value: 55 })],
+              minds: { chloe: { attitude: 'desconfiada', emoji: '🤨', event: 'viu você chegar' } },
+            }),
+          ),
+        post: async () => {
+          await streamGate
+          return sseResponse([{ delta: 'They stay.' }, '[DONE]'])
+        },
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      const statsGroup = screen.getByRole('group', { name: t('hud.stats.regionLabel') })
+      expect(statsGroup).toHaveAttribute('aria-busy', 'true')
+      expect(screen.getByText(t('hud.stat.value', { value: 55, max: 100 }))).toBeInTheDocument()
+
+      const infoGroup = screen.getByRole('group', { name: t('game.info.regionLabel') })
+      expect(infoGroup).toHaveAttribute('aria-busy', 'true')
+      expect(screen.getByText('desconfiada')).toBeInTheDocument()
+
+      releaseStream?.()
+      await screen.findByText('They stay.')
+    })
+
+    it('a scenario without stats renders no bars block', async () => {
+      mockRoutedFetch({ get: () => jsonResponse(session()), post: () => sseResponse(['[DONE]']) })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      expect(document.querySelector('.statBars')).toBeNull()
+    })
+
+    it('a failed turn shows hud.stale exactly once, with both blocks dimmed and still in the DOM', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () =>
+          jsonResponse(
+            session({
+              cast: [{ id: 'chloe', name: 'Chloe' }],
+              stats: [statView({ value: 55 })],
+              minds: { chloe: { attitude: 'desconfiada', emoji: '🤨', event: 'viu você chegar' } },
+            }),
+          ),
+        post: () => jsonResponse({}, 500),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'go{Enter}')
+
+      const staleTexts = await screen.findAllByText(t('hud.stale'))
+      expect(staleTexts).toHaveLength(1)
+      expect(document.querySelector('.statBars--stale')).not.toBeNull()
+      expect(document.querySelector('.info--stale')).not.toBeNull()
+      expect(screen.getByText(t('hud.stat.value', { value: 55, max: 100 }))).toBeInTheDocument()
+      expect(screen.getByText('desconfiada')).toBeInTheDocument()
     })
   })
 })
