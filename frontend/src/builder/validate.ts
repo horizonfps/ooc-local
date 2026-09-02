@@ -9,6 +9,13 @@ const WEATHER_CODES = ['clear', 'cloudy', 'rain', 'storm', 'snow', 'fog', 'night
 // Mirrors backend/app/scenario.py Character.emotions cap (20 total, default forced in).
 export const MAX_EMOTIONS = 20
 
+// Public contract, consumed by TCK-070 and TCK-073.
+export const STAT_ID_RE = /^[a-z0-9_-]+$/
+export const STAT_COLOR_RE = /^#[0-9a-fA-F]{6}$/
+export const MAX_STAT_NAME = 40
+export const MAX_STAT_ICON = 4
+export const MAX_STAT_DESCRIPTION = 200
+
 function hasUnbalancedVariable(text: string): boolean {
   return text.split('\n').some((line) => {
     let open = false
@@ -251,6 +258,109 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
   if (hasUnbalancedVariable(draft.world)) {
     errors.push(error('world', 'world', t('builder.world.custom.label'), t('builder.world.variables.unbalanced')))
   }
+
+  const seenStatIds = new Set<string>()
+  draft.stats.forEach((stat, i) => {
+    const statLabel = stat.name.trim() || stat.id || t('builder.stats.unnamed')
+    const withStat = (label: string) => `${statLabel} — ${label}`
+
+    if (!stat.id.trim()) {
+      errors.push(error('stats', `stats.${i}.id`, withStat(t('builder.field.label.statId')), t('builder.field.required')))
+    } else if (!STAT_ID_RE.test(stat.id)) {
+      errors.push(
+        error('stats', `stats.${i}.id`, withStat(t('builder.field.label.statId')), t('builder.field.slugUnderscoreInvalid')),
+      )
+    }
+
+    if (stat.id.trim() !== '') {
+      if (seenStatIds.has(stat.id)) {
+        errors.push(
+          error('stats', `stats.${i}.id`, withStat(t('builder.field.label.statId')), t('builder.field.slugTaken', { slug: stat.id })),
+        )
+      } else {
+        seenStatIds.add(stat.id)
+      }
+    }
+
+    if (!stat.name.trim()) {
+      errors.push(error('stats', `stats.${i}.name`, withStat(t('builder.stats.name')), t('builder.field.required')))
+    } else if (stat.name.length > MAX_STAT_NAME) {
+      errors.push(
+        error('stats', `stats.${i}.name`, withStat(t('builder.stats.name')), t('builder.field.tooLong', { max: MAX_STAT_NAME })),
+      )
+    }
+
+    if (stat.icon !== null && stat.icon.length > MAX_STAT_ICON) {
+      errors.push(
+        error('stats', `stats.${i}.icon`, withStat(t('builder.stats.icon')), t('builder.field.tooLong', { max: MAX_STAT_ICON })),
+      )
+    }
+
+    if (stat.color !== null && !STAT_COLOR_RE.test(stat.color)) {
+      errors.push(error('stats', `stats.${i}.color`, withStat(t('builder.stats.color')), t('builder.validate.colorInvalid')))
+    }
+
+    const rangeOk = stat.max > stat.min
+    if (!rangeOk) {
+      errors.push(error('stats', `stats.${i}.max`, withStat(t('builder.stats.max')), t('builder.validate.statMaxAboveMin')))
+    } else if (stat.default < stat.min || stat.default > stat.max) {
+      errors.push(
+        error(
+          'stats',
+          `stats.${i}.default`,
+          withStat(t('builder.stats.default')),
+          t('builder.validate.statDefaultRange', { min: stat.min, max: stat.max }),
+        ),
+      )
+    }
+
+    if (stat.description !== null && stat.description.length > MAX_STAT_DESCRIPTION) {
+      errors.push(
+        error(
+          'stats',
+          `stats.${i}.description`,
+          withStat(t('builder.stats.description')),
+          t('builder.field.tooLong', { max: MAX_STAT_DESCRIPTION }),
+        ),
+      )
+    }
+
+    let previousFrom: number | null = null
+    stat.levels.forEach((level, j) => {
+      if (rangeOk && (level.from < stat.min || level.from > stat.max)) {
+        errors.push(
+          error(
+            'stats',
+            `stats.${i}.levels.${j}.from`,
+            withStat(t('builder.stats.levels.from', { index: j + 1 })),
+            t('builder.validate.levelFromRange', { min: stat.min, max: stat.max }),
+          ),
+        )
+      }
+      if (j > 0 && previousFrom !== null && level.from <= previousFrom) {
+        errors.push(
+          error(
+            'stats',
+            `stats.${i}.levels.${j}.from`,
+            withStat(t('builder.stats.levels.from', { index: j + 1 })),
+            t('builder.validate.levelFromOrder'),
+          ),
+        )
+      }
+      previousFrom = level.from
+
+      if (!level.text.trim()) {
+        errors.push(
+          error(
+            'stats',
+            `stats.${i}.levels.${j}.text`,
+            withStat(t('builder.stats.levels.text', { index: j + 1 })),
+            t('builder.field.required'),
+          ),
+        )
+      }
+    })
+  })
 
   return errors
 }

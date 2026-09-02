@@ -6,6 +6,7 @@ import { CharactersTab } from '../components/builder/CharactersTab'
 import { IdentityTab } from '../components/builder/IdentityTab'
 import { MediaTab } from '../components/builder/MediaTab'
 import { StartsTab } from '../components/builder/StartsTab'
+import { StatsTab } from '../components/builder/StatsTab'
 import { WorldTab } from '../components/builder/WorldTab'
 import { ErrorState } from '../components/ErrorState'
 import { Loading } from '../components/Loading'
@@ -29,13 +30,14 @@ export type TabProps = {
   goToTab: (tab: BuilderTab) => void
 }
 
-const TAB_ORDER: readonly BuilderTab[] = ['identity', 'world', 'starts', 'characters', 'media']
+const TAB_ORDER: readonly BuilderTab[] = ['identity', 'world', 'starts', 'characters', 'stats', 'media']
 
 const TAB_LABEL_KEY: Record<BuilderTab, StringKey> = {
   identity: 'builder.editor.tab.identity',
   world: 'builder.editor.tab.world',
   starts: 'builder.editor.tab.starts',
   characters: 'builder.editor.tab.characters',
+  stats: 'builder.editor.tab.stats',
   media: 'builder.editor.tab.media',
 }
 
@@ -54,7 +56,8 @@ function draftOf(doc: ScenarioDocument): BuilderDraft {
 function slice(tab: BuilderTab, draft: BuilderDraft): unknown {
   switch (tab) {
     case 'identity': {
-      const { world_mode: _worldMode, default_start: _defaultStart, ...identityMeta } = draft.meta
+      const { world_mode: _worldMode, default_start: _defaultStart, allow_dynamic_stats: _allowDynamicStats, ...identityMeta } =
+        draft.meta
       return identityMeta
     }
     case 'world':
@@ -63,6 +66,8 @@ function slice(tab: BuilderTab, draft: BuilderDraft): unknown {
       return { starts: draft.starts, default_start: draft.meta.default_start }
     case 'characters':
       return draft.characters
+    case 'stats':
+      return { stats: draft.stats, allow_dynamic_stats: draft.meta.allow_dynamic_stats }
     case 'media':
       return null
   }
@@ -94,6 +99,12 @@ function demoEdit(tab: BuilderTab, draft: BuilderDraft): BuilderDraft {
       const character = draft.characters[id]
       const nextName = character.name.endsWith(DEMO_MARK) ? character.name.slice(0, -DEMO_MARK.length) : character.name + DEMO_MARK
       return { ...draft, characters: { ...draft.characters, [id]: { ...character, name: nextName } } }
+    }
+    case 'stats': {
+      if (draft.stats.length === 0) return draft
+      const [first, ...rest] = draft.stats
+      const nextName = first.name.endsWith(DEMO_MARK) ? first.name.slice(0, -DEMO_MARK.length) : first.name + DEMO_MARK
+      return { ...draft, stats: [{ ...first, name: nextName }, ...rest] }
     }
     case 'media':
       return draft
@@ -611,6 +622,8 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
                   <StartsTab {...tabProps} />
                 ) : activeTab === 'characters' ? (
                   <CharactersTab {...tabProps} />
+                ) : activeTab === 'stats' ? (
+                  <StatsTab {...tabProps} />
                 ) : activeTab === 'media' ? (
                   <MediaTab {...tabProps} />
                 ) : (

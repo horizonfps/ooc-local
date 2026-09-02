@@ -14,6 +14,7 @@ const DOCUMENT = {
     tags: [],
     default_start: 'default',
     world_mode: 'guided',
+    allow_dynamic_stats: false,
   },
   world: '## Universe\n\nA dusty old school.',
   starts: {
@@ -41,6 +42,7 @@ const DOCUMENT = {
       emotions: ['default'],
     },
   },
+  stats: [],
 }
 
 function jsonResponse(body: unknown, status = 200) {
@@ -89,10 +91,20 @@ describe('BuilderEditorScreen', () => {
     expect(await screen.findByRole('heading', { name: 'The School' })).toBeInTheDocument()
     const tablist = screen.getByRole('tablist', { name: t('builder.editor.tabs.label') })
     const tabs = within(tablist).getAllByRole('tab')
-    expect(tabs).toHaveLength(5)
+    expect(tabs).toHaveLength(6)
     const worldTab = within(tablist).getByRole('tab', { name: t('builder.editor.tab.world') })
     expect(worldTab).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText(t('builder.editor.clean'))).toBeInTheDocument()
+  })
+
+  it('shows six tabs with Stats between Characters and Media', async () => {
+    mockFetch(() => jsonResponse(DOCUMENT))
+    render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
+
+    const tablist = await screen.findByRole('tablist', { name: t('builder.editor.tabs.label') })
+    const tabs = within(tablist).getAllByRole('tab')
+    expect(tabs).toHaveLength(6)
+    expect(tabs[4]).toHaveTextContent(t('builder.editor.tab.stats'))
   })
 
   it('marks dirty on onChange from a tab field and clears it when undone', async () => {
@@ -425,5 +437,47 @@ describe('BuilderEditorScreen', () => {
 
     expect(await screen.findByText(t('builder.editor.clean'))).toBeInTheDocument()
     expect(fetchMock.mock.calls).toHaveLength(2)
+  })
+
+  it('marks only the Stats tab dirty when the allow_dynamic_stats toggle is flipped', async () => {
+    const user = userEvent.setup()
+    mockFetch(() => jsonResponse(DOCUMENT))
+    render(<BuilderEditorScreen scenarioId="school" tab="stats" />)
+
+    const toggle = await screen.findByRole('checkbox', { name: t('builder.stats.allowDynamic') })
+    const tablist = screen.getByRole('tablist', { name: t('builder.editor.tabs.label') })
+    const statsTab = within(tablist).getByRole('tab', { name: t('builder.editor.tab.stats') })
+    const identityTab = within(tablist).getByRole('tab', { name: t('builder.editor.tab.identity') })
+
+    await user.click(toggle)
+
+    expect(statsTab.className).toContain('is-dirty')
+    expect(identityTab.className).not.toContain('is-dirty')
+  })
+
+  it('blocks the save on an invalid stat name and the jump link focuses the stat field', async () => {
+    const user = userEvent.setup()
+    const invalidDocument = {
+      ...DOCUMENT,
+      stats: [{ id: 'rep', name: '', icon: null, color: null, min: 0, max: 100, default: 50, description: null, levels: [] }],
+    }
+    mockFetch(() => jsonResponse(invalidDocument))
+    render(<BuilderEditorScreen scenarioId="school" tab="stats" />)
+
+    const colorInput = await screen.findByLabelText(t('builder.stats.color'))
+    fireEvent.change(colorInput, { target: { value: '#112233' } })
+
+    await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
+
+    const summary = await screen.findByText(t('builder.editor.validation.summaryTitle'))
+    const panel = summary.closest('.builder-editor-validation') as HTMLElement
+    const nameJump = within(panel)
+      .getAllByRole('button')
+      .find((btn) => btn.textContent?.includes(t('builder.stats.name')))
+    expect(nameJump).toBeTruthy()
+    await user.click(nameJump as HTMLElement)
+
+    const nameInput = document.getElementById('builder-field-stats.0.name')
+    expect(document.activeElement).toBe(nameInput)
   })
 })
