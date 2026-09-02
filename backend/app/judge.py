@@ -125,9 +125,12 @@ def build_judge_messages(
     ]
 
 
+_EXPLICIT_PLUS = re.compile(r"(:\s*)\+(?=\d)")
+
+
 def parse_judgement(raw: str) -> tuple[dict | None, str | None]:
     """Tolerant parse: local models often wrap the object in code fences or prose."""
-    text = raw.strip()
+    text = _EXPLICIT_PLUS.sub(r"\1", raw.strip())
     if not text:
         return None, "invalid_json"
 

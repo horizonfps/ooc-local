@@ -153,6 +153,16 @@ def test_parse_judgement_accepts_code_fence_and_surrounding_prose():
     assert parse_judgement(raw) == ({"stats": {}}, None)
 
 
+def test_parse_judgement_accepts_explicit_plus_sign():
+    raw = '```json\n{"stats": {"reputacao": +5, "energia": -3}}\n```'
+    assert parse_judgement(raw) == ({"stats": {"reputacao": 5, "energia": -3}}, None)
+
+
+def test_parse_judgement_keeps_plus_inside_strings():
+    data, _ = parse_judgement('{"stats": {}, "nota": "+5 de moral"}')
+    assert data == {"stats": {}, "nota": "+5 de moral"}
+
+
 def test_parse_judgement_empty_object_is_legit():
     assert parse_judgement("{}") == ({}, None)
 
