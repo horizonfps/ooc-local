@@ -207,15 +207,17 @@ export function LorebookTab(props: TabProps) {
     }
     const focusIndex = index < nextIds.length ? index : nextIds.length - 1
     const nextSelected = nextIds[focusIndex]
-    setSelectedId(nextSelected)
+    // Deleting another entry keeps the current selection.
+    if (id === selectedId) setSelectedId(nextSelected)
     requestAnimationFrame(() => {
       document.getElementById(`builder-lorebook-listItem-${nextSelected}`)?.focus()
     })
   }
 
   const guided = draft.meta.world_mode === 'guided' ? parseGuidedWorld(draft.world) : null
+  const splittableCount = guided === null ? 0 : guided.lore.filter((block) => block.title.trim() !== '').length
   const splitState: 'unavailable' | 'empty' | 'available' =
-    guided === null ? 'unavailable' : guided.lore.length === 0 ? 'empty' : 'available'
+    guided === null ? 'unavailable' : splittableCount === 0 ? 'empty' : 'available'
 
   function openSplitConfirm() {
     setSplitConfirmOpen(true)
