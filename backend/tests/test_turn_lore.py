@@ -225,9 +225,10 @@ def test_lore_scope_always_enters_without_keyword(scenarios_root, monkeypatch):
 
 
 def test_lore_two_matches_ordered_by_priority_desc(scenarios_root, monkeypatch):
+    # Ids chosen so alphabetical order alone would put the low-priority entry first.
     _write_scenario(
         scenarios_root,
-        lorebook={"caderno.yaml": CADERNO_YAML, "gremio.yaml": GREMIO_YAML},
+        lorebook={"zz-caderno.yaml": CADERNO_YAML, "aa-gremio.yaml": GREMIO_YAML},
     )
     monkeypatch.setattr(main, "load_config", lambda: _config())
     monkeypatch.setattr(turn, "load_config", lambda: _config())
@@ -274,7 +275,7 @@ def test_lore_keyword_matches_regardless_of_accent_and_case(scenarios_root, monk
     client = TestClient(main.app)
     session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
 
-    _send(client, session["id"], "onde esta o DIARIO da Chloe?")
+    _send(client, session["id"], "onde está o DIÁRIO da Chloe?")
 
     system = captured[0][0].content
     assert "## LORE ATIVA" in system

@@ -349,7 +349,7 @@ def build_master_prompt(
         f"{template['world_header']}\n{_neutralize_headings(scenario.world)}",
     ]
 
-    lore_body = render_lore(lore)
+    lore_body = render_lore(lore or [])
     if lore_body is not None:
         sections.append(f"{template['lore_header']}\n{lore_body}")
 
