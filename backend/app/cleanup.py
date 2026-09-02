@@ -10,8 +10,9 @@ _HUD_FIELD_RE = re.compile(
     re.IGNORECASE,
 )
 _PLAYER_ECHO_RE = re.compile(r"^\*\*\s*(voce|você|you|player|jogador)\s*\*\*\s*\|.*$", re.IGNORECASE)
+_SEPARATOR_RE = re.compile(r"^[-*_=#~\s]+$")
 
-_LINE_PATTERNS = (_HEADING_RE, _HUD_LABEL_RE, _HUD_FIELD_RE, _PLAYER_ECHO_RE)
+_LINE_PATTERNS = (_HEADING_RE, _HUD_LABEL_RE, _HUD_FIELD_RE, _PLAYER_ECHO_RE, _SEPARATOR_RE)
 
 
 def _is_engine_echo(line: str) -> bool:

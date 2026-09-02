@@ -9,6 +9,9 @@ describe('isEngineEchoLine', () => {
     '- **Hora:** 07:52',
     '**Você** | vou até a Chloe',
     '**You** | I walk',
+    '---',
+    '****',
+    '  ___  ',
   ])('returns true for %s', (line) => {
     expect(isEngineEchoLine(line)).toBe(true)
   })

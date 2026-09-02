@@ -8,6 +8,13 @@ def test_strip_engine_echo_removes_hud_block_and_keeps_prose():
     assert dropped == 3
 
 
+def test_strip_engine_echo_removes_separator_only_lines():
+    text = "Ashlee sorri.\n---\n****\n\n***\nChloe olha para você."
+    clean, dropped = strip_engine_echo(text)
+    assert clean == "Ashlee sorri.\n\nChloe olha para você."
+    assert dropped == 3
+
+
 def test_strip_engine_echo_removes_player_echo_line():
     text = "**Você** | vou até a Chloe\nEla levanta os olhos."
     clean, dropped = strip_engine_echo(text)
