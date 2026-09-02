@@ -1,7 +1,7 @@
 ---
 id: TCK-071
 title: Chips de sugestão e seletor de modo Do/Say/Story na tela de jogo
-status: in_review
+status: done
 points: 5
 blockedBy: [TCK-060, TCK-067]
 files:

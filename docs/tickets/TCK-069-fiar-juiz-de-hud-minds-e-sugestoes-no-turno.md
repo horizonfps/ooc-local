@@ -1,7 +1,7 @@
 ---
 id: TCK-069
 title: Rodar juiz de HUD e minds depois do narrador e emitir as sugestões do turno
-status: in_review
+status: done
 points: 5
 blockedBy: [TCK-060, TCK-061, TCK-062, TCK-063]
 files:
