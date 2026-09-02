@@ -270,21 +270,23 @@ export type TurnHudPayload = HudState & {
 export type TurnHandlers = {
   onDelta: (delta: string) => void
   onHud: (hud: TurnHudPayload) => void
+  onSuggestions: (suggestions: string[]) => void
   onError: (err: unknown) => void
 }
 
-type TurnEvent = { delta?: string; hud?: TurnHudPayload; error?: string }
+type TurnEvent = { delta?: string; hud?: TurnHudPayload; suggestions?: string[]; error?: string }
 
 export type TurnOptions = { signal?: AbortSignal; mode?: InputMode }
 
 export async function streamTurn(sessionId: string, message: string, h: TurnHandlers, options?: TurnOptions): Promise<void> {
   const signal = options?.signal
+  const mode = options?.mode
   let response: Response
   try {
     response = await fetch(`/api/sessions/${sessionId}/turn`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, ...(mode ? { mode } : {}) }),
       signal,
     })
   } catch (err) {
@@ -326,6 +328,8 @@ export async function streamTurn(sessionId: string, message: string, h: TurnHand
           h.onDelta(parsed.delta)
         } else if (parsed.hud !== undefined) {
           h.onHud(parsed.hud)
+        } else if (Array.isArray(parsed.suggestions)) {
+          h.onSuggestions(parsed.suggestions)
         }
       }
     }

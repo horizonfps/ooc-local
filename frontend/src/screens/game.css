@@ -96,6 +96,16 @@
   background: #2b3a55;
 }
 
+.game-turn-mode {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  border: 1px solid currentColor;
+}
+
 .game-turn-text {
   margin: 0;
   white-space: pre-wrap;
@@ -153,6 +163,10 @@
   min-height: 44px;
 }
 
+.game-panel:has(.suggestions) {
+  --game-scrollLatest-bottom: 9rem;
+}
+
 .game-footer {
   display: flex;
   flex-wrap: wrap;
@@ -205,5 +219,14 @@
   .game-turn--player,
   .game-turn--narrator {
     width: 100%;
+  }
+
+  .modeSelector {
+    flex-basis: 100%;
+  }
+
+  .modeSelector__group {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
   }
 }

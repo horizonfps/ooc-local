@@ -5,13 +5,16 @@ import { ErrorState } from './ErrorState'
 import { Hud } from './Hud'
 import { InfoTracker } from './InfoTracker'
 import { Loading } from './Loading'
+import { ModeSelector } from './ModeSelector'
 import { StatBars } from './StatBars'
+import { SuggestionChips } from './SuggestionChips'
 import { TurnText, findUnclosedBracket } from './TurnText'
 import {
   fetchSession,
   streamTurn,
   type CastMember,
   type HudState,
+  type InputMode,
   type MindView,
   type SessionAssets,
   type SessionDetail,
@@ -38,6 +41,25 @@ function readStagePreference(): boolean {
 function writeStagePreference(value: boolean) {
   try {
     localStorage.setItem(STAGE_STORAGE_KEY, value ? '1' : '0')
+  } catch {
+    // localStorage unavailable: preference just doesn't persist
+  }
+}
+
+const INPUT_MODES: InputMode[] = ['do', 'say', 'story']
+
+function readInputMode(sessionId: string): InputMode {
+  try {
+    const raw = localStorage.getItem(`ooc-local:inputMode:${sessionId}`)
+    return raw !== null && (INPUT_MODES as string[]).includes(raw) ? (raw as InputMode) : 'do'
+  } catch {
+    return 'do'
+  }
+}
+
+function writeInputMode(sessionId: string, mode: InputMode) {
+  try {
+    localStorage.setItem(`ooc-local:inputMode:${sessionId}`, mode)
   } catch {
     // localStorage unavailable: preference just doesn't persist
   }
@@ -105,6 +127,8 @@ export function GamePanel(props: GamePanelProps) {
   const [cast, setCast] = useState<CastMember[] | null>(null)
   const [stats, setStats] = useState<StatView[] | null>(null)
   const [minds, setMinds] = useState<Record<string, MindView> | null>(null)
+  const [suggestions, setSuggestions] = useState<string[] | null>(null)
+  const [mode, setMode] = useState<InputMode>(() => readInputMode(sessionId))
   const [lastMessage, setLastMessage] = useState('')
   const [atBottom, setAtBottom] = useState(true)
   const [doneAnnouncement, setDoneAnnouncement] = useState('')
@@ -148,6 +172,8 @@ export function GamePanel(props: GamePanelProps) {
     setCast(null)
     setStats(null)
     setMinds(null)
+    setSuggestions(null)
+    setMode(readInputMode(sessionId))
     setLastMessage('')
     setDoneAnnouncement('')
     setSceneAnnouncement('')
@@ -174,6 +200,7 @@ export function GamePanel(props: GamePanelProps) {
       setCast(state.session.cast)
       setStats(state.session.stats)
       setMinds(state.session.minds)
+      setSuggestions(state.session.suggestions)
     }
   }, [state])
 
@@ -228,7 +255,10 @@ export function GamePanel(props: GamePanelProps) {
 
   useEffect(() => {
     if (focusToken === 0) return
-    textareaRef.current?.focus()
+    const el = textareaRef.current
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(el.value.length, el.value.length)
   }, [focusToken])
 
   const handleScroll = () => {
@@ -284,13 +314,16 @@ export function GamePanel(props: GamePanelProps) {
             if (newHud.stats != null) setStats(newHud.stats)
             if (newHud.minds != null) setMinds(newHud.minds)
           },
+          onSuggestions: (list) => {
+            setSuggestions(list)
+          },
           onError: (err) => {
             sawError = true
             setHudStale(true)
             setPending((p) => (p ? { index: p.index, message: p.message, text: p.text, status: 'error', kind: 'stream', cause: String(err) } : p))
           },
         },
-        { signal: controller.signal },
+        { signal: controller.signal, mode },
       )
 
       if (controller.signal.aborted) return
@@ -300,7 +333,7 @@ export function GamePanel(props: GamePanelProps) {
         if (!sawHud) setHudStale(true)
         setExtraTurns((prev) => [
           ...prev,
-          { index, role: 'player', text: message },
+          { index, role: 'player', text: message, mode },
           { index, role: 'narrator', text: narratorText },
         ])
         setDoneAnnouncement(t('game.turn.done', { index }))
@@ -339,6 +372,21 @@ export function GamePanel(props: GamePanelProps) {
     void runTurn(lastMessage)
   }
 
+  const handleSendSuggestion = (text: string) => {
+    if (turnPhase === 'streaming') return
+    void runTurn(text)
+  }
+
+  const handleEditSuggestion = (text: string) => {
+    setDraft(text)
+    setFocusToken((n) => n + 1)
+  }
+
+  const handleModeChange = (next: InputMode) => {
+    setMode(next)
+    writeInputMode(sessionId, next)
+  }
+
   const handleFormSubmit = (e: FormEvent) => {
     e.preventDefault()
     submit()
@@ -354,6 +402,7 @@ export function GamePanel(props: GamePanelProps) {
   const turns = state.phase === 'ready' ? [...state.session.turns, ...extraTurns] : []
   const hudView = state.phase === 'ready' ? (hud ?? state.session.hud) : null
   const castView = state.phase === 'ready' ? (cast ?? state.session.cast) : null
+  const suggestionsView = state.phase === 'ready' ? (suggestions ?? state.session.suggestions) : []
   const statsView = state.phase === 'ready' ? (stats ?? state.session.stats) : null
   const mindsView = state.phase === 'ready' ? (minds ?? state.session.minds) : null
   const inputId_ = `game-input-${inputId}`
@@ -525,6 +574,9 @@ export function GamePanel(props: GamePanelProps) {
               <span className="game-turn-label">
                 {turn.role === 'player' ? t('game.turn.playerLabel') : t('game.turn.narratorLabel')}
               </span>
+              {turn.role === 'player' && turn.mode ? (
+                <span className="game-turn-mode">{t(`game.mode.${turn.mode}`)}</span>
+              ) : null}
               {turn.role === 'player' ? <p className="game-turn-text">{turn.text}</p> : <TurnText text={turn.text} />}
             </li>
           ))}
@@ -532,6 +584,7 @@ export function GamePanel(props: GamePanelProps) {
           {pending ? (
             <li className="game-turn game-turn--player">
               <span className="game-turn-label">{t('game.turn.playerLabel')}</span>
+              <span className="game-turn-mode">{t(`game.mode.${mode}`)}</span>
               <p className="game-turn-text">{pending.message}</p>
             </li>
           ) : null}
@@ -603,6 +656,10 @@ export function GamePanel(props: GamePanelProps) {
 
       {state.phase === 'ready' ? (
         <form className="game-footer" onSubmit={handleFormSubmit}>
+          {turnPhase !== 'streaming' ? (
+            <SuggestionChips suggestions={suggestionsView} onSend={handleSendSuggestion} onEdit={handleEditSuggestion} />
+          ) : null}
+          <ModeSelector value={mode} onChange={handleModeChange} name={`game-mode-${inputId}`} disabled={turnPhase === 'streaming'} />
           <label htmlFor={inputId_} className="visually-hidden">
             {t('game.input.label')}
           </label>
@@ -612,7 +669,7 @@ export function GamePanel(props: GamePanelProps) {
             className="game-input-textarea"
             rows={1}
             value={draft}
-            placeholder={t('game.input.placeholder')}
+            placeholder={t(`game.input.placeholder.${mode}`)}
             disabled={turnPhase === 'streaming'}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
