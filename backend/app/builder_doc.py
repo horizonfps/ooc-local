@@ -44,6 +44,10 @@ class ScenarioDocument(BaseModel):
 class ScenarioDocumentWrite(ScenarioDocument):
     model_config = ConfigDict(extra="forbid")
 
+    # Required on write: a client that omits them would otherwise wipe the files.
+    stats: list[StatDef]
+    lorebook: dict[str, LoreEntry]
+    commands: list[CommandDef]
     force: bool = False
 
 

@@ -530,6 +530,26 @@ def test_put_with_duplicate_command_name_returns_422_citing_name_and_writes_noth
     assert (scenario_dir / "scenario.yaml").read_bytes() == before
 
 
+def test_put_omitting_stats_lorebook_and_commands_returns_422_and_keeps_files(client, scenarios_root):
+    scenario_dir = _write_scenario(
+        scenarios_root,
+        "exemplo-escola",
+        stats="- id: reputacao\n  name: R\n  min: 0\n  max: 10\n  default: 5\n",
+        commands="- name: fofoca\n  description: d\n  prompt: p\n",
+    )
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+    revision = doc["revision"]
+    for key in ("stats", "lorebook", "commands"):
+        del doc[key]
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 422
+    assert (scenario_dir / "stats.yaml").exists()
+    assert (scenario_dir / "commands.yaml").exists()
+    assert compute_revision("exemplo-escola") == revision
+
+
 def test_put_with_uppercase_lorebook_id_returns_422_citing_id_and_writes_nothing(
     client, scenarios_root
 ):
