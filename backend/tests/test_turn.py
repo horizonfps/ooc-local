@@ -35,8 +35,16 @@ mind:
   goal: descobrir segredo
 """
 
+STATS_YAML = """\
+- id: reputacao
+  name: Reputação
+  min: 0
+  max: 100
+  default: 40
+"""
 
-def _write_scenario(root, scenario_id="exemplo-escola"):
+
+def _write_scenario(root, scenario_id="exemplo-escola", *, stats=None):
     scenario_path = root / scenario_id
     scenario_path.mkdir(parents=True)
     (scenario_path / "scenario.yaml").write_text(SCENARIO_YAML, encoding="utf-8")
@@ -49,6 +57,9 @@ def _write_scenario(root, scenario_id="exemplo-escola"):
     characters_dir = scenario_path / "characters"
     characters_dir.mkdir()
     (characters_dir / "chloe.yaml").write_text(CHLOE_YAML, encoding="utf-8")
+
+    if stats is not None:
+        (scenario_path / "stats.yaml").write_text(stats, encoding="utf-8")
 
     return scenario_path
 
@@ -130,7 +141,7 @@ def test_turn_happy_path_emits_deltas_hud_then_done(scenarios_root, monkeypatch)
 
 
 def test_turn_records_tags_as_events(scenarios_root, monkeypatch):
-    _write_scenario(scenarios_root)
+    _write_scenario(scenarios_root, stats=STATS_YAML)
     monkeypatch.setattr(main, "load_config", lambda: _config())
     monkeypatch.setattr(turn, "load_config", lambda: _config())
     monkeypatch.setattr(

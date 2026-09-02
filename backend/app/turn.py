@@ -17,7 +17,7 @@ from app.compact import (
 )
 from app.config import Config, load_config
 from app.director import DIRECTOR_RAW_LOG_CHARS, DIRECTOR_WINDOW_TURNS, DirectorError, decide_scene
-from app.hud import advance, apply_location
+from app.hud import advance, apply_location, apply_stat, ensure_stats, stat_event, stat_ids, stat_views
 from app.llm.base import ChatMessage
 from app.llm.openai_compat import OpenAICompatProvider
 from app.observability import emit
@@ -34,7 +34,7 @@ from app.sessions import (
     read_events,
     set_compact,
 )
-from app.tags import parse_tags
+from app.tags import Tag, parse_tags
 
 WINDOW_TURNS = 18
 TURN_ERROR_CODE = "turn_failed"
@@ -63,6 +63,7 @@ def load_turn_context(session_id: str) -> TurnContext:
     else:
         ids = [char_id for char_id in ids if char_id in scenario.characters]
     characters = [scenario.characters[char_id] for char_id in ids]
+    row = row.model_copy(update={"hud": ensure_stats(row.hud, scenario.stats)})
     return TurnContext(row=row, scenario=scenario, start=start, characters=characters, cast_ids=ids)
 
 
@@ -196,6 +197,7 @@ async def run_turn(
     tags = []
     stripped_lines = 0
     location_changed = False
+    stat_change_count = 0
 
     def emit_game_turn(error: str | None) -> None:
         emit(
@@ -212,6 +214,7 @@ async def run_turn(
             location_changed=location_changed,
             error=error,
             cast=len(ctx.cast_ids) if ctx is not None else None,
+            stats=stat_change_count if ctx is not None else None,
         )
 
     pending_cast_event: tuple[str, dict] | None = None
@@ -314,19 +317,42 @@ async def run_turn(
             if tag.kind == "LOC" and tag.valid:
                 new_hud = apply_location(new_hud, tag.args[0])
         location_changed = new_hud.location != hud.location
+
+        known_stat_ids = stat_ids(new_hud, ctx.scenario.stats)
+        resolved_tags: list[Tag] = []
+        stat_events: list[tuple[str, dict]] = []
+        for tag in tags:
+            if tag.kind == "STAT" and tag.valid and tag.args[0] not in known_stat_ids:
+                tag = tag.model_copy(update={"valid": False})
+            elif tag.kind == "STAT" and tag.valid:
+                new_hud, change = apply_stat(new_hud, ctx.scenario.stats, tag.args[0], int(tag.args[1]))
+                if change is not None:
+                    delta, value = change
+                    stat_events.append(stat_event(tag.args[0], delta, value, "tag"))
+            resolved_tags.append(tag)
+        tags = resolved_tags
+        stat_change_count = len(stat_events)
+
         events = [
             ("player_turn", {"text": message}),
             ("narrator_turn", {"text": clean_text}),
         ]
         for tag in tags:
             events.append(("tag", {"kind": tag.kind, "args": tag.args, "raw": tag.raw, "valid": tag.valid}))
+        events.extend(stat_events)
         if pending_cast_event is not None:
             events.append(pending_cast_event)
         append_events(session_id, events, hud=new_hud)
 
         hud = new_hud
         cast = [member.model_dump() for member in resolve_cast(ctx.scenario, ctx.cast_ids)]
-        yield {"hud": {**new_hud.model_dump(exclude={"stats", "dynamic_stats"}), "cast": cast}}
+        yield {
+            "hud": {
+                **new_hud.model_dump(exclude={"stats", "dynamic_stats"}),
+                "cast": cast,
+                "stats": [view.model_dump() for view in stat_views(ctx.scenario, new_hud)],
+            }
+        }
         emit_game_turn(None)
     except Exception as exc:
         emit_game_turn(str(exc))

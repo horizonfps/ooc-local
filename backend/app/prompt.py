@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import re
 
-from app.hud import HudState
+from app.hud import HudState, stat_views
 from app.media import scan_media
 from app.scenario import Character, LoadedScenario, StartConfig
 
-MASTER_PROMPT_VERSION = 8
+MASTER_PROMPT_VERSION = 9
 
 WEATHER_LABELS: dict[str, dict[str, str]] = {
     "pt-br": {
@@ -77,6 +77,8 @@ _TEMPLATES = {
         "hud_location": "Local",
         "hud_time": "Hora",
         "hud_weather": "Clima",
+        "status_header": "## STATUS DO JOGADOR",
+        "status_level_label": "Nível atual",
         "opening_header": "## CENA DE ABERTURA",
         "conflict_label": "Conflito deste início",
         "mission_label": "Missão do jogador",
@@ -98,9 +100,11 @@ _TEMPLATES = {
             "Trate o HUD, o relógio e a ficha de status como verdade absoluta: "
             "nunca reescreva HUD, relógio ou ficha de status dentro do texto, "
             "isso é estado do engine.\n"
-            "Você pode emitir as tags inline [STAT:nome:±N], "
+            "Você pode emitir as tags inline [STAT:id:±N], "
             "[SPRITE:personagem:emocao], [BG:local] e [LOC:local], sempre "
             "coladas ao trecho a que se referem.\n"
+            "Os únicos ids válidos para [STAT:id:±N] são os listados em "
+            "## STATUS DO JOGADOR; sem essa seção, não emita essa tag.\n"
             "Quando a cena mudar de lugar, emita [LOC:nome do local] com o "
             "nome do lugar em português, curto, no máximo 60 caracteres. O "
             "HUD só muda de local por essa tag.\n"
@@ -144,6 +148,8 @@ _TEMPLATES = {
         "hud_location": "Location",
         "hud_time": "Time",
         "hud_weather": "Weather",
+        "status_header": "## PLAYER STATUS",
+        "status_level_label": "Current level",
         "opening_header": "## OPENING SCENE",
         "conflict_label": "Conflict of this start",
         "mission_label": "Player mission",
@@ -164,9 +170,11 @@ _TEMPLATES = {
             "Treat the HUD, clock and status sheet as absolute truth: never "
             "rewrite HUD, clock or status sheet inside the text, that is "
             "engine state.\n"
-            "You may emit the inline tags [STAT:name:±N], "
+            "You may emit the inline tags [STAT:id:±N], "
             "[SPRITE:character:emotion], [BG:place] and [LOC:place], always "
             "attached to the passage they refer to.\n"
+            "The only valid ids for [STAT:id:±N] are the ones listed in "
+            "## PLAYER STATUS; without that section, do not emit that tag.\n"
             "When the scene moves to another place, emit [LOC:place name] "
             "with a short name, at most 60 characters. The HUD only changes "
             "location through this tag.\n"
@@ -258,6 +266,26 @@ def _tag_vocabulary(
     return "\n".join(parts)
 
 
+def _status(scenario: LoadedScenario, hud: HudState, template: dict[str, str]) -> str | None:
+    """One line per stat, in scenario order; the same projection the UI uses. Description
+    comes from the scenario's StatDef, which stat_views does not carry to the UI."""
+    views = stat_views(scenario, hud)
+    if not views:
+        return None
+
+    descriptions = {stat.id: stat.description for stat in scenario.stats}
+    lines = []
+    for view in views:
+        line = f"{view.name}: {view.value}/{view.max}"
+        description = descriptions.get(view.id)
+        if description:
+            line += f" — {' '.join(description.split())}"
+        if view.level is not None:
+            line += f" {template['status_level_label']}: {' '.join(view.level.split())}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def build_master_prompt(
     scenario: LoadedScenario,
     start: StartConfig,
@@ -293,6 +321,10 @@ def build_master_prompt(
         f"{template['hud_weather']}: {weather_label}"
     )
     sections.append(f"{template['hud_header']}\n{hud_body}")
+
+    status = _status(scenario, hud, template)
+    if status is not None:
+        sections.append(f"{template['status_header']}\n{status}")
 
     opening_parts = [_neutralize_headings(start.opening_scene).strip()]
     if start.conflict is not None:
