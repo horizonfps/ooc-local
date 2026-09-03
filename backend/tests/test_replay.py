@@ -409,3 +409,42 @@ def test_corrupted_events_mark_exact_false_and_skip_snapshot(scenarios_root, mod
     assert len(result.turns) == 1
     assert result.turns[0].message == "eu falo"
     assert result.turns[0].exact is False
+
+
+@pytest.mark.parametrize(
+    "extra_events",
+    [
+        [("tag", {"kind": "STAT", "valid": True, "raw": "[STAT:x]"})],
+        [("tag", {"kind": "LOC", "args": [], "valid": True, "raw": "[LOC:]"})],
+        [("stat", {"id": "reputacao", "delta": 1, "source": "tag"})],
+        [("stat", {"id": "reputacao", "delta": 1, "value": None, "source": "judge"})],
+        [("cast", {"ids": None, "source": "director"})],
+        [("minds", {"entries": ["chloe"]})],
+        [("minds", {"entries": {"chloe": {"attitude": "x"}}})],
+    ],
+)
+def test_malformed_payload_never_raises_and_marks_inexact(scenarios_root, extra_events):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+    sessions.append_events(detail.id, _turn_events("oi", "ola") + extra_events)
+    sessions.append_events(detail.id, _turn_events("de novo", "de novo"))
+
+    result = replay.replay_session(detail.id)
+
+    assert [snapshot.turn for snapshot in result.turns] == [1, 2]
+    assert result.turns[0].exact is False
+    assert result.turns[1].exact is False
+    assert result.turns[0].hud_end.stats["reputacao"] == 40
+
+
+def test_cast_event_with_unknown_character_is_filtered_like_the_engine(scenarios_root):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+    sessions.append_events(detail.id, _turn_events("oi", "ola", cast=["chloe", "fantasma"]))
+    sessions.append_events(detail.id, _turn_events("de novo", "de novo"))
+
+    result = replay.replay_session(detail.id)
+
+    assert result.turns[0].cast_after == ["chloe"]
+    assert result.turns[1].cast_before == ["chloe"]
+    assert result.turns[0].exact is True
