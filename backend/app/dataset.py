@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import logging
 from pathlib import Path
 from typing import TextIO
 
@@ -13,6 +14,8 @@ from app.replay import SessionReplay, TurnSnapshot, replay_session
 from app.sessions import Event, ScenarioNotFound, SessionNotFound, list_sessions, read_events
 from app.turn import events_to_messages
 
+logger = logging.getLogger(__name__)
+
 TASKS: tuple[str, ...] = ("judge", "director", "minds")
 HOLDOUT_PCT = 10
 
@@ -22,28 +25,53 @@ def split_for(session_id: str) -> str:
     return "holdout" if bucket < HOLDOUT_PCT else "train"
 
 
-def _stat_snapshot(hud) -> dict[str, int]:
-    merged = dict(hud.stats)
-    for stat_id, dynamic in hud.dynamic_stats.items():
-        merged[stat_id] = dynamic.value
-    return merged
+def _judge_engine_label(turn_events: list[Event]) -> tuple[dict, bool]:
+    judge_stats = [
+        event for event in turn_events if event.kind == "stat" and event.payload.get("source") == "judge"
+    ]
+    stats: dict[str, int] = {}
+    for event in judge_stats:
+        stat_id = event.payload.get("id")
+        delta = event.payload.get("delta")
+        if isinstance(stat_id, str) and isinstance(delta, int):
+            stats[stat_id] = delta
+    return {"stats": stats}, bool(judge_stats)
 
 
-def _judge_engine_label(snap: TurnSnapshot) -> tuple[dict, bool]:
-    """hud_end only differs from hud_after_tags by the judge's own stat events
-    (replay.py applies tag-sourced stats into hud_after_tags, judge-sourced on top)."""
-    before = _stat_snapshot(snap.hud_after_tags)
-    after = _stat_snapshot(snap.hud_end)
-    stats = {
-        stat_id: value - before.get(stat_id, 0)
-        for stat_id, value in after.items()
-        if value != before.get(stat_id, 0)
-    }
-    return {"stats": stats}, bool(stats)
+def _director_engine_label(snap: TurnSnapshot, turn_events: list[Event]) -> tuple[dict, bool]:
+    applied = any(event.kind == "cast" for event in turn_events)
+    return {"scene": snap.cast_after}, applied
 
 
-def _director_engine_label(snap: TurnSnapshot) -> tuple[dict, bool]:
-    return {"scene": snap.cast_after}, snap.cast_after != snap.cast_before
+def _turn_events_by_seq(session_id: str) -> dict[int, list[Event]]:
+    """Mirrors replay.py's turn grouping to recover the raw events of each turn for
+    judge and director labels: TurnSnapshot only keeps the merged HUD/cast state."""
+    result: dict[int, list[Event]] = {}
+    group: list[Event] | None = None
+
+    def close(group_events: list[Event]) -> None:
+        narrator_event = next((e for e in group_events[1:] if e.kind == "narrator_turn"), None)
+        if narrator_event is None:
+            return
+        result[narrator_event.seq] = group_events[1:]
+
+    for event in read_events(session_id):
+        if event.kind == "compact":
+            if group is not None:
+                close(group)
+                group = None
+            continue
+        if event.kind in ("player_turn", "meta_player_turn"):
+            if group is not None:
+                close(group)
+            group = [event] if event.kind == "player_turn" else None
+            continue
+        if group is None:
+            continue
+        group.append(event)
+    if group is not None:
+        close(group)
+    return result
 
 
 def _minds_engine_label(snap: TurnSnapshot, minds_by_seq: dict[int, dict]) -> tuple[dict, bool]:
@@ -128,6 +156,7 @@ def export_dataset(out_dir: Path) -> dict:
         **{task: 0 for task in TASKS},
         "skipped_scenario": 0,
         "skipped_inexact": 0,
+        "skipped_error": 0,
     }
 
     handles = {task: open(out_dir / f"{task}.jsonl", "w", encoding="utf-8") for task in TASKS}
@@ -138,59 +167,72 @@ def export_dataset(out_dir: Path) -> dict:
             except (ScenarioNotFound, SessionNotFound):
                 counters["skipped_scenario"] += 1
                 continue
+            except Exception as exc:
+                counters["skipped_error"] += 1
+                logger.exception("skipping session %s: %s", summary.id, type(exc).__name__)
+                continue
+
+            try:
+                turn_events_by_seq = _turn_events_by_seq(summary.id)
+                minds_by_seq = _minds_by_seq(summary.id)
+                split = split_for(summary.id)
+
+                for snap in replay.turns:
+                    if not snap.exact:
+                        counters["skipped_inexact"] += 1
+                        continue
+
+                    counters["turns"] += 1
+                    turn_events = turn_events_by_seq.get(snap.seq, [])
+
+                    judge_messages = build_judge_messages(
+                        replay.scenario, snap.hud_after_tags, snap.message, snap.narrator_text, snap.touched_ids
+                    )
+                    judge_label, judge_applied = _judge_engine_label(turn_events)
+                    _write_line(
+                        handles["judge"],
+                        _envelope("judge", replay, snap, split, judge_messages, judge_label, judge_applied),
+                    )
+                    counters["judge"] += 1
+
+                    window = events_to_messages(
+                        snap.history_before[-(DIRECTOR_WINDOW_TURNS * 2) :], replay.locale
+                    )
+                    director_messages = build_director_messages(
+                        replay.scenario, snap.hud_start, snap.cast_before, snap.message, window
+                    )
+                    director_label, director_applied = _director_engine_label(snap, turn_events)
+                    _write_line(
+                        handles["director"],
+                        _envelope(
+                            "director", replay, snap, split, director_messages, director_label, director_applied
+                        ),
+                    )
+                    counters["director"] += 1
+
+                    minds_messages = build_minds_messages(
+                        replay.scenario, snap.cast_after, snap.minds_before, snap.message, snap.narrator_text
+                    )
+                    minds_label, minds_applied = _minds_engine_label(snap, minds_by_seq)
+                    _write_line(
+                        handles["minds"],
+                        _envelope("minds", replay, snap, split, minds_messages, minds_label, minds_applied),
+                    )
+                    counters["minds"] += 1
+            except Exception as exc:
+                counters["skipped_error"] += 1
+                logger.exception("skipping session %s: %s", summary.id, type(exc).__name__)
+                continue
 
             counters["sessions"] += 1
-            minds_by_seq = _minds_by_seq(summary.id)
-            split = split_for(summary.id)
-
-            for snap in replay.turns:
-                if not snap.exact:
-                    counters["skipped_inexact"] += 1
-                    continue
-
-                counters["turns"] += 1
-
-                judge_messages = build_judge_messages(
-                    replay.scenario, snap.hud_after_tags, snap.message, snap.narrator_text, snap.touched_ids
-                )
-                judge_label, judge_applied = _judge_engine_label(snap)
-                _write_line(
-                    handles["judge"],
-                    _envelope("judge", replay, snap, split, judge_messages, judge_label, judge_applied),
-                )
-                counters["judge"] += 1
-
-                window = events_to_messages(
-                    snap.history_before[-(DIRECTOR_WINDOW_TURNS * 2) :], replay.locale
-                )
-                director_messages = build_director_messages(
-                    replay.scenario, snap.hud_start, snap.cast_before, snap.message, window
-                )
-                director_label, director_applied = _director_engine_label(snap)
-                _write_line(
-                    handles["director"],
-                    _envelope(
-                        "director", replay, snap, split, director_messages, director_label, director_applied
-                    ),
-                )
-                counters["director"] += 1
-
-                minds_messages = build_minds_messages(
-                    replay.scenario, snap.cast_after, snap.minds_before, snap.message, snap.narrator_text
-                )
-                minds_label, minds_applied = _minds_engine_label(snap, minds_by_seq)
-                _write_line(
-                    handles["minds"],
-                    _envelope("minds", replay, snap, split, minds_messages, minds_label, minds_applied),
-                )
-                counters["minds"] += 1
     finally:
         for handle in handles.values():
             handle.close()
 
     print(
         "sessions={sessions} turns={turns} judge={judge} director={director} minds={minds} "
-        "skipped_scenario={skipped_scenario} skipped_inexact={skipped_inexact}".format(**counters)
+        "skipped_scenario={skipped_scenario} skipped_inexact={skipped_inexact} "
+        "skipped_error={skipped_error}".format(**counters)
     )
     return counters
 

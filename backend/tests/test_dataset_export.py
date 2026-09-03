@@ -318,10 +318,19 @@ def test_two_runs_are_byte_for_byte_identical(scenarios_root, tmp_path):
 
 def test_split_for_is_deterministic_and_matches_known_id():
     assert dataset.split_for("session-a") == dataset.split_for("session-a")
+    assert dataset.split_for("session-0") == "holdout"
 
     ids = [f"session-{i}" for i in range(40)]
     holdout = [session_id for session_id in ids if dataset.split_for(session_id) == "holdout"]
-    assert 0 <= len(holdout) <= 10
+    assert holdout == [
+        "session-0",
+        "session-9",
+        "session-23",
+        "session-24",
+        "session-33",
+        "session-36",
+        "session-39",
+    ]
 
 
 def test_deleted_scenario_is_skipped_and_counted(scenarios_root, tmp_path):
@@ -367,6 +376,101 @@ def test_inexact_turn_is_not_exported(scenarios_root, tmp_path):
         _read_jsonl(out_dir / "minds.jsonl"),
     ):
         assert lines == []
+
+
+def test_session_that_raises_during_replay_is_skipped_and_others_still_export(
+    scenarios_root, tmp_path, monkeypatch, caplog
+):
+    _write_scenario(scenarios_root, scenario_id="escola-um")
+    _write_scenario(scenarios_root, scenario_id="escola-dois")
+
+    broken = sessions.create_session("escola-um")
+    sessions.append_events(broken.id, _turn_events("eu ando", "voce anda"))
+    ok = sessions.create_session("escola-dois")
+    sessions.append_events(ok.id, _turn_events("eu corro", "voce corre"))
+
+    real_replay_session = dataset.replay_session
+
+    def flaky_replay_session(session_id):
+        if session_id == broken.id:
+            raise RuntimeError("boom")
+        return real_replay_session(session_id)
+
+    monkeypatch.setattr(dataset, "replay_session", flaky_replay_session)
+
+    out_dir = tmp_path / "out"
+    with caplog.at_level("ERROR"):
+        counters = dataset.export_dataset(out_dir)
+
+    assert counters["skipped_error"] == 1
+    assert counters["sessions"] == 1
+    assert broken.id in caplog.text
+
+    judge_lines = _read_jsonl(out_dir / "judge.jsonl")
+    assert {line["session_id"] for line in judge_lines} == {ok.id}
+
+
+def test_minds_delta_only_includes_changed_characters_when_minds_before_is_not_empty(
+    scenarios_root, tmp_path
+):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+
+    chloe = {"attitude": "curiosa", "emoji": "🙂", "event": "te viu"}
+    mia = {"attitude": "cautelosa", "emoji": "😐", "event": "observou"}
+
+    sessions.append_events(detail.id, _turn_events("eu ando", "voce anda", minds={"chloe": chloe}))
+    sessions.append_events(
+        detail.id, _turn_events("eu falo", "voce fala", minds={"chloe": chloe, "mia": mia})
+    )
+
+    out_dir = tmp_path / "out"
+    dataset.export_dataset(out_dir)
+
+    minds_lines = _read_jsonl(out_dir / "minds.jsonl")
+    assert minds_lines[0]["engine_label"] == {"chloe": chloe}
+    assert minds_lines[1]["engine_label"] == {"mia": mia}
+
+
+def test_split_is_the_same_for_all_turns_and_all_three_files(scenarios_root, tmp_path):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+    sessions.append_events(detail.id, _turn_events("eu ando", "voce anda"))
+    sessions.append_events(detail.id, _turn_events("eu falo", "voce fala"))
+
+    out_dir = tmp_path / "out"
+    dataset.export_dataset(out_dir)
+
+    judge_lines = _read_jsonl(out_dir / "judge.jsonl")
+    director_lines = _read_jsonl(out_dir / "director.jsonl")
+    minds_lines = _read_jsonl(out_dir / "minds.jsonl")
+
+    splits = {line["split"] for lines in (judge_lines, director_lines, minds_lines) for line in lines}
+    assert len(splits) == 1
+    assert splits == {dataset.split_for(detail.id)}
+
+
+def test_compact_mid_session_keeps_later_turns_with_correct_minds(scenarios_root, tmp_path):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+
+    chloe = {"attitude": "curiosa", "emoji": "🙂", "event": "te viu"}
+    mia = {"attitude": "cautelosa", "emoji": "😐", "event": "observou"}
+
+    sessions.append_events(detail.id, _turn_events("eu ando", "voce anda", minds={"chloe": chloe}))
+    sessions.set_compact(detail.id, "resumo ate aqui", 2, {"replaced_turns": 1, "from_seq": 1, "to_seq": 2})
+    sessions.append_events(
+        detail.id, _turn_events("eu falo", "voce fala", minds={"chloe": chloe, "mia": mia})
+    )
+
+    out_dir = tmp_path / "out"
+    counters = dataset.export_dataset(out_dir)
+
+    assert counters["turns"] == 2
+    minds_lines = _read_jsonl(out_dir / "minds.jsonl")
+    assert len(minds_lines) == 2
+    assert minds_lines[0]["engine_label"] == {"chloe": chloe}
+    assert minds_lines[1]["engine_label"] == {"mia": mia}
 
 
 def test_main_without_subcommand_raises_system_exit():
