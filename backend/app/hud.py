@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, field_validator
 
@@ -36,6 +36,7 @@ class DynamicStat(BaseModel):
     value: int
     min: int = 0
     max: int
+    kind: Literal["stat", "item", "skill"] = "stat"
 
 
 class StatView(BaseModel):
@@ -47,6 +48,7 @@ class StatView(BaseModel):
     min: int
     max: int
     level: str | None
+    kind: Literal["stat", "item", "skill"]
 
 
 class HudState(BaseModel):
@@ -90,6 +92,7 @@ def stat_views(scenario: "LoadedScenario", hud: HudState) -> list[StatView]:
                 min=stat.min,
                 max=stat.max,
                 level=level_text,
+                kind="stat",
             )
         )
     for stat_id, dynamic in hud.dynamic_stats.items():
@@ -103,6 +106,7 @@ def stat_views(scenario: "LoadedScenario", hud: HudState) -> list[StatView]:
                 min=dynamic.min,
                 max=dynamic.max,
                 level=None,
+                kind=dynamic.kind,
             )
         )
     return views
@@ -178,6 +182,8 @@ def apply_stat(
     declared = next((stat for stat in stats if stat.id == stat_id), None)
     if declared is not None:
         current = hud.stats.get(stat_id, declared.default)
+        if declared.max_delta is not None:
+            delta = min(max(delta, -declared.max_delta), declared.max_delta)
         new_value = min(max(current + delta, declared.min), declared.max)
         if new_value == current:
             return hud, None

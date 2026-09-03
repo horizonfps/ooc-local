@@ -121,6 +121,62 @@ def test_allow_dynamic_stats_absent_defaults_false(monkeypatch, tmp_path):
     assert scenario.meta.allow_dynamic_stats is False
 
 
+def test_max_delta_is_read(monkeypatch, tmp_path):
+    _write_scenario(tmp_path, "exemplo-escola", stats="- id: reputacao\n  name: A\n  max: 100\n  default: 0\n  max_delta: 500\n")
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.stats[0].max_delta == 500
+
+
+def test_max_dynamic_stats_is_read(monkeypatch, tmp_path):
+    _write_scenario(
+        tmp_path, "exemplo-escola", scenario_yaml=SCENARIO_YAML + "max_dynamic_stats: 12\n"
+    )
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.meta.max_dynamic_stats == 12
+
+
+def test_max_delta_and_max_dynamic_stats_absent_are_none(monkeypatch, tmp_path):
+    _write_scenario(tmp_path, "exemplo-escola", stats="- id: reputacao\n  name: A\n  max: 100\n  default: 0\n")
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.stats[0].max_delta is None
+    assert scenario.meta.max_dynamic_stats is None
+
+
+def test_max_delta_zero_raises_scenario_error_with_path(monkeypatch, tmp_path):
+    _write_scenario(
+        tmp_path,
+        "exemplo-escola",
+        stats="- id: reputacao\n  name: A\n  max: 100\n  default: 0\n  max_delta: 0\n",
+    )
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    with pytest.raises(ScenarioError) as exc_info:
+        load_scenario("exemplo-escola")
+
+    assert "stats.yaml" in str(exc_info.value.path)
+
+
+def test_max_dynamic_stats_zero_raises_scenario_error_with_path(monkeypatch, tmp_path):
+    _write_scenario(
+        tmp_path, "exemplo-escola", scenario_yaml=SCENARIO_YAML + "max_dynamic_stats: 0\n"
+    )
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    with pytest.raises(ScenarioError) as exc_info:
+        load_scenario("exemplo-escola")
+
+    assert "scenario.yaml" in str(exc_info.value.path)
+
+
 def test_stats_yaml_missing_is_empty_list(monkeypatch, tmp_path):
     _write_scenario(tmp_path, "exemplo-escola")
     monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)

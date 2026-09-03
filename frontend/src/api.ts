@@ -48,6 +48,7 @@ export type CastMember = { id: string; name: string }
 export type StatView = {
   id: string; name: string; icon: string | null; color: string | null
   value: number; min: number; max: number; level: string | null
+  kind?: 'stat' | 'item' | 'skill'
 }
 export type MindView = { attitude: string; emoji: string; event: string }
 export type CommandView = { name: string; description: string; scope: 'scenario' | 'global' }
@@ -129,6 +130,7 @@ export type ScenarioMeta = {
   default_start: string
   world_mode: 'guided' | 'custom'
   allow_dynamic_stats: boolean
+  max_dynamic_stats?: number | null
 }
 
 export type StatLevel = { from: number; text: string }
@@ -136,6 +138,7 @@ export type StatDef = {
   id: string; name: string; icon: string | null; color: string | null
   min: number; max: number; default: number
   description: string | null; levels: StatLevel[]
+  max_delta?: number | null
 }
 export type LoreEntryDoc = {
   title: string; keywords: string[]; body: string
