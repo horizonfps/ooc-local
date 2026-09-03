@@ -1,6 +1,7 @@
 """GGUF profile catalog and downloader for the local model roles."""
 
 import argparse
+import sys
 from pathlib import Path
 
 import httpx
@@ -35,6 +36,14 @@ DEFAULT_PROFILES: dict[str, dict[str, ProfileModel]] = {
 
 class UnknownProfile(Exception):
     pass
+
+
+class UnknownRole(Exception):
+    pass
+
+
+class ProfileHeadError(Exception):
+    """Raised when the HEAD probe for a role's file fails (bad repo/file)."""
 
 
 def models_dir() -> Path:
@@ -96,6 +105,10 @@ def _range_total(value: str | None) -> int | None:
 
 def download_profile(name: str, config: Config, roles: list[str] | None = None) -> dict[str, str]:
     profile = resolve_profile(name, config)
+    if roles is not None:
+        unknown = [role for role in roles if role not in profile]
+        if unknown:
+            raise UnknownRole(unknown[0])
     items = {role: model for role, model in profile.items() if roles is None or role in roles}
 
     total_bytes = 0
@@ -104,6 +117,14 @@ def download_profile(name: str, config: Config, roles: list[str] | None = None) 
         for role, model in items.items():
             url = f"https://huggingface.co/{model.hf_repo}/resolve/main/{model.file}"
             head = client.head(url)
+            try:
+                head.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                print(
+                    f"error: {role} {model.hf_repo}/{model.file}: HTTP {head.status_code}",
+                    file=sys.stderr,
+                )
+                raise ProfileHeadError(role) from exc
             size = _content_length(head.headers.get("Content-Length"))
             sizes[role] = size
             if size is not None:
@@ -114,7 +135,20 @@ def download_profile(name: str, config: Config, roles: list[str] | None = None) 
 
         results: dict[str, str] = {}
         for role, model in items.items():
-            result = download_one(model, models_dir(), client)
+            local = models_dir() / model.file
+            size = sizes.get(role)
+            if size is not None and local.exists() and local.stat().st_size == size:
+                results[role] = "skipped"
+                print(f"{role} skipped")
+                continue
+
+            try:
+                result = download_one(model, models_dir(), client)
+            except httpx.TransportError as exc:
+                print(f"error: {role}: {exc}", file=sys.stderr)
+                results[role] = "partial"
+                continue
+
             results[role] = result
             print(f"{role} {result}")
 
@@ -128,10 +162,27 @@ def _format_gb(size: int | None) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="app.models")
+    parser = argparse.ArgumentParser(
+        prog="app.models",
+        epilog=(
+            "Note: the premium profile weights total ~18.8 GB. They only fit "
+            "entirely on GPU from ~20 GB VRAM (e.g. a 3090/4090); on 16 GB "
+            "VRAM you need to lower the narrator's gpu_layers in the profile."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    download = sub.add_parser("download", help="Download the GGUF weights for a model profile")
+    download = sub.add_parser(
+        "download",
+        help="Download the GGUF weights for a model profile",
+        epilog=(
+            "Note: the premium profile weights total ~18.8 GB. They only fit "
+            "entirely on GPU from ~20 GB VRAM (e.g. a 3090/4090); on 16 GB "
+            "VRAM you need to lower the narrator's gpu_layers in the profile."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     download.add_argument(
         "--profile", required=True,
         help="Profile name (built-in: recommended = 12 GB VRAM, premium = 16 GB+ VRAM)")
@@ -143,12 +194,26 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "download":
         try:
-            resolve_profile(args.profile, config)
+            profile = resolve_profile(args.profile, config)
         except UnknownProfile:
-            print(f"unknown profile: {args.profile}")
+            print(f"error: unknown profile '{args.profile}'", file=sys.stderr)
             return 2
 
-        results = download_profile(args.profile, config, roles=args.role)
+        if args.role:
+            expected = ", ".join(profile.keys())
+            for role in args.role:
+                if role not in profile:
+                    print(
+                        f"error: unknown role '{role}' (expected: {expected})",
+                        file=sys.stderr,
+                    )
+                    return 2
+
+        try:
+            results = download_profile(args.profile, config, roles=args.role)
+        except ProfileHeadError:
+            return 1
+
         if any(result == "partial" for result in results.values()):
             return 1
         return 0

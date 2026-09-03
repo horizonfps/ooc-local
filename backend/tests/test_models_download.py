@@ -254,3 +254,139 @@ def test_prints_sizes_before_downloading(monkeypatch, capsys):
     narrator_line_index = out.index("acme/narrator-repo")
     downloaded_line_index = out.index("downloaded")
     assert narrator_line_index < downloaded_line_index
+
+
+def test_head_error_aborts_before_any_download(monkeypatch, capsys):
+    config = _config({"test": _test_profile()})
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.method, request.url.path))
+        if request.method == "HEAD":
+            return httpx.Response(404)
+        raise AssertionError("no GET should be issued after a failing HEAD")
+
+    monkeypatch.setattr(httpx, "Client", lambda **kwargs: _client(handler))
+
+    with pytest.raises(models.ProfileHeadError):
+        models.download_profile("test", config)
+
+    assert all(method != "GET" for method, _ in calls)
+    err = capsys.readouterr().err
+    assert "error: narrator acme/narrator-repo/narrator.gguf: HTTP 404" in err
+
+
+def test_main_head_error_exits_1(monkeypatch, capsys):
+    config = _config({"test": _test_profile()})
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "HEAD":
+            return httpx.Response(404)
+        raise AssertionError("no GET should be issued after a failing HEAD")
+
+    monkeypatch.setattr(models, "load_config", lambda: config)
+    monkeypatch.setattr(httpx, "Client", lambda **kwargs: _client(handler))
+
+    code = models.main(["download", "--profile", "test"])
+
+    assert code == 1
+
+
+def test_complete_file_matching_head_size_is_skipped_without_get(monkeypatch):
+    config = _config({"test": _test_profile()})
+    dest = models.models_dir()
+    dest.mkdir(parents=True)
+    content = b"x" * 1000
+    (dest / "narrator.gguf").write_bytes(content)
+    (dest / "utility.gguf").write_bytes(UTILITY_CONTENT)
+
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.method, request.url.path))
+        if request.method == "HEAD":
+            if "narrator.gguf" in request.url.path:
+                return httpx.Response(200, headers={"Content-Length": str(len(content))})
+            return httpx.Response(200, headers={"Content-Length": str(len(UTILITY_CONTENT))})
+        return _basic_handler(request)
+
+    monkeypatch.setattr(httpx, "Client", lambda **kwargs: _client(handler))
+    results = models.download_profile("test", config, roles=["narrator"])
+
+    assert results == {"narrator": "skipped"}
+    assert all(method != "GET" for method, path in calls if "narrator.gguf" in path)
+    assert (dest / "narrator.gguf").read_bytes() == content
+
+
+def test_role_filter_unknown_role_raises():
+    config = _config({"test": _test_profile()})
+    with pytest.raises(models.UnknownRole):
+        models.download_profile("test", config, roles=["ghost"])
+
+
+def test_main_unknown_role_exits_2_without_requests(monkeypatch, capsys):
+    called = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        called.append(request)
+        return httpx.Response(200, headers={"Content-Length": "1"}, content=b"x")
+
+    config = _config({"test": _test_profile()})
+    monkeypatch.setattr(models, "load_config", lambda: config)
+    monkeypatch.setattr(httpx, "Client", lambda **kwargs: _client(handler))
+
+    code = models.main(["download", "--profile", "test", "--role", "ghost"])
+
+    assert code == 2
+    assert called == []
+    err = capsys.readouterr().err
+    assert "unknown role 'ghost'" in err
+    assert "narrator" in err and "utility" in err
+
+
+def test_network_error_mid_download_keeps_partial_and_continues_other_roles(monkeypatch, capsys):
+    config = _config({"test": _test_profile()})
+    dest = models.models_dir()
+    dest.mkdir(parents=True)
+    have = NARRATOR_CONTENT[:50]
+    (dest / "narrator.gguf").write_bytes(have)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "HEAD":
+            return _basic_handler(request)
+        if "narrator.gguf" in request.url.path:
+            raise httpx.ReadTimeout("connection dropped", request=request)
+        return _basic_handler(request)
+
+    monkeypatch.setattr(httpx, "Client", lambda **kwargs: _client(handler))
+    results = models.download_profile("test", config)
+
+    assert results["narrator"] == "partial"
+    assert results["utility"] == "downloaded"
+    assert (dest / "narrator.gguf").read_bytes() == have
+    err = capsys.readouterr().err
+    assert "error: narrator:" in err
+
+
+def test_main_network_error_exits_1(monkeypatch):
+    config = _config({"test": _test_profile()})
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "HEAD":
+            return _basic_handler(request)
+        raise httpx.ReadTimeout("connection dropped", request=request)
+
+    monkeypatch.setattr(models, "load_config", lambda: config)
+    monkeypatch.setattr(httpx, "Client", lambda **kwargs: _client(handler))
+
+    code = models.main(["download", "--profile", "test"])
+
+    assert code == 1
+
+
+def test_help_mentions_premium_vram_caveat(capsys):
+    with pytest.raises(SystemExit):
+        models.main(["download", "--help"])
+    out = capsys.readouterr().out
+    assert "18.8 GB" in out
+    assert "gpu_layers" in out
