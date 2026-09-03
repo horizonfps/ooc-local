@@ -238,6 +238,35 @@ def test_put_identical_document_does_not_change_revision_or_mtime(client, scenar
     assert (scenario_dir / "characters" / "chloe.yaml").stat().st_mtime_ns == char_before
 
 
+def test_put_identical_document_with_dynamic_stat_fields_leaves_files_byte_identical(
+    client, scenarios_root
+):
+    scenario_yaml = SCENARIO_YAML + "allow_dynamic_stats: true\nmax_dynamic_stats: 12\n"
+    scenario_dir = _write_scenario(
+        scenarios_root,
+        "exemplo-escola",
+        scenario_yaml=scenario_yaml,
+        stats="- id: reputacao\n  name: R\n  min: 0\n  max: 10\n  default: 5\n  max_delta: 500\n",
+    )
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+    assert doc["meta"]["allow_dynamic_stats"] is True
+    assert doc["meta"]["max_dynamic_stats"] == 12
+    assert doc["stats"][0]["max_delta"] == 500
+
+    meta_before = (scenario_dir / "scenario.yaml").read_bytes()
+    stats_before = (scenario_dir / "stats.yaml").read_bytes()
+    meta_mtime_before = (scenario_dir / "scenario.yaml").stat().st_mtime_ns
+    stats_mtime_before = (scenario_dir / "stats.yaml").stat().st_mtime_ns
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 200
+    assert (scenario_dir / "scenario.yaml").read_bytes() == meta_before
+    assert (scenario_dir / "stats.yaml").read_bytes() == stats_before
+    assert (scenario_dir / "scenario.yaml").stat().st_mtime_ns == meta_mtime_before
+    assert (scenario_dir / "stats.yaml").stat().st_mtime_ns == stats_mtime_before
+
+
 def test_put_with_stale_revision_returns_409_and_disk_untouched(client, scenarios_root):
     scenario_dir = _write_scenario(scenarios_root, "exemplo-escola")
     doc = client.get("/api/builder/scenarios/exemplo-escola").json()

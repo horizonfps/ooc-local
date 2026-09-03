@@ -511,6 +511,43 @@ def test_apply_judgement_new_invalid_kind_is_rejected(monkeypatch, tmp_path):
     assert hud.dynamic_stats == {}
 
 
+@pytest.mark.parametrize("bad_kind", [5, None])
+def test_apply_judgement_new_non_string_kind_is_rejected(monkeypatch, tmp_path, bad_kind):
+    scenario = _load(monkeypatch, tmp_path, allow_dynamic_stats=True)
+    hud = _hud()
+
+    new_hud, changes, rejected = apply_judgement(
+        scenario,
+        hud,
+        {"new": [{"id": "espada", "name": "Espada", "value": 1, "max": 1, "kind": bad_kind}]},
+        [],
+    )
+
+    assert changes == []
+    assert rejected == [StatRejection(id="espada", reason="invalid_kind")]
+    assert new_hud is hud
+    assert hud.dynamic_stats == {}
+
+
+def test_apply_judgement_new_invalid_kind_rejected_before_over_cap(monkeypatch, tmp_path):
+    cap = 1
+    scenario = _load(monkeypatch, tmp_path, allow_dynamic_stats=True, max_dynamic_stats=cap)
+    dynamic_stats = {"stat0": DynamicStat(name="Stat0", value=1, min=0, max=10)}
+    hud = _hud(dynamic_stats=dynamic_stats)
+    items = [
+        {"id": "espada", "name": "Espada", "value": 1, "max": 1, "kind": "weapon"},
+        {"id": "vida", "name": "Vida", "value": 10, "max": 100, "kind": "item"},
+    ]
+
+    new_hud, changes, rejected = apply_judgement(scenario, hud, {"new": items}, [])
+
+    assert changes == []
+    assert [r.id for r in rejected] == ["espada", "vida"]
+    assert [r.reason for r in rejected] == ["invalid_kind", "over_cap"]
+    assert new_hud is hud
+    assert hud.dynamic_stats == dynamic_stats
+
+
 def test_apply_judgement_stats_before_new_order(monkeypatch, tmp_path):
     scenario = _load(monkeypatch, tmp_path, allow_dynamic_stats=True)
 
@@ -622,6 +659,16 @@ def test_build_judge_messages_dynamic_stats_flag_controls_kind_mention(monkeypat
     assert "kind" in enabled_system
     assert "item" in enabled_system
     assert "skill" in enabled_system
+
+
+def test_build_judge_messages_en_system_prompt_has_max_delta_rule_and_kinds(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path, locale="en", allow_dynamic_stats=True)
+
+    system = build_judge_messages(scenario, _hud(), "enters the room", "ok", [])[0].content
+
+    assert "max ±N" in system
+    assert "item" in system
+    assert "skill" in system
 
 
 def test_build_judge_messages_dynamic_stats_flag_controls_system_text(monkeypatch, tmp_path):

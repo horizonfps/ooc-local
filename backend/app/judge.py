@@ -271,6 +271,11 @@ def apply_judgement(
                     rejections.append(StatRejection(id=item_id, reason="invalid_id"))
                     continue
 
+                kind = item.get("kind", "stat")
+                if kind not in ("stat", "item", "skill"):
+                    rejections.append(StatRejection(id=item_id, reason="invalid_kind"))
+                    continue
+
                 if item_id in judgeable or item_id in created_ids:
                     rejections.append(StatRejection(id=item_id, reason="duplicate_id"))
                     continue
@@ -278,11 +283,6 @@ def apply_judgement(
                 if cap is not None and len(hud.dynamic_stats) + len(created_ids) >= cap:
                     rejections.append(StatRejection(id=item_id, reason="over_cap"))
                     over_cap = True
-                    continue
-
-                kind = item.get("kind", "stat")
-                if kind not in ("stat", "item", "skill"):
-                    rejections.append(StatRejection(id=item_id, reason="invalid_kind"))
                     continue
 
                 created_ids.add(item_id)
