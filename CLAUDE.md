@@ -33,6 +33,12 @@ de verdade e tag `fase-N`.
   wave depende dele; mudança de contrato vira ticket de foundation, que roda em
   wave anterior à dos consumidores.
 
+## Git
+
+- Commit, branch e PR em inglês, `type(scope): summary`, falando só do conteúdo.
+  Sem ID de ticket nem menção a wave, spec ou agente. Merge por squash com o
+  título do PR.
+
 ## Código
 
 - Comentários e identificadores em inglês, mínimos. UI e prompts nascem i18n

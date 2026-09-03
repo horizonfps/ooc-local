@@ -16,8 +16,8 @@ completa: não invente escopo, não expanda, não "aproveite para" arrumar outra
 4. Escreva os testes dos cenários declarados: feliz, borda, falha
 5. Rode o comando `verify` do `.claude/pipeline.json` e corrija as falhas
 6. Commit e push na branch do ticket
-7. Abra o PR contra `main`, com o ID do ticket no título e o link no corpo
-8. Marque o ticket como `in_review`
+7. Abra o PR contra `main`
+8. Marque o ticket como `in_review` e grave o número do PR em `pr:` no frontmatter
 9. Reporte o resultado
 
 ## Protocolo de spec-drift
@@ -45,6 +45,19 @@ implementar como descrito quebraria comportamento existente coberto por teste.
 - **Não altere `main`**, não faça rebase de outra branch, não mergeie nada
 - Se `verify` falhar por algo que já estava quebrado antes do seu commit, reporte
   em vez de consertar: dívida alheia dentro do seu PR polui o review
+
+## Commit, branch e PR
+
+O histórico é público e fala só do conteúdo. Tudo em inglês:
+
+- Branch: `feat/<slug>` (ou `fix/`, `chore/`), slug curto do que muda
+- Commit: `type(scope): summary`, imperativo, minúsculo, sem ponto final. Corpo
+  opcional, descrevendo o que muda e por quê
+- Título do PR: igual ao assunto do commit principal. Corpo: o que muda, como
+  testar
+- Proibido em branch, commit, título ou corpo do PR: ID do ticket, "ticket",
+  "wave", "spec", "HRZ", nome de agente. O vínculo com o ticket é o campo `pr:`
+  no frontmatter dele
 
 ## Isolamento
 
