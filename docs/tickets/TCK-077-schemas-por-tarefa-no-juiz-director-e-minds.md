@@ -224,6 +224,22 @@ Trocas nos seis pontos de emissão:
 Nada mais de `turn.py` muda. Nenhum call novo, nenhuma ordem alterada, nenhum
 evento novo de sessão.
 
+### `additionalProperties` e `strict`
+
+Achado do review do PR #76 (TCK-076): `Model.model_json_schema()` do Pydantic
+**não** emite `additionalProperties: false` e deixa fora de `required` os campos
+com default. Como o provider manda `strict: true` fixo, um servidor que valide
+`strict` de verdade recusaria o schema. Decisão do coordenador (03/09/2026): os
+modelos Pydantic de schema deste ticket usam `model_config =
+ConfigDict(extra="forbid")`, que faz o Pydantic emitir
+`additionalProperties: false`, e declaram todo campo sem default (o schema do
+juiz e do director não têm campo opcional; o `MindEntry` tem os três
+obrigatórios). O schema do minds tem `additionalProperties` igual ao schema de
+`MindEntry` na raiz, e isso é intencional: é o único jeito de aceitar ids
+dinâmicos como chave. Acceptance criteria adicional: cada schema gerado tem
+`additionalProperties` igual a `false` em todo objeto de campos fixos, e
+`required` igual à lista completa dos campos.
+
 ### Ressalva de porte
 
 Estimativa: ~120 linhas de código (três modelos Pydantic de schema com
