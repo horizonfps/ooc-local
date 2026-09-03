@@ -434,6 +434,8 @@ def test_judge_stat_event_carries_dynamic_definition():
     _, dynamic_payload = _judge_stat_event(hud, StatChange(id="confianca", delta=0, value=10, source="judge"))
     _, declared_payload = _judge_stat_event(hud, StatChange(id="reputacao", delta=3, value=43, source="judge"))
 
+    dynamic_kind = dynamic_payload.pop("kind", None)
     assert dynamic_payload == {"id": "confianca", "delta": 0, "value": 10, "source": "judge",
                                "name": "Confiança", "min": 0, "max": 20}
+    assert dynamic_kind == getattr(hud.dynamic_stats["confianca"], "kind", None)
     assert declared_payload == {"id": "reputacao", "delta": 3, "value": 43, "source": "judge"}
