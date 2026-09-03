@@ -8,7 +8,6 @@ from app.judge import (
     DYNAMIC_STAT_NAME_CHARS,
     JUDGE_NARRATOR_CHARS,
     JUDGE_OPTIONS,
-    MAX_DYNAMIC_STATS,
     JudgeError,
     StatChange,
     StatRejection,
@@ -27,14 +26,14 @@ name: Exemplo Escola
 tagline: uma tagline
 locale: pt-br
 allow_dynamic_stats: {allow_dynamic_stats}
-"""
+{max_dynamic_stats_line}"""
 
 SCENARIO_YAML_EN = """\
 name: Example School
 tagline: a tagline
 locale: en
 allow_dynamic_stats: {allow_dynamic_stats}
-"""
+{max_dynamic_stats_line}"""
 
 DEFAULT_START = """\
 name: Começo
@@ -71,10 +70,31 @@ STATS_YAML = """\
   default: 80
 """
 
+STATS_YAML_MAX_DELTA = """\
+- id: reputacao
+  name: Reputação
+  min: 0
+  max: 100
+  default: 50
+  description: Quanto a escola te respeita.
+  max_delta: 5
+- id: energia
+  name: Energia
+  min: 0
+  max: 100
+  default: 80
+"""
 
-def _write_scenario(root, scenario_id="exemplo-escola", *, locale="pt-br", allow_dynamic_stats=False):
+
+def _write_scenario(
+    root, scenario_id="exemplo-escola", *, locale="pt-br", allow_dynamic_stats=False, max_dynamic_stats=None
+):
     scenario_yaml = SCENARIO_YAML_PTBR if locale == "pt-br" else SCENARIO_YAML_EN
-    scenario_yaml = scenario_yaml.format(allow_dynamic_stats=str(allow_dynamic_stats).lower())
+    max_dynamic_stats_line = f"max_dynamic_stats: {max_dynamic_stats}\n" if max_dynamic_stats is not None else ""
+    scenario_yaml = scenario_yaml.format(
+        allow_dynamic_stats=str(allow_dynamic_stats).lower(),
+        max_dynamic_stats_line=max_dynamic_stats_line,
+    )
 
     scenario_path = root / scenario_id
     scenario_path.mkdir(parents=True)
@@ -93,8 +113,17 @@ def _write_scenario(root, scenario_id="exemplo-escola", *, locale="pt-br", allow
     return scenario_path
 
 
-def _load(monkeypatch, tmp_path, *, locale="pt-br", allow_dynamic_stats=False):
-    _write_scenario(tmp_path, locale=locale, allow_dynamic_stats=allow_dynamic_stats)
+def _load(monkeypatch, tmp_path, *, locale="pt-br", allow_dynamic_stats=False, max_dynamic_stats=None):
+    _write_scenario(
+        tmp_path, locale=locale, allow_dynamic_stats=allow_dynamic_stats, max_dynamic_stats=max_dynamic_stats
+    )
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+    return load_scenario("exemplo-escola")
+
+
+def _load_with_stats_yaml(monkeypatch, tmp_path, stats_yaml, *, allow_dynamic_stats=False):
+    _write_scenario(tmp_path, allow_dynamic_stats=allow_dynamic_stats)
+    (tmp_path / "exemplo-escola" / "stats.yaml").write_text(stats_yaml, encoding="utf-8")
     monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
     return load_scenario("exemplo-escola")
 
@@ -207,16 +236,34 @@ def test_apply_judgement_two_ids_in_json_order(monkeypatch, tmp_path):
     assert rejected == []
 
 
-def test_apply_judgement_delta_clamped_to_judge_max_delta(monkeypatch, tmp_path):
+def test_apply_judgement_delta_without_max_delta_moves_freely(monkeypatch, tmp_path):
     scenario = _load(monkeypatch, tmp_path)
 
     _, changes, _ = apply_judgement(scenario, _hud(), {"stats": {"reputacao": 40}}, [])
-    assert changes[0].delta == 10
-    assert changes[0].value == 60
+    assert changes[0].delta == 40
+    assert changes[0].value == 90
+
+
+def test_apply_judgement_delta_clamped_to_stat_max_delta(monkeypatch, tmp_path):
+    scenario = _load_with_stats_yaml(monkeypatch, tmp_path, STATS_YAML_MAX_DELTA)
+
+    _, changes, _ = apply_judgement(scenario, _hud(), {"stats": {"reputacao": 40}}, [])
+    assert changes[0].delta == 5
+    assert changes[0].value == 55
 
     _, changes, _ = apply_judgement(scenario, _hud(), {"stats": {"reputacao": -999}}, [])
-    assert changes[0].delta == -10
-    assert changes[0].value == 40
+    assert changes[0].delta == -5
+    assert changes[0].value == 45
+
+
+def test_apply_judgement_max_delta_does_not_override_range_clamp(monkeypatch, tmp_path):
+    scenario = _load_with_stats_yaml(monkeypatch, tmp_path, STATS_YAML_MAX_DELTA)
+    hud = _hud(stats={"reputacao": 98, "energia": 80})
+
+    _, changes, _ = apply_judgement(scenario, hud, {"stats": {"reputacao": 40}}, [])
+
+    assert changes[0].delta == 2
+    assert changes[0].value == 100
 
 
 def test_apply_judgement_value_clamped_to_stat_range(monkeypatch, tmp_path):
@@ -375,10 +422,9 @@ def test_apply_judgement_new_duplicate_within_same_call(monkeypatch, tmp_path):
 
 
 def test_apply_judgement_new_over_cap_when_hud_already_full(monkeypatch, tmp_path):
-    scenario = _load(monkeypatch, tmp_path, allow_dynamic_stats=True)
-    dynamic_stats = {
-        f"stat{i}": DynamicStat(name=f"Stat{i}", value=1, min=0, max=10) for i in range(MAX_DYNAMIC_STATS)
-    }
+    cap = 6
+    scenario = _load(monkeypatch, tmp_path, allow_dynamic_stats=True, max_dynamic_stats=cap)
+    dynamic_stats = {f"stat{i}": DynamicStat(name=f"Stat{i}", value=1, min=0, max=10) for i in range(cap)}
     hud = _hud(dynamic_stats=dynamic_stats)
 
     new_hud, changes, rejected = apply_judgement(
@@ -391,10 +437,9 @@ def test_apply_judgement_new_over_cap_when_hud_already_full(monkeypatch, tmp_pat
 
 
 def test_apply_judgement_new_over_cap_only_first_of_three_accepted(monkeypatch, tmp_path):
-    scenario = _load(monkeypatch, tmp_path, allow_dynamic_stats=True)
-    dynamic_stats = {
-        f"stat{i}": DynamicStat(name=f"Stat{i}", value=1, min=0, max=10) for i in range(MAX_DYNAMIC_STATS - 1)
-    }
+    cap = 6
+    scenario = _load(monkeypatch, tmp_path, allow_dynamic_stats=True, max_dynamic_stats=cap)
+    dynamic_stats = {f"stat{i}": DynamicStat(name=f"Stat{i}", value=1, min=0, max=10) for i in range(cap - 1)}
     hud = _hud(dynamic_stats=dynamic_stats)
     items = [
         {"id": "vida", "name": "Vida", "value": 10, "max": 100},
@@ -408,6 +453,62 @@ def test_apply_judgement_new_over_cap_only_first_of_three_accepted(monkeypatch, 
     assert [r.id for r in rejected] == ["mana", "sede"]
     assert all(r.reason == "over_cap" for r in rejected)
     assert "vida" in new_hud.dynamic_stats
+
+
+def test_apply_judgement_new_without_cap_accepts_beyond_thirty(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path, allow_dynamic_stats=True)
+    dynamic_stats = {f"stat{i}": DynamicStat(name=f"Stat{i}", value=1, min=0, max=10) for i in range(30)}
+    hud = _hud(dynamic_stats=dynamic_stats)
+
+    new_hud, changes, rejected = apply_judgement(
+        scenario, hud, {"new": [{"id": "vida", "name": "Vida", "value": 10, "max": 100}]}, []
+    )
+
+    assert changes == [StatChange(id="vida", delta=0, value=10, source="judge")]
+    assert rejected == []
+    assert "vida" in new_hud.dynamic_stats
+
+
+def test_apply_judgement_new_kind_item_is_stored(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path, allow_dynamic_stats=True)
+
+    new_hud, changes, rejected = apply_judgement(
+        scenario,
+        _hud(),
+        {"new": [{"id": "espada", "name": "Espada", "value": 1, "max": 1, "kind": "item"}]},
+        [],
+    )
+
+    assert new_hud.dynamic_stats["espada"].kind == "item"
+    assert rejected == []
+
+
+def test_apply_judgement_new_without_kind_defaults_to_stat(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path, allow_dynamic_stats=True)
+
+    new_hud, changes, rejected = apply_judgement(
+        scenario, _hud(), {"new": [{"id": "vida", "name": "Vida", "value": 10, "max": 100}]}, []
+    )
+
+    assert new_hud.dynamic_stats["vida"].kind == "stat"
+    assert rejected == []
+
+
+def test_apply_judgement_new_invalid_kind_is_rejected(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path, allow_dynamic_stats=True)
+    hud = _hud()
+
+    new_hud, changes, rejected = apply_judgement(
+        scenario,
+        hud,
+        {"new": [{"id": "espada", "name": "Espada", "value": 1, "max": 1, "kind": "weapon"}]},
+        [],
+    )
+
+    assert changes == []
+    assert rejected == [StatRejection(id="espada", reason="invalid_kind")]
+    assert new_hud is hud
+    assert hud.dynamic_stats == {}
 
 
 def test_apply_judgement_stats_before_new_order(monkeypatch, tmp_path):
@@ -472,6 +573,55 @@ def test_build_judge_messages_uses_stat_default_when_hud_stats_empty(monkeypatch
 
     assert "reputacao | Reputação | 50/0..100" in prompt_text
     assert "energia | Energia | 80/0..100" in prompt_text
+
+
+def test_build_judge_messages_marks_max_delta_on_the_stat_line(monkeypatch, tmp_path):
+    scenario = _load_with_stats_yaml(monkeypatch, tmp_path, STATS_YAML_MAX_DELTA)
+
+    messages = build_judge_messages(scenario, _hud(), "ameaça a aluna", "ela recua", [])
+    prompt_text = "\n".join(m.content for m in messages)
+
+    reputacao_line = next(line for line in prompt_text.split("\n") if line.startswith("reputacao |"))
+    energia_line = next(line for line in prompt_text.split("\n") if line.startswith("energia |"))
+
+    assert " | max ±5" in reputacao_line
+    assert "max ±" not in energia_line
+
+
+def test_build_judge_messages_max_delta_and_touched_marker_order(monkeypatch, tmp_path):
+    scenario = _load_with_stats_yaml(monkeypatch, tmp_path, STATS_YAML_MAX_DELTA)
+
+    messages = build_judge_messages(scenario, _hud(), "ameaça a aluna", "ela recua", ["reputacao"])
+    prompt_text = "\n".join(m.content for m in messages)
+
+    reputacao_line = next(line for line in prompt_text.split("\n") if line.startswith("reputacao |"))
+
+    assert reputacao_line.endswith("max ±5 (já ajustado neste turno)")
+
+
+def test_build_judge_messages_system_prompts_never_mention_fixed_delta(monkeypatch, tmp_path):
+    ptbr = _load(monkeypatch, tmp_path)
+    en = _load(monkeypatch, tmp_path / "en", locale="en")
+
+    ptbr_system = build_judge_messages(ptbr, _hud(), "oi", "nada", [])[0].content
+    en_system = build_judge_messages(en, _hud(), "enters", "ok", [])[0].content
+
+    for system in (ptbr_system, en_system):
+        assert "-10" not in system
+        assert "+10" not in system
+
+
+def test_build_judge_messages_dynamic_stats_flag_controls_kind_mention(monkeypatch, tmp_path):
+    disabled = _load(monkeypatch, tmp_path, allow_dynamic_stats=False)
+    enabled = _load(monkeypatch, tmp_path / "enabled", allow_dynamic_stats=True)
+
+    disabled_system = build_judge_messages(disabled, _hud(), "oi", "nada", [])[0].content
+    enabled_system = build_judge_messages(enabled, _hud(), "oi", "nada", [])[0].content
+
+    assert "kind" not in disabled_system
+    assert "kind" in enabled_system
+    assert "item" in enabled_system
+    assert "skill" in enabled_system
 
 
 def test_build_judge_messages_dynamic_stats_flag_controls_system_text(monkeypatch, tmp_path):
