@@ -28,7 +28,7 @@ from app.hud import (
     stat_ids,
     stat_views,
 )
-from app.judge import JUDGE_RAW_LOG_CHARS, JudgeError, apply_judgement, judge_turn
+from app.judge import JUDGE_RAW_LOG_CHARS, JudgeError, StatChange, apply_judgement, judge_turn
 from app.llm.base import ChatMessage
 from app.llm.openai_compat import OpenAICompatProvider
 from app.lore import LORE_SCAN_TURNS, build_scan_text, lore_ids, render_lore, select_lore
@@ -63,6 +63,18 @@ class TurnContext(BaseModel):
     minds: dict[str, MindView] = {}
     lore: list[LoreEntry] = []
 
+
+
+def _judge_stat_event(hud: HudState, change: StatChange) -> tuple[str, dict]:
+    """Dynamic stats carry their definition so replay can rebuild the HUD exactly."""
+    kind, payload = stat_event(change.id, change.delta, change.value, change.source)
+    dynamic = hud.dynamic_stats.get(change.id)
+    if dynamic is not None:
+        payload.update(name=dynamic.name, min=dynamic.min, max=dynamic.max)
+        dynamic_kind = getattr(dynamic, "kind", None)
+        if dynamic_kind is not None:
+            payload["kind"] = dynamic_kind
+    return kind, payload
 
 def load_turn_context(session_id: str) -> TurnContext:
     """Single point that reads the session row and loads its scenario for a turn."""
@@ -501,8 +513,7 @@ async def run_turn(
                         ctx.scenario, new_hud, judgement, touched_ids
                     )
                     judge_events = [
-                        stat_event(change.id, change.delta, change.value, change.source)
-                        for change in changes
+                        _judge_stat_event(new_hud, change) for change in changes
                     ]
                     stat_events += judge_events
                     post_events.extend(judge_events)
