@@ -30,12 +30,40 @@ def _judge_engine_label(turn_events: list[Event]) -> tuple[dict, bool]:
         event for event in turn_events if event.kind == "stat" and event.payload.get("source") == "judge"
     ]
     stats: dict[str, int] = {}
+    new: list[dict] = []
     for event in judge_stats:
-        stat_id = event.payload.get("id")
-        delta = event.payload.get("delta")
-        if isinstance(stat_id, str) and isinstance(delta, int):
+        payload = event.payload
+        stat_id = payload.get("id")
+        delta = payload.get("delta")
+        if not isinstance(stat_id, str) or not isinstance(delta, int):
+            continue
+        created = _created_dynamic(payload)
+        if created is not None:
+            new.append({"id": stat_id, **created})
+        else:
             stats[stat_id] = delta
-    return {"stats": stats}, bool(judge_stats)
+    label: dict = {"stats": stats}
+    if new:
+        label["new"] = new
+    return label, bool(judge_stats)
+
+
+def _created_dynamic(payload: dict) -> dict | None:
+    """Judge-created dynamic stats persist name/min/max in their stat event; a delta-0
+    event with that definition is the creation, which the judge expressed as "new"."""
+    if payload.get("delta") != 0 or not isinstance(payload.get("name"), str):
+        return None
+    if type(payload.get("min")) is not int or type(payload.get("max")) is not int:
+        return None
+    created = {
+        "name": payload["name"],
+        "value": payload.get("value"),
+        "min": payload["min"],
+        "max": payload["max"],
+    }
+    if isinstance(payload.get("kind"), str):
+        created["kind"] = payload["kind"]
+    return created
 
 
 def _director_engine_label(snap: TurnSnapshot, turn_events: list[Event]) -> tuple[dict, bool]:

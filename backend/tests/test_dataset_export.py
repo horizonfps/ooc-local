@@ -481,3 +481,25 @@ def test_main_without_subcommand_raises_system_exit():
 def test_main_export_without_out_raises_system_exit():
     with pytest.raises(SystemExit):
         dataset.main(["export"])
+
+
+def test_judge_label_rebuilds_new_from_dynamic_stat_events(scenarios_root, tmp_path):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+    created = ("stat", {"id": "espada", "delta": 0, "value": 1, "source": "judge",
+                        "name": "Espada de ferro", "min": 0, "max": 1, "kind": "item"})
+    legacy = ("stat", {"id": "confianca", "delta": 0, "value": 10, "source": "judge"})
+    sessions.append_events(
+        detail.id,
+        _turn_events("eu ando", "voce anda", stats=[_stat_event("reputacao", -5, 35, "judge"), created]),
+    )
+    sessions.append_events(detail.id, _turn_events("eu falo", "voce fala", stats=[legacy]))
+
+    dataset.export_dataset(tmp_path)
+
+    judge_lines = _read_jsonl(tmp_path / "judge.jsonl")
+    assert judge_lines[0]["engine_label"] == {
+        "stats": {"reputacao": -5},
+        "new": [{"id": "espada", "name": "Espada de ferro", "value": 1, "min": 0, "max": 1, "kind": "item"}],
+    }
+    assert judge_lines[0]["applied"] is True
