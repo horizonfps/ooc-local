@@ -36,11 +36,20 @@ class ModelRole(BaseModel):
     model: str
 
 
+class ProfileModel(BaseModel):
+    hf_repo: str
+    file: str
+    port: int
+    ctx: int = 8192
+    gpu_layers: int = -1
+
+
 class Config(BaseModel):
     language: str = "pt-br"
     providers: dict[str, ProviderConfig]
     models: dict[str, ModelRole]
     flags: dict[str, bool] = {}
+    profiles: dict[str, dict[str, ProfileModel]] = {}
 
     def flag(self, name: str, default: bool = True) -> bool:
         """Runtime kill switch, togglable by editing config.yaml without restart."""
