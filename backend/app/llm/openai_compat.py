@@ -11,6 +11,7 @@ class OpenAICompatProvider(LLMProvider):
     def __init__(self, provider: ProviderConfig, options: GenerationOptions | None = None):
         self.base_url = provider.base_url.rstrip("/")
         self.api_key = provider.api_key
+        self.structured_output = provider.structured_output
         self.options = options or GenerationOptions()
 
     def build_payload(self, messages: list[ChatMessage], model: str) -> dict:
@@ -23,6 +24,15 @@ class OpenAICompatProvider(LLMProvider):
             payload["max_tokens"] = self.options.max_tokens
         if self.options.temperature is not None:
             payload["temperature"] = self.options.temperature
+        if self.structured_output == "json_schema" and self.options.json_schema is not None:
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": self.options.schema_name,
+                    "schema": self.options.json_schema,
+                    "strict": True,
+                },
+            }
         return payload
 
     async def stream_chat(self, messages: list[ChatMessage], model: str) -> AsyncIterator[str]:
