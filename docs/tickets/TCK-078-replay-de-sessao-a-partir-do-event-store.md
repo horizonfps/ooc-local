@@ -1,7 +1,7 @@
 ---
 id: TCK-078
 title: Reconstruir turno a turno o estado de uma sessão a partir do event store
-status: in_review
+status: done
 points: 5
 blockedBy: []
 files:
@@ -10,6 +10,7 @@ files:
 migration: false
 ui: false
 risk: low
+pr: 77
 ---
 
 ## Problema

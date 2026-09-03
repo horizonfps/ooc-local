@@ -1,7 +1,7 @@
 ---
 id: TCK-076
 title: Aceitar JSON schema nas GenerationOptions e emitir response_format no provider
-status: in_review
+status: done
 points: 2
 blockedBy: []
 files:
@@ -12,6 +12,7 @@ files:
 migration: false
 ui: false
 risk: low
+pr: 76
 ---
 
 ## Problema
