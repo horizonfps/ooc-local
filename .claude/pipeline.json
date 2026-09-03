@@ -3,7 +3,7 @@
   "test": "npm run check:api",
   "e2e": null,
   "build": "npm run build",
-  "ticketsDir": "docs/tickets",
+  "ticketsDir": "dev/tickets",
   "idPrefix": "TCK",
   "guards": ["file-collision"],
   "checks": [],
