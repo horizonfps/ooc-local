@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, model_validator
@@ -23,6 +24,7 @@ models:
 class ProviderConfig(BaseModel):
     base_url: str
     api_key_env: str = "OOC_LOCAL_API_KEY"
+    structured_output: Literal["json_schema", "none"] = "none"
 
     @property
     def api_key(self) -> str:

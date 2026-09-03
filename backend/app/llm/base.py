@@ -13,6 +13,8 @@ class GenerationOptions(BaseModel):
     max_tokens: int | None = None
     temperature: float | None = None
     timeout_s: float = 120.0
+    json_schema: dict | None = None
+    schema_name: str = "response"
 
 
 class LLMProvider(ABC):
