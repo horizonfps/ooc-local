@@ -41,7 +41,8 @@ def _apply_stat_event(
 ) -> tuple[HudState, bool]:
     """Writes the persisted value directly, never re-derives it from delta. Returns
     (new_hud, exact): exact is False when the id is a dynamic stat created here
-    without its persisted name/min/max (turn.py never wrote them)."""
+    whose event lacks its persisted name/min/max (sessions older than the
+    definition-carrying event)."""
     stat_id = event.payload.get("id")
     value = event.payload.get("value")
     if not isinstance(stat_id, str) or type(value) is not int:
@@ -52,8 +53,24 @@ def _apply_stat_event(
     if stat_id in hud.dynamic_stats:
         dynamic = hud.dynamic_stats[stat_id].model_copy(update={"value": value})
         return hud.model_copy(update={"dynamic_stats": {**hud.dynamic_stats, stat_id: dynamic}}), True
-    dynamic = DynamicStat(name=stat_id, value=value, min=0, max=value)
-    return hud.model_copy(update={"dynamic_stats": {**hud.dynamic_stats, stat_id: dynamic}}), False
+    definition = _dynamic_definition(event.payload)
+    if definition is None:
+        dynamic = DynamicStat(name=stat_id, value=value, min=0, max=value)
+        return hud.model_copy(update={"dynamic_stats": {**hud.dynamic_stats, stat_id: dynamic}}), False
+    dynamic = DynamicStat(value=value, **definition)
+    return hud.model_copy(update={"dynamic_stats": {**hud.dynamic_stats, stat_id: dynamic}}), True
+
+
+def _dynamic_definition(payload: dict) -> dict | None:
+    name, minimum, maximum = payload.get("name"), payload.get("min"), payload.get("max")
+    if not isinstance(name, str) or type(minimum) is not int or type(maximum) is not int:
+        return None
+    if maximum <= minimum:
+        return None
+    definition = {"name": name, "min": minimum, "max": maximum}
+    if isinstance(payload.get("kind"), str):
+        definition["kind"] = payload["kind"]
+    return definition
 
 
 def _first_arg(payload: dict) -> str | None:
