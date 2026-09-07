@@ -14,7 +14,10 @@ de verdade e tag `fase-N`.
   primeiro uso). Dois papéis: `narrator` (narra) e `utility` (judge, director,
   minds, compact); sem `utility` declarado o auxiliar fica desligado. Default é
   API por chave (OpenRouter, `OPENROUTER_API_KEY`); qualquer servidor
-  openai-compat local serve como provider alternativo.
+  openai-compat local serve como provider alternativo. Provider que substitui o
+  `system` da requisição pelo próprio (ex.: proxy sobre credencial OAuth) usa
+  `system_mode: fold_into_user`, que dobra as instruções na primeira mensagem
+  do usuário; default é `system`, sem mudança de comportamento.
 
 ## Git
 

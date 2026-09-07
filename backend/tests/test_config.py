@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.config import DEFAULT_CONFIG, load_config
+from app.config import DEFAULT_CONFIG, ProviderConfig, load_config
 
 
 def test_creates_default_config_when_missing(tmp_path):
@@ -26,3 +26,18 @@ def test_rejects_role_with_unknown_provider(tmp_path):
     )
     with pytest.raises(ValidationError, match="unknown provider"):
         load_config(path)
+
+
+def test_provider_accepts_fold_into_user_system_mode():
+    config = ProviderConfig(base_url="http://x/v1", system_mode="fold_into_user")
+    assert config.system_mode == "fold_into_user"
+
+
+def test_provider_without_system_mode_defaults_to_system():
+    config = ProviderConfig(base_url="http://x/v1")
+    assert config.system_mode == "system"
+
+
+def test_provider_rejects_unknown_system_mode():
+    with pytest.raises(ValidationError):
+        ProviderConfig(base_url="http://x/v1", system_mode="cloak")
