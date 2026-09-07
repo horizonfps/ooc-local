@@ -772,7 +772,12 @@ export function GamePanel(props: GamePanelProps) {
             if (kind === 'milestone' || kind === 'epilogue') {
               const rarity = rarityClass(turn.achievement?.rarity)
               return (
-                <li key={key} className={`game-turn game-unlock game-unlock--${kind}`}>
+                <li
+                  key={key}
+                  className={`game-turn game-unlock game-unlock--${kind}`}
+                  data-turn-index={turn.index}
+                  data-achievement={JSON.stringify(turn.achievement)}
+                >
                   <span className="game-unlock-label">
                     {kind === 'epilogue' ? t('game.ending.label') : t('game.milestone.label')}
                   </span>

@@ -1466,6 +1466,40 @@ describe('GamePanel', () => {
       expect(getCallsAfter).toBe(getCallsBefore)
     })
 
+    it('assembles the milestone turn with the same index, kind and achievement a GET would return for the same event', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session()),
+        post: () =>
+          sseResponse([
+            { delta: 'The bell rings.' },
+            {
+              achievements: [
+                { id: 'first-bell', name: 'First Bell', type: 'achievement', rarity: 'rare', turn: 1, text: 'The bell rings across the yard.' },
+              ],
+            },
+            '[DONE]',
+          ]),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'ring{Enter}')
+
+      const milestoneText = await screen.findByText('The bell rings across the yard.')
+      const block = milestoneText.closest('.game-unlock--milestone') as HTMLElement
+      expect(block).not.toBeNull()
+      // `_build_turns` does not increment `index` for the achievement branch: the block
+      // must carry the index of the turn that unlocked it, this session's first turn.
+      expect(block.getAttribute('data-turn-index')).toBe('1')
+      expect(within(block).getByText('First Bell')).toHaveClass('game-rarity--rare')
+      // `turn.achievement` must match `UnlockedView` exactly, the same as what the
+      // `GET` returns for the same event: no `text` field bleeding into it.
+      const achievement = JSON.parse(block.getAttribute('data-achievement') ?? 'null')
+      expect(achievement).toEqual({ id: 'first-bell', name: 'First Bell', type: 'achievement', rarity: 'rare', turn: 1 })
+    })
+
     it('renders the epilogue block alongside the ending banner as soon as the stream carries its text', async () => {
       const user = userEvent.setup()
       mockRoutedFetch({
