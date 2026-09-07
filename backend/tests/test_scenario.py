@@ -771,9 +771,12 @@ achievements:
     [
         "achievements:\n  - id: a\n    name: A\n    condition: cond\n",
         "achievements:\n  - id: a\n    name: A\n    type: achievement\n    condition: '   '\n",
+        "achievements:\n  - id: a\n    name: '   '\n    type: achievement\n    condition: cond\n",
         "achievements:\n  - id: a\n    name: A\n    type: achievement\n    rarity: mitica\n    condition: cond\n",
         "achievements:\n  - id: a\n    name: A\n    type: achievement\n    condition: cond\n    min_turn: 0\n",
         "achievements:\n  - id: A_id\n    name: A\n    type: achievement\n    condition: cond\n",
+        "achievements:\n  - id: conquista-ção\n    name: A\n    type: achievement\n    condition: cond\n",
+        "achievements:\n  - id: 'conquista id'\n    name: A\n    type: achievement\n    condition: cond\n",
     ],
 )
 def test_achievement_invalid_fields_raise(monkeypatch, tmp_path, achievement_yaml):
