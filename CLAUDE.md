@@ -11,7 +11,10 @@ de verdade e tag `fase-N`.
 - `npm run check` (= `verify`) — pytest do backend + `tsc -b` do frontend.
 - `npm run build` — build do frontend.
 - Config de runtime em `~/.ooc-local/config.yaml` (criada com defaults no
-  primeiro uso; papéis narrator/utility/builder).
+  primeiro uso). Dois papéis: `narrator` (narra) e `utility` (judge, director,
+  minds, compact); sem `utility` declarado o auxiliar fica desligado. Default é
+  API por chave (OpenRouter, `OPENROUTER_API_KEY`); qualquer servidor
+  openai-compat local serve como provider alternativo.
 
 ## Git
 

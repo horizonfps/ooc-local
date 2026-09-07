@@ -9,7 +9,10 @@ def test_creates_default_config_when_missing(tmp_path):
     config = load_config(path)
     assert path.read_text(encoding="utf-8") == DEFAULT_CONFIG
     assert config.language == "pt-br"
-    assert config.models["narrator"].provider == "local"
+    assert config.models["narrator"].provider == "openrouter"
+    assert config.models["utility"].provider == "openrouter"
+    assert config.providers["openrouter"].structured_output == "json_schema"
+    assert config.providers["local"].base_url.startswith("http://127.0.0.1")
 
 
 def test_rejects_role_with_unknown_provider(tmp_path):

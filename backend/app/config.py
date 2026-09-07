@@ -11,13 +11,17 @@ CONFIG_PATH = CONFIG_DIR / "config.yaml"
 DEFAULT_CONFIG = """\
 language: pt-br
 providers:
+  openrouter:
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    structured_output: json_schema
+  # Any OpenAI-compatible server works here: llama.cpp, koboldcpp, LM Studio, Ollama.
   local:
     base_url: http://127.0.0.1:5001/v1
     api_key_env: OOC_LOCAL_API_KEY
 models:
-  narrator: {provider: local, model: Cydonia-24B-v4.3}
-  utility:  {provider: local, model: Cydonia-24B-v4.3}
-  builder:  {provider: local, model: Cydonia-24B-v4.3}
+  narrator: {provider: openrouter, model: anthropic/claude-sonnet-5}
+  utility:  {provider: openrouter, model: google/gemini-3.8-flash}
 """
 
 
