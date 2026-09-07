@@ -467,6 +467,42 @@ export const builderEn = {
     "What the narrator is asked, outside the narrative. The turn doesn't advance, and the answer stays out of the memory of the session.",
   'builder.field.label.commandName': 'Command name',
 
+  // Builder achievements tab
+  'builder.editor.tab.achievements': 'Achievements',
+  'builder.achievements.heading': 'Achievements and endings',
+  'builder.achievements.startLabel': 'Start',
+  'builder.achievements.startHint': 'Achievements and endings belong to one start. Pick which one you are editing.',
+  'builder.achievements.listLabel': 'Entries',
+  'builder.achievements.create': 'New achievement',
+  'builder.achievements.added': '{name} added',
+  'builder.achievements.removed': '{name} removed',
+  'builder.achievements.remove.title': 'Remove {name}',
+  'builder.achievements.unnamed': 'Untitled entry',
+  'builder.achievements.empty.title': 'This start has no achievements',
+  'builder.achievements.empty.body':
+    'Achievements mark milestones without ending the story. An ending writes the epilogue and closes the session.',
+  'builder.achievements.id': 'Id',
+  'builder.achievements.name': 'Name',
+  'builder.achievements.type': 'Type',
+  'builder.achievements.type.achievement': 'Achievement',
+  'builder.achievements.type.ending': 'Ending',
+  'builder.achievements.type.hint':
+    'An achievement accumulates and the story goes on. An ending writes the epilogue and locks the session.',
+  'builder.achievements.rarity': 'Rarity',
+  'builder.achievements.rarity.common': 'Common',
+  'builder.achievements.rarity.rare': 'Rare',
+  'builder.achievements.rarity.epic': 'Epic',
+  'builder.achievements.rarity.legendary': 'Legendary',
+  'builder.achievements.hint': 'Player hint',
+  'builder.achievements.hint.hint': 'Shown in the gallery while the entry is still locked. Leave it empty to show nothing.',
+  'builder.achievements.condition': 'Condition',
+  'builder.achievements.condition.hint':
+    'Plain language. Every few turns a cheap model judges whether it happened, so describe a fact, not an intention.',
+  'builder.achievements.minTurn': 'Minimum turn',
+  'builder.achievements.minTurn.hint': 'Nothing is judged before this turn. Empty means no gate.',
+  'builder.validate.achievementIdTaken': '{slug} is already used in this start.',
+  'builder.validate.minTurnPositive': 'The minimum turn must be 1 or greater. Leave it empty for no gate.',
+
   // Builder media tab
   'builder.media.heading': 'Media',
   'builder.media.hint': 'Images are written to disk the moment you upload them, outside the save button.',
@@ -975,6 +1011,42 @@ export const builderPtBr: Record<keyof typeof builderEn, string> = {
   'builder.commands.prompt.hint':
     'O que é pedido ao narrador, fora da narrativa. O turno não avança, e a resposta fica fora da memória da sessão.',
   'builder.field.label.commandName': 'Nome do comando',
+
+  // Builder achievements tab
+  'builder.editor.tab.achievements': 'Conquistas',
+  'builder.achievements.heading': 'Conquistas e finais',
+  'builder.achievements.startLabel': 'Começo',
+  'builder.achievements.startHint': 'Conquistas e finais pertencem a um começo. Escolha qual você está editando.',
+  'builder.achievements.listLabel': 'Entradas',
+  'builder.achievements.create': 'Nova conquista',
+  'builder.achievements.added': '{name} adicionada',
+  'builder.achievements.removed': '{name} removida',
+  'builder.achievements.remove.title': 'Remover {name}',
+  'builder.achievements.unnamed': 'Entrada sem nome',
+  'builder.achievements.empty.title': 'Este começo não tem conquistas',
+  'builder.achievements.empty.body':
+    'Conquistas marcam etapas sem encerrar a história. Um final escreve o epílogo e fecha a sessão.',
+  'builder.achievements.id': 'Id',
+  'builder.achievements.name': 'Nome',
+  'builder.achievements.type': 'Tipo',
+  'builder.achievements.type.achievement': 'Conquista',
+  'builder.achievements.type.ending': 'Final',
+  'builder.achievements.type.hint':
+    'A conquista acumula e a história continua. O final escreve o epílogo e tranca a sessão.',
+  'builder.achievements.rarity': 'Raridade',
+  'builder.achievements.rarity.common': 'Comum',
+  'builder.achievements.rarity.rare': 'Rara',
+  'builder.achievements.rarity.epic': 'Épica',
+  'builder.achievements.rarity.legendary': 'Lendária',
+  'builder.achievements.hint': 'Dica para o jogador',
+  'builder.achievements.hint.hint': 'Aparece na galeria enquanto a entrada não foi conquistada. Deixe vazio para não mostrar nada.',
+  'builder.achievements.condition': 'Condição',
+  'builder.achievements.condition.hint':
+    'Em linguagem natural. A cada poucos turnos um modelo barato julga se aconteceu, então descreva um fato, não uma intenção.',
+  'builder.achievements.minTurn': 'Turno mínimo',
+  'builder.achievements.minTurn.hint': 'Nada é julgado antes deste turno. Vazio significa sem trava.',
+  'builder.validate.achievementIdTaken': '{slug} já está em uso neste começo.',
+  'builder.validate.minTurnPositive': 'O turno mínimo precisa ser 1 ou maior. Deixe vazio para não ter trava.',
 
   // Builder media tab
   'builder.media.heading': 'Mídia',

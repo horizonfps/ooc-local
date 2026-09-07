@@ -109,6 +109,11 @@ describe('useHashRoute', () => {
     expect(renderHook(() => useHashRoute()).result.current).toEqual({ name: 'builderEditor', id: 'school', tab: 'commands' })
   })
 
+  it('resolves #/builder/school/achievements', () => {
+    setHash('#/builder/school/achievements')
+    expect(renderHook(() => useHashRoute()).result.current).toEqual({ name: 'builderEditor', id: 'school', tab: 'achievements' })
+  })
+
   it('falls back to identity for an unknown tab', () => {
     setHash('#/builder/school/nope')
     expect(renderHook(() => useHashRoute()).result.current).toEqual({ name: 'builderEditor', id: 'school', tab: 'identity' })

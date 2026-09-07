@@ -390,6 +390,77 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
     errors.push(error('stats', 'meta.max_dynamic_stats', t('builder.stats.maxDynamic'), t('builder.validate.maxDynamicPositive')))
   }
 
+  for (const startId of startIds) {
+    const start = draft.starts[startId]
+    const startLabel = start.name.trim() || startId
+    const seenAchievementIds = new Set<string>()
+
+    ;(start.achievements ?? []).forEach((entry, i) => {
+      const entryLabel = entry.name.trim() || t('builder.achievements.unnamed')
+      const withEntry = (label: string) => `${startLabel} — ${entryLabel} — ${label}`
+
+      const trimmedId = entry.id.trim()
+      if (!trimmedId) {
+        errors.push(
+          error('achievements', `achievements.${startId}.${i}.id`, withEntry(t('builder.achievements.id')), t('builder.field.required')),
+        )
+      } else if (!ID_RE.test(trimmedId)) {
+        errors.push(
+          error(
+            'achievements',
+            `achievements.${startId}.${i}.id`,
+            withEntry(t('builder.achievements.id')),
+            t('builder.field.slugInvalid'),
+          ),
+        )
+      } else if (seenAchievementIds.has(trimmedId)) {
+        errors.push(
+          error(
+            'achievements',
+            `achievements.${startId}.${i}.id`,
+            withEntry(t('builder.achievements.id')),
+            t('builder.validate.achievementIdTaken', { slug: trimmedId }),
+          ),
+        )
+      } else {
+        seenAchievementIds.add(trimmedId)
+      }
+
+      if (!entry.name.trim()) {
+        errors.push(
+          error(
+            'achievements',
+            `achievements.${startId}.${i}.name`,
+            withEntry(t('builder.achievements.name')),
+            t('builder.field.required'),
+          ),
+        )
+      }
+
+      if (!entry.condition.trim()) {
+        errors.push(
+          error(
+            'achievements',
+            `achievements.${startId}.${i}.condition`,
+            withEntry(t('builder.achievements.condition')),
+            t('builder.field.required'),
+          ),
+        )
+      }
+
+      if (entry.min_turn != null && entry.min_turn < 1) {
+        errors.push(
+          error(
+            'achievements',
+            `achievements.${startId}.${i}.min_turn`,
+            withEntry(t('builder.achievements.minTurn')),
+            t('builder.validate.minTurnPositive'),
+          ),
+        )
+      }
+    })
+  }
+
   const lorebookIds = Object.keys(draft.lorebook)
   for (const loreId of lorebookIds) {
     const entry = draft.lorebook[loreId]
