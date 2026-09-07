@@ -18,6 +18,10 @@ from app.media import SessionAssets, session_assets
 from app.observability import emit
 from app.scenario import CommandView, ScenarioError, load_scenario
 
+ACHIEVEMENT_EVENT_KIND = "achievement"
+SESSION_ENDED_KIND = "session_ended"
+SESSION_REOPENED_KIND = "session_reopened"
+
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS sessions (
   id            TEXT PRIMARY KEY,
@@ -54,12 +58,26 @@ class SessionNotEphemeral(Exception):
     pass
 
 
+class SessionNotEnded(Exception):
+    pass
+
+
 class ScenarioNotFound(Exception):
     pass
 
 
 class StartNotFound(Exception):
     pass
+
+
+class UnlockedView(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    name: str
+    type: Literal["achievement", "ending"]
+    rarity: str
+    turn: int
 
 
 class TurnView(BaseModel):
@@ -72,6 +90,8 @@ class TurnView(BaseModel):
     meta: bool = False
     suggestions: list[str] = []
     command: str | None = None
+    kind: Literal["turn", "milestone", "epilogue"] = "turn"
+    achievement: UnlockedView | None = None
 
 
 class SessionSummary(BaseModel):
@@ -101,6 +121,8 @@ class SessionDetail(BaseModel):
     minds: dict[str, MindView] = {}
     commands: list[CommandView] = []
     suggestions: list[str] = []
+    achievements: list[UnlockedView] = []
+    ended: bool = False
 
 
 class SessionRow(BaseModel):
@@ -303,7 +325,13 @@ def get_session(session_id: str) -> SessionDetail:
 
     events = read_events(
         session_id,
-        kinds=("player_turn", "narrator_turn", "meta_player_turn", "meta_narrator_turn"),
+        kinds=(
+            "player_turn",
+            "narrator_turn",
+            "meta_player_turn",
+            "meta_narrator_turn",
+            ACHIEVEMENT_EVENT_KIND,
+        ),
     )
     turns = _build_turns(events)
 
@@ -339,6 +367,8 @@ def get_session(session_id: str) -> SessionDetail:
         minds=read_minds(session_id),
         commands=command_views(scenario, load_global_commands(), scenario.meta.locale),
         suggestions=suggestions,
+        achievements=read_achievements(session_id),
+        ended=is_session_ended(session_id),
     )
 
 
@@ -520,6 +550,58 @@ def read_minds(session_id: str) -> dict[str, MindView]:
     return result
 
 
+def is_session_ended(session_id: str) -> bool:
+    events = read_events(session_id, kinds=(SESSION_ENDED_KIND, SESSION_REOPENED_KIND))
+    return bool(events) and events[-1].kind == SESSION_ENDED_KIND
+
+
+def read_achievements(session_id: str) -> list[UnlockedView]:
+    """Every valid achievement event, first occurrence per id wins. A malformed
+    payload is dropped, never raised: same defense as read_cast_ids and
+    read_minds, but per-event instead of per-snapshot."""
+    events = read_events(session_id, kinds=(ACHIEVEMENT_EVENT_KIND,))
+    result: list[UnlockedView] = []
+    seen: set[str] = set()
+    for event in events:
+        payload = event.payload
+        try:
+            view = UnlockedView(
+                id=payload["id"],
+                name=payload["name"],
+                type=payload["type"],
+                rarity=payload["rarity"],
+                turn=payload["turn"],
+            )
+        except Exception as exc:
+            emit(
+                "session_achievement_invalid",
+                session_id=session_id,
+                seq=event.seq,
+                reason=str(exc),
+            )
+            continue
+        if view.id in seen:
+            continue
+        seen.add(view.id)
+        result.append(view)
+    return result
+
+
+def reopen_session(session_id: str) -> SessionDetail:
+    row = get_session_row(session_id)
+    if not is_session_ended(session_id):
+        raise SessionNotEnded(session_id)
+    append_events(session_id, [(SESSION_REOPENED_KIND, {"turn": row.hud.turn})])
+    detail = get_session(session_id)
+    emit(
+        "session_reopened",
+        session_id=session_id,
+        turn=row.hud.turn,
+        achievements=len(detail.achievements),
+    )
+    return detail
+
+
 def _build_turns(events: list[Event]) -> list[TurnView]:
     turns: list[TurnView] = []
     index = 0
@@ -567,4 +649,28 @@ def _build_turns(events: list[Event]) -> list[TurnView]:
                 )
             )
             pending_command = None
+        elif event.kind == ACHIEVEMENT_EVENT_KIND:
+            payload = event.payload
+            text = payload.get("text") if isinstance(payload, dict) else None
+            if not text:
+                continue
+            try:
+                achievement = UnlockedView(
+                    id=payload["id"],
+                    name=payload["name"],
+                    type=payload["type"],
+                    rarity=payload["rarity"],
+                    turn=payload["turn"],
+                )
+            except Exception:
+                continue
+            turns.append(
+                TurnView(
+                    index=index,
+                    role="narrator",
+                    text=text,
+                    kind="epilogue" if achievement.type == "ending" else "milestone",
+                    achievement=achievement,
+                )
+            )
     return turns

@@ -16,6 +16,7 @@ from app.scenario import list_scenarios
 from app.sessions import (
     ScenarioNotFound,
     SessionDetail,
+    SessionNotEnded,
     SessionNotEphemeral,
     SessionNotFound,
     SessionSummary,
@@ -24,7 +25,9 @@ from app.sessions import (
     delete_session,
     get_session,
     init_db,
+    is_session_ended,
     list_sessions,
+    reopen_session,
 )
 from app.turn import TURN_ERROR_CODE, load_turn_context, run_turn
 
@@ -104,6 +107,18 @@ async def delete_session_route(session_id: str) -> None:
         raise HTTPException(status_code=409, detail="session is not ephemeral") from None
 
 
+@app.post("/api/sessions/{session_id}/reopen", response_model=SessionDetail)
+async def reopen_session_route(session_id: str) -> SessionDetail:
+    try:
+        return reopen_session(session_id)
+    except SessionNotFound:
+        raise HTTPException(status_code=404, detail="session not found") from None
+    except ScenarioNotFound:
+        raise HTTPException(status_code=404, detail="scenario not found") from None
+    except SessionNotEnded:
+        raise HTTPException(status_code=409, detail="session is not ended") from None
+
+
 @app.post("/api/chat")
 async def chat(req: ChatRequest) -> StreamingResponse:
     config = load_config()
@@ -153,6 +168,9 @@ async def turn_route(session_id: str, req: ChatRequest) -> StreamingResponse:
     except ScenarioNotFound:
         emit("turn_rejected", session_id=session_id, reason="scenario not found")
         raise HTTPException(status_code=404, detail="scenario not found") from None
+    if config.flag("achievements") and is_session_ended(session_id):
+        emit("turn_rejected", session_id=session_id, reason="session ended")
+        raise HTTPException(status_code=409, detail="session ended")
     if not req.message.strip():
         emit("turn_rejected", session_id=session_id, reason="message must not be empty")
         raise HTTPException(status_code=422, detail="message must not be empty")
