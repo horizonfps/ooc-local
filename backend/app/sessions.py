@@ -80,6 +80,10 @@ class UnlockedView(BaseModel):
     turn: int
 
 
+class UnlockedStreamView(UnlockedView):
+    text: str | None = None
+
+
 class TurnView(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 

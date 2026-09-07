@@ -396,6 +396,20 @@ export function GamePanel(props: GamePanelProps) {
               )
               .join(' ')
             setUnlockAnnouncement(announcement)
+
+            const textTurns: TurnView[] = unlocked
+              .filter((a): a is typeof a & { text: string } => Boolean(a.text))
+              .map((a) => {
+                const { text, ...achievement } = a
+                return {
+                  index,
+                  role: 'narrator',
+                  text,
+                  kind: achievement.type === 'ending' ? 'epilogue' : 'milestone',
+                  achievement,
+                }
+              })
+            if (textTurns.length > 0) setExtraTurns((prev) => [...prev, ...textTurns])
           },
           onEnded: () => {
             setEnded({ name: lastEndingRef.current?.name ?? null })
