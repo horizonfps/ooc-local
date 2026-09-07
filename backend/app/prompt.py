@@ -6,9 +6,10 @@ from app.cast import MindView
 from app.hud import HudState, stat_views
 from app.lore import render_lore
 from app.media import scan_media
+from app.memory import MemoryEntry, render_memories
 from app.scenario import Character, LoadedScenario, LoreEntry, StartConfig
 
-MASTER_PROMPT_VERSION = 12
+MASTER_PROMPT_VERSION = 13
 
 MODE_LABELS: dict[str, dict[str, str]] = {
     "pt-br": {"do": "Ação", "say": "Fala", "story": "Narração"},
@@ -106,6 +107,11 @@ _TEMPLATES = {
         "conflict_label": "Conflito deste início",
         "mission_label": "Missão do jogador",
         "summary_header": "## RESUMO DA CAMPANHA",
+        "memories_header": "## MEMÓRIAS",
+        "memories_intro": (
+            "Estes são fatos já estabelecidos nesta partida. Não os "
+            "contradiga."
+        ),
         "tags_header": "## VOCABULÁRIO DE TAGS",
         "tags_intro": (
             "Use somente estas chaves nas tags [SPRITE:...] e [BG:...], "
@@ -187,6 +193,11 @@ _TEMPLATES = {
         "conflict_label": "Conflict of this start",
         "mission_label": "Player mission",
         "summary_header": "## CAMPAIGN SUMMARY",
+        "memories_header": "## MEMORIES",
+        "memories_intro": (
+            "These are facts already established in this playthrough. Do "
+            "not contradict them."
+        ),
         "tags_header": "## TAG VOCABULARY",
         "tags_intro": (
             "Use only these keys in the [SPRITE:...] and [BG:...] tags, "
@@ -340,6 +351,7 @@ def build_master_prompt(
     compact: str | None = None,
     minds: dict[str, MindView] | None = None,
     lore: list[LoreEntry] | None = None,
+    memories: list[MemoryEntry] | None = None,
 ) -> str:
     template = _TEMPLATES[scenario.meta.locale]
     locale_weather_labels = WEATHER_LABELS[scenario.meta.locale]
@@ -392,6 +404,12 @@ def build_master_prompt(
 
     if compact is not None:
         sections.append(f"{template['summary_header']}\n{compact}")
+
+    memories_body = render_memories(memories or [], scenario.meta.locale)
+    if memories_body is not None:
+        sections.append(
+            f"{template['memories_header']}\n{template['memories_intro']}\n\n{memories_body}"
+        )
 
     tag_vocabulary = _tag_vocabulary(scenario, characters, template)
     if tag_vocabulary is not None:

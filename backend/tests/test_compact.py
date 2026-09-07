@@ -66,7 +66,13 @@ def _config(flags=None):
                 "narrator": {"provider": "local", "model": "narrator-model"},
                 "utility": {"provider": "local", "model": "utility-model"},
             },
-            "flags": {"director": False, "hud_judge": False, "minds": False, **(flags or {})},
+            "flags": {
+                "director": False,
+                "hud_judge": False,
+                "minds": False,
+                "memory": False,
+                **(flags or {}),
+            },
         }
     )
 

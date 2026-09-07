@@ -621,7 +621,75 @@ def test_build_master_prompt_opening_section_has_single_blank_line_between_parts
     assert opening.endswith("descobrir de quem é")
 
 
-def test_master_prompt_version_is_twelve():
+def test_master_prompt_version_is_thirteen():
     from app.prompt import MASTER_PROMPT_VERSION
 
-    assert MASTER_PROMPT_VERSION == 12
+    assert MASTER_PROMPT_VERSION == 13
+
+
+def _memories(overrides=None):
+    from app.memory import MemoryEntry
+
+    base = [
+        MemoryEntry(id="fato", category="long_term", text="fato permanente", turn=1),
+        MemoryEntry(id="rel", category="relationship", text="relacao com chloe", turn=1),
+        MemoryEntry(id="obj", category="goal", text="objetivo atual", turn=1),
+        MemoryEntry(id="tmp", category="temporary", text="estado passageiro", turn=1),
+        MemoryEntry(id="nota", category="user_note", text="nota do jogador", turn=1, source="player"),
+    ]
+    return overrides if overrides is not None else base
+
+
+def test_build_master_prompt_memories_section_present_in_fixed_order(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters, memories=_memories())
+
+    assert "## MEMÓRIAS" in prompt
+    for earlier, later in (
+        ("fato permanente", "relacao com chloe"),
+        ("relacao com chloe", "objetivo atual"),
+        ("objetivo atual", "estado passageiro"),
+        ("estado passageiro", "nota do jogador"),
+    ):
+        assert prompt.index(earlier) < prompt.index(later)
+
+
+def test_build_master_prompt_memories_section_absent_when_empty(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters, memories=[])
+    assert "## MEMÓRIAS" not in prompt
+
+    prompt_default = build_master_prompt(scenario, start, _hud(), characters)
+    assert "## MEMÓRIAS" not in prompt_default
+
+
+def test_build_master_prompt_memories_between_summary_and_tags(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path, characters={"chloe.yaml": CHLOE_WITH_EMOTIONS_YAML})
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(
+        scenario, start, _hud(), characters, compact="resumo", memories=_memories()
+    )
+
+    summary_pos = prompt.index("## RESUMO DA CAMPANHA")
+    memories_pos = prompt.index("## MEMÓRIAS")
+    tags_pos = prompt.index("## VOCABULÁRIO DE TAGS")
+    assert summary_pos < memories_pos < tags_pos
+
+
+def test_build_master_prompt_memories_labels_en_locale(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path, locale="en")
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters, memories=_memories())
+
+    assert "## MEMORIES" in prompt
+    assert "fato permanente" in prompt
