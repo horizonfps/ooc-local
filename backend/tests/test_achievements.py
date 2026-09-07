@@ -495,3 +495,7 @@ def test_judge_achievements_prose_response_is_invalid(monkeypatch, tmp_path):
     assert verdicts is None
     assert reason == "invalid_json"
     assert returned_raw == raw
+
+
+def test_achievements_options_request_low_reasoning_effort():
+    assert ACHIEVEMENTS_OPTIONS.reasoning_effort == "low"

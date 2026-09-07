@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -15,6 +16,7 @@ class GenerationOptions(BaseModel):
     timeout_s: float = 120.0
     json_schema: dict | None = None
     schema_name: str = "response"
+    reasoning_effort: Literal["low", "medium", "high"] | None = None
 
 
 class LLMProvider(ABC):

@@ -356,3 +356,8 @@ def test_write_milestone_without_narrator_role_raises_before_network(monkeypatch
 
     with pytest.raises(EpilogueError, match="no narrator role"):
         asyncio.run(write_milestone(scenario, achievement, _window(2), _config_without_narrator()))
+
+
+def test_epilogue_options_do_not_request_reasoning_effort():
+    assert MILESTONE_OPTIONS.reasoning_effort is None
+    assert ENDING_OPTIONS.reasoning_effort is None

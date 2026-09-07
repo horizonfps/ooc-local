@@ -106,6 +106,7 @@ JUDGE_OPTIONS = GenerationOptions(
     timeout_s=45.0,
     json_schema=JudgementResponse.model_json_schema(),
     schema_name="judgement",
+    reasoning_effort="low",
 )
 JUDGE_OPTIONS_DYNAMIC = GenerationOptions(
     max_tokens=200,
@@ -113,6 +114,7 @@ JUDGE_OPTIONS_DYNAMIC = GenerationOptions(
     timeout_s=45.0,
     json_schema=JudgementDynamicResponse.model_json_schema(),
     schema_name="judgement",
+    reasoning_effort="low",
 )
 
 

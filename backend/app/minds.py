@@ -33,6 +33,7 @@ MINDS_OPTIONS = GenerationOptions(
     timeout_s=45.0,
     json_schema=MINDS_SCHEMA,
     schema_name="minds",
+    reasoning_effort="low",
 )
 MIND_FIELD_CHARS = 120
 EMOJI_CHARS = 4

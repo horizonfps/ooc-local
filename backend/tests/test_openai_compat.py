@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from app.config import ProviderConfig
 from app.llm.base import ChatMessage, GenerationOptions
 from app.llm.openai_compat import (
@@ -91,3 +94,50 @@ def test_response_format_and_max_tokens_present_in_both_modes():
             "type": "json_schema",
             "json_schema": {"name": "s", "schema": {"type": "object"}, "strict": True},
         }
+
+
+def test_reasoning_effort_present_when_set():
+    options = GenerationOptions(reasoning_effort="low")
+    provider = _provider(options=options)
+    messages = [ChatMessage(role="user", content="hi")]
+
+    payload = provider.build_payload(messages, "m")
+
+    assert payload["reasoning_effort"] == "low"
+
+
+def test_reasoning_effort_absent_when_unset():
+    provider = _provider()
+    messages = [ChatMessage(role="user", content="hi")]
+
+    payload = provider.build_payload(messages, "m")
+
+    assert "reasoning_effort" not in payload
+
+
+def test_reasoning_effort_coexists_with_other_options():
+    options = GenerationOptions(
+        max_tokens=42,
+        temperature=0.3,
+        json_schema={"type": "object"},
+        schema_name="s",
+        reasoning_effort="low",
+    )
+    config = ProviderConfig(base_url="http://x/v1", system_mode="system", structured_output="json_schema")
+    provider = OpenAICompatProvider(config, options)
+    messages = [ChatMessage(role="user", content="hi")]
+
+    payload = provider.build_payload(messages, "m")
+
+    assert payload["max_tokens"] == 42
+    assert payload["temperature"] == 0.3
+    assert payload["reasoning_effort"] == "low"
+    assert payload["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {"name": "s", "schema": {"type": "object"}, "strict": True},
+    }
+
+
+def test_reasoning_effort_none_is_validation_error():
+    with pytest.raises(ValidationError):
+        GenerationOptions(reasoning_effort="none")

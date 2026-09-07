@@ -24,6 +24,7 @@ DIRECTOR_OPTIONS = GenerationOptions(
     timeout_s=45.0,
     json_schema=SceneResponse.model_json_schema(),
     schema_name="scene",
+    reasoning_effort="low",
 )
 DIRECTOR_WINDOW_TURNS = 3
 DIRECTOR_EXCERPT_CHARS = 300

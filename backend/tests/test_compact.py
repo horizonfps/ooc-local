@@ -1234,3 +1234,7 @@ def test_init_db_migrates_old_schema_with_compact_but_no_compact_seq(tmp_path, m
         "ephemeral",
     }
     assert sessions.get_compact("s1") == (None, None)
+
+
+def test_compact_options_request_low_reasoning_effort():
+    assert COMPACT_OPTIONS.reasoning_effort == "low"

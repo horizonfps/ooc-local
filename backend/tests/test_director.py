@@ -438,3 +438,7 @@ def test_decide_scene_prose_response_is_still_rejected_with_schema_declared(monk
 
     assert ids is None
     assert reason == "invalid_json"
+
+
+def test_director_options_request_low_reasoning_effort():
+    assert DIRECTOR_OPTIONS.reasoning_effort == "low"
