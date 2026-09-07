@@ -136,6 +136,16 @@ describe('useHashRoute', () => {
     expect(location.hash).toBe('#/builder/school/identity')
   })
 
+  it('resolves gallery with the id from the hash', () => {
+    setHash('#/gallery/exemplo-escola')
+    expect(renderHook(() => useHashRoute()).result.current).toEqual({ name: 'gallery', id: 'exemplo-escola' })
+  })
+
+  it('resolves sessions for a gallery hash with no id', () => {
+    setHash('#/gallery/')
+    expect(renderHook(() => useHashRoute()).result.current).toEqual({ name: 'sessions' })
+  })
+
   it('navigates by setting location.hash', () => {
     setHash('#/')
     navigate('#/session/abc')

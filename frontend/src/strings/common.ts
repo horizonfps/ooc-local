@@ -41,6 +41,7 @@ export const commonEn = {
   'sessions.new.error': "Couldn't start the session. Nothing was saved — try again.",
   'sessions.new.scenariosError': "Couldn't load scenarios",
   'sessions.builderLink': 'Open the builder',
+  'sessions.galleryLink': 'See the gallery',
 } as const
 
 export const commonPtBr: Record<keyof typeof commonEn, string> = {
@@ -86,4 +87,5 @@ export const commonPtBr: Record<keyof typeof commonEn, string> = {
   'sessions.new.error': 'Não consegui começar a sessão. Nada foi salvo — tente de novo.',
   'sessions.new.scenariosError': 'Não consegui carregar os cenários',
   'sessions.builderLink': 'Abrir o builder',
+  'sessions.galleryLink': 'Ver a galeria',
 }

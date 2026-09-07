@@ -87,6 +87,14 @@
   margin: 0.5rem 0 0;
 }
 
+.sessions-new-galleryLink {
+  margin: 0.75rem 0 0;
+}
+
+.sessions-new-galleryLink a {
+  color: var(--focus);
+}
+
 .sessions-list ul {
   list-style: none;
   margin: 0;

@@ -77,6 +77,23 @@ export const gameEn = {
   'game.rarity.epic': 'Epic',
   'game.rarity.legendary': 'Legendary',
 
+  // Gallery screen
+  'gallery.documentTitle': '{scenario} — gallery',
+  'gallery.heading': 'Gallery',
+  'gallery.back': 'Back to sessions',
+  'gallery.loading': 'Loading the gallery…',
+  'gallery.progress': '{achievementsUnlocked} of {achievements} achievements · {endingsUnlocked} of {endings} endings',
+  'gallery.achievements.heading': 'Achievements',
+  'gallery.endings.heading': 'Endings',
+  'gallery.locked.name': '???',
+  'gallery.locked.sr': 'Not unlocked yet',
+  'gallery.locked.noHint': 'No hint for this one.',
+  'gallery.unlocked.when': 'Turn {turn} · {when}',
+  'gallery.empty.title': 'This scenario has no achievements',
+  'gallery.empty.body': 'The author has not declared any achievement or ending yet.',
+  'gallery.notFound.title': 'Scenario not found',
+  'gallery.notFound.body': 'This scenario does not exist anymore. Go back and pick another one.',
+
   // HUD
   'hud.turn': 'Turn',
   'hud.location': 'Location',
@@ -187,6 +204,23 @@ export const gamePtBr: Record<keyof typeof gameEn, string> = {
   'game.rarity.rare': 'Rara',
   'game.rarity.epic': 'Épica',
   'game.rarity.legendary': 'Lendária',
+
+  // Gallery screen
+  'gallery.documentTitle': '{scenario} — galeria',
+  'gallery.heading': 'Galeria',
+  'gallery.back': 'Voltar para as sessões',
+  'gallery.loading': 'Carregando a galeria…',
+  'gallery.progress': '{achievementsUnlocked} de {achievements} conquistas · {endingsUnlocked} de {endings} finais',
+  'gallery.achievements.heading': 'Conquistas',
+  'gallery.endings.heading': 'Finais',
+  'gallery.locked.name': '???',
+  'gallery.locked.sr': 'Ainda não conquistado',
+  'gallery.locked.noHint': 'Sem pista para esta.',
+  'gallery.unlocked.when': 'Turno {turn} · {when}',
+  'gallery.empty.title': 'Este cenário não tem conquistas',
+  'gallery.empty.body': 'Quem montou o cenário ainda não declarou conquista nem final.',
+  'gallery.notFound.title': 'Cenário não encontrado',
+  'gallery.notFound.body': 'Este cenário não existe mais. Volte e escolha outro.',
 
   // HUD
   'hud.turn': 'Turno',

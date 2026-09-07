@@ -208,6 +208,47 @@ describe('SessionsScreen', () => {
     expect(link).toHaveAttribute('href', '#/builder')
   })
 
+  it('shows a link to the gallery pointing at the selected scenario', async () => {
+    mockFetch({ scenarios: () => jsonResponse([SCENARIO]), sessions: () => jsonResponse([]) })
+    render(<SessionsScreen />)
+
+    const link = await screen.findByRole('link', { name: t('sessions.galleryLink') })
+    expect(link).toHaveAttribute('href', `#/gallery/${SCENARIO.id}`)
+  })
+
+  it('changes the gallery link target when the selection changes', async () => {
+    const user = userEvent.setup()
+    const other = { id: 'noir', name: 'Noir City', tagline: null, locale: 'en' }
+    mockFetch({ scenarios: () => jsonResponse([SCENARIO, other]), sessions: () => jsonResponse([]) })
+    render(<SessionsScreen />)
+
+    const link = await screen.findByRole('link', { name: t('sessions.galleryLink') })
+    expect(link).toHaveAttribute('href', `#/gallery/${SCENARIO.id}`)
+
+    const select = screen.getByLabelText(t('sessions.new.scenarioLabel'))
+    await user.selectOptions(select, other.id)
+
+    expect(await screen.findByRole('link', { name: t('sessions.galleryLink') })).toHaveAttribute('href', `#/gallery/${other.id}`)
+  })
+
+  it('does not render the gallery link when the scenario list is empty', async () => {
+    mockFetch({ scenarios: () => jsonResponse([]), sessions: () => jsonResponse([]) })
+    render(<SessionsScreen />)
+
+    await screen.findByText(t('sessions.empty.title'))
+    expect(screen.queryByRole('link', { name: t('sessions.galleryLink') })).toBeNull()
+  })
+
+  it('keeps the gallery link outside the session form', async () => {
+    mockFetch({ scenarios: () => jsonResponse([SCENARIO]), sessions: () => jsonResponse([]) })
+    render(<SessionsScreen />)
+
+    const link = await screen.findByRole('link', { name: t('sessions.galleryLink') })
+    const form = document.querySelector('form') as HTMLFormElement
+    expect(within(form).queryByRole('link', { name: t('sessions.galleryLink') })).toBeNull()
+    expect(document.body.contains(link)).toBe(true)
+  })
+
   it('shows coherent relative time for now and three days ago', async () => {
     const now = new Date().toISOString()
     const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
