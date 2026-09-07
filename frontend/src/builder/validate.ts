@@ -365,7 +365,30 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
         )
       }
     })
+
+    const maxDelta = stat.max_delta
+    if (maxDelta != null) {
+      if (maxDelta < 1) {
+        errors.push(
+          error('stats', `stats.${i}.max_delta`, withStat(t('builder.stats.maxDelta')), t('builder.validate.maxDeltaPositive')),
+        )
+      } else if (rangeOk && maxDelta > stat.max - stat.min) {
+        errors.push(
+          error(
+            'stats',
+            `stats.${i}.max_delta`,
+            withStat(t('builder.stats.maxDelta')),
+            t('builder.validate.maxDeltaSpan', { span: stat.max - stat.min }),
+          ),
+        )
+      }
+    }
   })
+
+  const dynamicStatsCap = draft.meta.max_dynamic_stats
+  if (draft.meta.allow_dynamic_stats && dynamicStatsCap != null && dynamicStatsCap < 1) {
+    errors.push(error('stats', 'meta.max_dynamic_stats', t('builder.stats.maxDynamic'), t('builder.validate.maxDynamicPositive')))
+  }
 
   const lorebookIds = Object.keys(draft.lorebook)
   for (const loreId of lorebookIds) {

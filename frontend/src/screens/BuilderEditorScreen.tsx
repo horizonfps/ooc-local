@@ -60,8 +60,13 @@ function draftOf(doc: ScenarioDocument): BuilderDraft {
 function slice(tab: BuilderTab, draft: BuilderDraft): unknown {
   switch (tab) {
     case 'identity': {
-      const { world_mode: _worldMode, default_start: _defaultStart, allow_dynamic_stats: _allowDynamicStats, ...identityMeta } =
-        draft.meta
+      const {
+        world_mode: _worldMode,
+        default_start: _defaultStart,
+        allow_dynamic_stats: _allowDynamicStats,
+        max_dynamic_stats: _maxDynamicStats,
+        ...identityMeta
+      } = draft.meta
       return identityMeta
     }
     case 'world':
@@ -71,7 +76,7 @@ function slice(tab: BuilderTab, draft: BuilderDraft): unknown {
     case 'characters':
       return draft.characters
     case 'stats':
-      return { stats: draft.stats, allow_dynamic_stats: draft.meta.allow_dynamic_stats }
+      return { stats: draft.stats, allow_dynamic_stats: draft.meta.allow_dynamic_stats, max_dynamic_stats: draft.meta.max_dynamic_stats }
     case 'lorebook':
       return draft.lorebook
     case 'commands':

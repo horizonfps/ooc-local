@@ -253,6 +253,55 @@ describe('validateDraft', () => {
     expect(unnamed.find((e) => e.tab === 'stats' && e.field === 'stats.0.name')?.label.startsWith('rep')).toBe(true)
   })
 
+  it('does not flag a delta cap and dynamic stat limit within range', () => {
+    const errors = validateDraft(
+      draft({
+        stats: [stat({ min: 0, max: 100, max_delta: 100 })],
+        meta: { ...draft().meta, allow_dynamic_stats: true, max_dynamic_stats: 12 },
+      }),
+    )
+    expect(errors.some((e) => e.field === 'stats.0.max_delta')).toBe(false)
+    expect(errors.some((e) => e.field === 'meta.max_dynamic_stats')).toBe(false)
+  })
+
+  it('does not flag an absent or null delta cap', () => {
+    const absent = validateDraft(draft({ stats: [stat({ min: 0, max: 100 })] }))
+    expect(absent.some((e) => e.field === 'stats.0.max_delta')).toBe(false)
+
+    const explicitNull = validateDraft(draft({ stats: [stat({ min: 0, max: 100, max_delta: null })] }))
+    expect(explicitNull.some((e) => e.field === 'stats.0.max_delta')).toBe(false)
+  })
+
+  it('flags a delta cap of zero', () => {
+    const errors = validateDraft(draft({ stats: [stat({ min: 0, max: 100, max_delta: 0 })] }))
+    expect(errors.filter((e) => e.field === 'stats.0.max_delta')).toHaveLength(1)
+    expect(errors.find((e) => e.field === 'stats.0.max_delta')?.tab).toBe('stats')
+  })
+
+  it('flags a delta cap larger than the stat range', () => {
+    const errors = validateDraft(draft({ stats: [stat({ min: 0, max: 100, max_delta: 500 })] }))
+    expect(
+      errors.some(
+        (e) => e.field === 'stats.0.max_delta' && e.message === t('builder.validate.maxDeltaSpan', { span: 100 }),
+      ),
+    ).toBe(true)
+  })
+
+  it('does not stack a delta cap span error when the range itself is broken', () => {
+    const errors = validateDraft(draft({ stats: [stat({ min: 50, max: 10, max_delta: 500 })] }))
+    expect(errors.filter((e) => e.field === 'stats.0.max_delta')).toHaveLength(0)
+    expect(errors.some((e) => e.field === 'stats.0.max')).toBe(true)
+  })
+
+  it('flags a dynamic stats limit of zero only when the toggle is on', () => {
+    const on = validateDraft(draft({ meta: { ...draft().meta, allow_dynamic_stats: true, max_dynamic_stats: 0 } }))
+    expect(on.filter((e) => e.field === 'meta.max_dynamic_stats')).toHaveLength(1)
+    expect(on.find((e) => e.field === 'meta.max_dynamic_stats')?.tab).toBe('stats')
+
+    const off = validateDraft(draft({ meta: { ...draft().meta, allow_dynamic_stats: false, max_dynamic_stats: 0 } }))
+    expect(off.some((e) => e.field === 'meta.max_dynamic_stats')).toBe(false)
+  })
+
   it('does not complain about an empty lorebook', () => {
     const errors = validateDraft(draft({ lorebook: {} }))
     expect(errors.some((e) => e.tab === 'lorebook')).toBe(false)
