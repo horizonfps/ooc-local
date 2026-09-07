@@ -682,36 +682,50 @@ def reopen_session(session_id: str) -> SessionDetail:
 
 
 def rewind_session(session_id: str, turn: int) -> SessionDetail:
-    from app.replay import cut_seq, replay_session
+    """Recomputes the target state and writes the marker in one transaction.
 
-    try:
-        rep = replay_session(session_id)
-    except SessionNotFound:
-        raise
-    except ScenarioNotFound:
-        raise
-
-    if turn > len(rep.turns):
-        emit("rewind_rejected", session_id=session_id, turn=turn, reason="out_of_range")
-        raise RewindTargetNotFound(session_id)
-
-    to_seq = cut_seq(rep, turn)
-    was_ended = is_session_ended(session_id)
-
-    if turn == 0:
-        hud_new = ensure_stats(hud_from_start(rep.start), rep.scenario.stats)
-    else:
-        hud_new = rep.turns[turn - 1].hud_end
-
-    dropped = [event for event in read_events(session_id) if event.seq > to_seq]
-    dropped_events = len(dropped)
-    dropped_turns = len(rep.turns) - turn
-    dropped_achievements = sum(1 for event in dropped if event.kind == ACHIEVEMENT_EVENT_KIND)
+    `BEGIN IMMEDIATE` is taken before the replay is read, not after, so an
+    in-flight turn either finished (and is visible to the replay) or blocks on
+    its own `append_events` transaction until this one commits or rolls back.
+    Without that ordering a turn could land above `to_seq` after the cut was
+    computed and survive the rewind.
+    """
+    from app.replay import InvalidRewindTarget, cut_seq, replay_session
 
     now = _now_iso()
     conn = _connect()
     try:
         conn.execute("BEGIN IMMEDIATE")
+
+        rep = replay_session(session_id)
+        was_ended = is_session_ended(session_id)
+
+        try:
+            to_seq = cut_seq(rep, turn)
+        except InvalidRewindTarget:
+            raise RewindTargetNotFound(session_id) from None
+
+        if turn == 0:
+            hud_new = ensure_stats(hud_from_start(rep.start), rep.scenario.stats)
+        else:
+            hud_new = rep.turns[turn - 1].hud_end
+
+        # The compact vigente at the target: the last `compact` event that
+        # survives the cut, independent of turn boundaries.
+        compact_new: str | None = None
+        compact_seq_new: int | None = None
+        for event in rep.events:
+            if event.seq > to_seq:
+                break
+            if event.kind == "compact":
+                compact_new = event.payload.get("text")
+                compact_seq_new = event.payload.get("to_seq")
+
+        dropped = [event for event in rep.events if event.seq > to_seq]
+        dropped_events = len(dropped)
+        dropped_turns = len(rep.turns) - turn
+        dropped_achievements = sum(1 for event in dropped if event.kind == ACHIEVEMENT_EVENT_KIND)
+
         _append_in_tx(
             conn,
             session_id,
@@ -729,13 +743,21 @@ def rewind_session(session_id: str, turn: int) -> SessionDetail:
             now,
         )
         conn.execute(
-            "UPDATE sessions SET hud = ?, updated_at = ? WHERE id = ?",
-            (hud_new.model_dump_json(), now, session_id),
+            "UPDATE sessions SET hud = ?, compact = ?, compact_seq = ?, updated_at = ? WHERE id = ?",
+            (hud_new.model_dump_json(), compact_new, compact_seq_new, now, session_id),
         )
         conn.commit()
     except sqlite3.Error as exc:
         conn.rollback()
         emit("session_db_error", op="rewind_session", error=str(exc))
+        raise
+    except RewindTargetNotFound:
+        conn.rollback()
+        emit("rewind_rejected", session_id=session_id, turn=turn, reason="out_of_range")
+        raise
+    except (SessionNotFound, ScenarioNotFound):
+        conn.rollback()
+        emit("rewind_rejected", session_id=session_id, turn=turn, reason="not_found")
         raise
     except BaseException:
         conn.rollback()

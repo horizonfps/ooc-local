@@ -130,6 +130,7 @@ class RewindRequest(BaseModel):
 async def rewind_session_route(session_id: str, req: RewindRequest) -> SessionDetail:
     config = load_config()
     if not config.flag("rewind"):
+        emit("rewind_rejected", session_id=session_id, turn=req.turn, reason="disabled")
         raise HTTPException(status_code=503, detail="rewind disabled by flag")
     try:
         return rewind_session(session_id, req.turn)

@@ -280,6 +280,8 @@ def test_discarded_achievement_leaves_session_but_stays_in_gallery(scenarios_roo
 
 
 def test_discarded_compact_stops_being_used(scenarios_root):
+    from app import turn as turn_module
+
     _write_scenario(scenarios_root)
     detail = sessions.create_session("exemplo-escola")
 
@@ -291,8 +293,13 @@ def test_discarded_compact_stops_being_used(scenarios_root):
 
     sessions.rewind_session(detail.id, 1)
 
-    text, _ = sessions.get_compact(detail.id)
-    assert text == "resumo novo"
+    text, compact_seq = sessions.get_compact(detail.id)
+    assert text == "resumo antigo"
+    assert compact_seq == seq_after_first
+
+    # the window the narrator reads: with the discarded compact gone, there is
+    # nothing left to summarize past the surviving turn.
+    assert turn_module.history_events(detail.id, compact_seq) == []
 
 
 def test_cut_seq_at_last_turn_with_trailing_events(scenarios_root):
@@ -315,6 +322,130 @@ def test_cut_seq_at_last_turn_with_trailing_events(scenarios_root):
     cut = replay.cut_seq(rep, 1)
 
     assert cut == all_events[-1].seq
+
+
+def test_cut_seq_drops_a_meta_command_that_happened_after_the_target_turn(scenarios_root):
+    """A `/status`-style command played after turn 1 is discarded by a rewind
+    to turn 1: it happened after the target, so it has nothing to attach to."""
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(detail.id, _turn_events("turno um", "narra um"))
+    sessions.append_events(
+        detail.id,
+        [
+            ("meta_player_turn", {"text": "/status", "command": "status"}),
+            ("meta_narrator_turn", {"text": "status: ok"}),
+        ],
+    )
+    sessions.append_events(detail.id, _turn_events("turno dois", "narra dois"))
+
+    result = sessions.rewind_session(detail.id, 1)
+
+    assert [t.text for t in result.turns] == ["turno um", "narra um"]
+    assert all(not t.meta for t in result.turns)
+
+
+def test_cut_seq_rejects_out_of_range_turn(scenarios_root):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+    sessions.append_events(detail.id, _turn_events("turno um", "narra um"))
+
+    rep = replay.replay_session(detail.id)
+
+    with pytest.raises(replay.InvalidRewindTarget):
+        replay.cut_seq(rep, 2)
+    with pytest.raises(replay.InvalidRewindTarget):
+        replay.cut_seq(rep, -1)
+
+
+def test_rewind_target_cast_minds_and_suggestions_match_the_target_turn(scenarios_root):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(
+        detail.id,
+        _turn_events("turno um", "narra um")
+        + [
+            ("cast", {"ids": ["chloe"], "source": "director"}),
+            (
+                "minds",
+                {"entries": {"chloe": {"attitude": "curiosa", "emoji": "🤔", "event": "turno um"}}},
+            ),
+        ],
+    )
+    sessions.append_events(
+        detail.id,
+        _turn_events("turno dois", "narra dois", mode="say")
+        + [
+            ("cast", {"ids": [], "source": "director"}),
+            ("minds", {"entries": {}}),
+        ],
+    )
+
+    result = sessions.rewind_session(detail.id, 1)
+
+    assert [member.id for member in result.cast] == ["chloe"]
+    assert "chloe" in result.minds
+    assert result.suggestions == []
+
+
+def test_dynamic_stat_created_in_a_discarded_turn_leaves_the_hud(scenarios_root):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(detail.id, _turn_events("turno um", "narra um"))
+    sessions.append_events(
+        detail.id,
+        _turn_events(
+            "turno dois",
+            "narra dois",
+            stats=[
+                (
+                    "stat",
+                    {
+                        "id": "confianca",
+                        "delta": 1,
+                        "value": 1,
+                        "source": "tag",
+                        "name": "Confianca",
+                        "min": 0,
+                        "max": 10,
+                    },
+                )
+            ],
+        ),
+    )
+
+    before = replay.replay_session(detail.id)
+    assert "confianca" in before.turns[1].hud_end.dynamic_stats
+
+    result = sessions.rewind_session(detail.id, 1)
+
+    assert "confianca" not in result.hud.dynamic_stats
+
+
+def test_session_rewound_and_rejected_events_are_emitted(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+    _play_turns(detail.id, 3)
+
+    events: list[tuple[str, dict]] = []
+    monkeypatch.setattr(sessions, "emit", lambda name, **props: events.append((name, props)))
+
+    sessions.rewind_session(detail.id, 2)
+
+    rewound = [props for name, props in events if name == "session_rewound"]
+    assert len(rewound) == 1
+    assert rewound[0]["turn"] == 2
+    assert rewound[0]["dropped_turns"] == 1
+
+    events.clear()
+    with pytest.raises(sessions.RewindTargetNotFound):
+        sessions.rewind_session(detail.id, 99)
+
+    rejected = [props for name, props in events if name == "rewind_rejected"]
+    assert rejected == [{"session_id": detail.id, "turn": 99, "reason": "out_of_range"}]
 
 
 def test_rewind_out_of_range_is_409(scenarios_root):

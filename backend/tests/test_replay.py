@@ -653,3 +653,7 @@ def test_rewind_to_seq_mid_turn_drops_the_whole_incomplete_group(scenarios_root)
     result = replay.replay_session(detail.id)
 
     assert [snapshot.message for snapshot in result.turns] == ["turno um"]
+    # the incomplete group discarded by the cut is always the tail of the
+    # filtered stream, so it can never come before a surviving turn and taint
+    # its already-recorded `exact`.
+    assert result.turns[0].exact is True
