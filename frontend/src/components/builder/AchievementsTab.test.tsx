@@ -5,8 +5,24 @@ import { describe, expect, it } from 'vitest'
 import { AchievementsTab } from './AchievementsTab'
 import { validateDraft } from '../../builder/validate'
 import type { BuilderDraft } from '../../screens/BuilderEditorScreen'
-import type { AchievementDoc, StartDoc, StatGateDoc } from '../../api'
+import type { AchievementDoc, StartDoc, StatDef, StatGateDoc } from '../../api'
 import { t } from '../../i18n'
+
+function stat(overrides: Partial<StatDef> = {}): StatDef {
+  return {
+    id: 'reputacao',
+    name: 'Reputação',
+    icon: null,
+    color: null,
+    min: -100,
+    max: 100,
+    default: 0,
+    description: null,
+    levels: [],
+    max_delta: null,
+    ...overrides,
+  }
+}
 
 function achievement(overrides: Partial<AchievementDoc> = {}): AchievementDoc {
   return {
@@ -38,7 +54,7 @@ function start(overrides: Partial<StartDoc> = {}): StartDoc {
   }
 }
 
-function baseDraft(starts: Record<string, StartDoc> = { default: start() }): BuilderDraft {
+function baseDraft(starts: Record<string, StartDoc> = { default: start() }, stats: StatDef[] = []): BuilderDraft {
   return {
     meta: {
       name: 'The School',
@@ -53,7 +69,7 @@ function baseDraft(starts: Record<string, StartDoc> = { default: start() }): Bui
     world: 'A dusty old school.',
     starts,
     characters: {},
-    stats: [],
+    stats,
     lorebook: {},
     commands: [],
   }
@@ -162,13 +178,150 @@ describe('AchievementsTab', () => {
     expect(startsDebug().default.achievements?.[0].stat_gates).toEqual(gates)
   })
 
-  it('renders no gate controls', () => {
-    const gates: StatGateDoc[] = [{ id: 'rep', at_least: 5 }]
-    render(<Harness initial={baseDraft({ default: start({ achievements: [achievement({ stat_gates: gates })] }) })} />)
+  it('adds a gate, edits its stat and value, then removes it', async () => {
+    const user = userEvent.setup()
+    render(
+      <Harness
+        initial={baseDraft({ default: start({ achievements: [achievement()] }) }, [stat(), stat({ id: 'coragem', name: 'Coragem' })])}
+      />,
+    )
 
-    const detail = document.querySelector('.builder-achievements-detail') as HTMLElement
-    expect(detail.textContent).not.toContain('rep')
-    expect(detail.textContent?.toLowerCase()).not.toContain('at_least')
+    await user.click(screen.getByRole('button', { name: t('builder.achievements.gates.add') }))
+    let gate = startsDebug().default.achievements?.[0].stat_gates?.[0]
+    expect(gate).toEqual({ id: 'reputacao', at_least: 0 })
+    await waitFor(() => {
+      expect(document.getElementById('builder-field-achievements.default.0.stat_gates.0.id')).toBe(document.activeElement)
+    })
+
+    const select = screen.getByLabelText(t('builder.achievements.gates.stat')) as HTMLSelectElement
+    await user.selectOptions(select, 'coragem')
+    gate = startsDebug().default.achievements?.[0].stat_gates?.[0]
+    expect(gate?.id).toBe('coragem')
+
+    const atLeast = screen.getByLabelText(t('builder.achievements.gates.atLeast'))
+    fireEvent.change(atLeast, { target: { value: '50' } })
+    gate = startsDebug().default.achievements?.[0].stat_gates?.[0]
+    expect(gate?.at_least).toBe(50)
+
+    await user.click(screen.getByRole('button', { name: t('builder.achievements.gates.remove.title', { id: 'coragem' }) }))
+    expect(startsDebug().default.achievements?.[0].stat_gates).toEqual([])
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: t('builder.achievements.gates.add') })).toBe(document.activeElement)
+    })
+  })
+
+  it('supports two gates on the same entry', () => {
+    const gates: StatGateDoc[] = [
+      { id: 'reputacao', at_least: 10 },
+      { id: 'coragem', at_least: -5 },
+    ]
+    render(
+      <Harness
+        initial={baseDraft({ default: start({ achievements: [achievement({ stat_gates: gates })] }) }, [
+          stat(),
+          stat({ id: 'coragem', name: 'Coragem' }),
+        ])}
+      />,
+    )
+
+    expect(startsDebug().default.achievements?.[0].stat_gates).toEqual(gates)
+    const atLeastInputs = screen.getAllByLabelText(t('builder.achievements.gates.atLeast'))
+    expect(atLeastInputs).toHaveLength(2)
+  })
+
+  it('accepts a negative at_least value', () => {
+    render(
+      <Harness
+        initial={baseDraft({ default: start({ achievements: [achievement({ stat_gates: [{ id: 'reputacao', at_least: 0 }] })] }) }, [
+          stat(),
+        ])}
+      />,
+    )
+
+    const atLeast = screen.getByLabelText(t('builder.achievements.gates.atLeast'))
+    fireEvent.change(atLeast, { target: { value: '-5' } })
+    expect(startsDebug().default.achievements?.[0].stat_gates?.[0].at_least).toBe(-5)
+  })
+
+  it('removing a middle gate focuses the row that took its place, and removing the last focuses add', async () => {
+    const user = userEvent.setup()
+    const gates: StatGateDoc[] = [
+      { id: 'reputacao', at_least: 1 },
+      { id: 'coragem', at_least: 2 },
+    ]
+    render(
+      <Harness
+        initial={baseDraft({ default: start({ achievements: [achievement({ stat_gates: gates })] }) }, [
+          stat(),
+          stat({ id: 'coragem', name: 'Coragem' }),
+        ])}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: t('builder.achievements.gates.remove.title', { id: 'reputacao' }) }))
+    await waitFor(() => {
+      expect(document.getElementById('builder-field-achievements.default.0.stat_gates.0.id')).toBe(document.activeElement)
+    })
+
+    await user.click(screen.getByRole('button', { name: t('builder.achievements.gates.remove.title', { id: 'coragem' }) }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: t('builder.achievements.gates.add') })).toBe(document.activeElement)
+    })
+  })
+
+  it('scenario without stats disables the add button, shows the hint, and still renders an orphan gate', () => {
+    const gates: StatGateDoc[] = [{ id: 'rep', at_least: 5 }]
+    render(<Harness initial={baseDraft({ default: start({ achievements: [achievement({ stat_gates: gates })] }) }, [])} />)
+
+    expect(screen.getByRole('button', { name: t('builder.achievements.gates.add') })).toBeDisabled()
+    expect(screen.getByText(t('builder.achievements.gates.noStats'))).toBeInTheDocument()
+    const select = screen.getByLabelText(t('builder.achievements.gates.stat')) as HTMLSelectElement
+    expect(select.value).toBe('rep')
+  })
+
+  it('pending text for a gate in one start is not shared with the same position in another start', async () => {
+    render(
+      <Harness
+        initial={baseDraft(
+          {
+            default: start({ achievements: [achievement({ id: 'a1', stat_gates: [{ id: 'reputacao', at_least: 1 }] })] }),
+            other: start({
+              id: 'other',
+              name: 'Other start',
+              achievements: [achievement({ id: 'b1', stat_gates: [{ id: 'reputacao', at_least: 2 }] })],
+            }),
+          },
+          [stat()],
+        )}
+      />,
+    )
+
+    const atLeast = screen.getByLabelText(t('builder.achievements.gates.atLeast'))
+    fireEvent.change(atLeast, { target: { value: 'abc' } })
+    expect(screen.getByText(t('builder.validate.integerRequired'))).toBeInTheDocument()
+
+    await userEvent.setup().selectOptions(screen.getByLabelText(t('builder.achievements.startLabel')), 'other')
+    expect(screen.queryByText(t('builder.validate.integerRequired'))).not.toBeInTheDocument()
+    const otherAtLeast = screen.getByLabelText(t('builder.achievements.gates.atLeast')) as HTMLInputElement
+    expect(otherAtLeast.value).toBe('2')
+  })
+
+  it('clearing at_least renders integerRequired from the component and keeps the draft unchanged', () => {
+    render(
+      <Harness
+        initial={baseDraft({ default: start({ achievements: [achievement({ stat_gates: [{ id: 'reputacao', at_least: 5 }] })] }) }, [
+          stat(),
+        ])}
+      />,
+    )
+
+    const atLeast = screen.getByLabelText(t('builder.achievements.gates.atLeast'))
+    fireEvent.change(atLeast, { target: { value: '' } })
+
+    const message = screen.getByText(t('builder.validate.integerRequired'))
+    expect(message).toHaveAttribute('role', 'alert')
+    expect(atLeast.getAttribute('aria-describedby')).toContain(message.id)
+    expect(startsDebug().default.achievements?.[0].stat_gates?.[0].at_least).toBe(5)
   })
 
   it('shows the empty state when the start has no achievements', () => {

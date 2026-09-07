@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { TabProps } from '../../screens/BuilderEditorScreen'
-import type { AchievementDoc, StartDoc } from '../../api'
+import type { AchievementDoc, StartDoc, StatGateDoc } from '../../api'
 import { t } from '../../i18n'
 import { EmptyState } from '../EmptyState'
 import '../../screens/builderEditor.css'
@@ -58,6 +58,41 @@ function OptionalIntegerField(props: {
   )
 }
 
+function RequiredIntegerField(props: {
+  id: string
+  label: string
+  value: number
+  pending: string | undefined
+  error: string | null
+  onChangeRaw: (raw: string) => void
+  onBlur: () => void
+}) {
+  const { id, label, value, pending, error, onChangeRaw, onBlur } = props
+  const message = pending !== undefined ? t('builder.validate.integerRequired') : error
+  const errorId = `${id}-error`
+  return (
+    <div className="builder-field">
+      <label htmlFor={id}>{label}</label>
+      <input
+        id={id}
+        type="number"
+        step={1}
+        inputMode="numeric"
+        value={pending ?? String(value)}
+        onChange={(e) => onChangeRaw(e.target.value)}
+        onBlur={onBlur}
+        aria-invalid={message ? 'true' : undefined}
+        aria-describedby={message ? errorId : undefined}
+      />
+      {message ? (
+        <p role="alert" id={errorId} className="field-error">
+          {message}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 function firstErrorStartId(errors: TabProps['errors']): string | null {
   const withError = errors.find((e) => e.tab === 'achievements')
   if (!withError) return null
@@ -86,8 +121,10 @@ export function AchievementsTab(props: TabProps) {
     return withError >= 0 ? withError : 0
   })
   const [announcement, setAnnouncement] = useState('')
+  const [pendingNumbers, setPendingNumbers] = useState<Record<string, string>>({})
 
   const createTriggerRef = useRef<HTMLButtonElement>(null)
+  const addGateButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (selectedIndex > entries.length - 1) {
@@ -115,6 +152,63 @@ export function AchievementsTab(props: TabProps) {
 
   function updateEntry(index: number, patch: Partial<AchievementDoc>) {
     updateStart({ achievements: entries.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)) })
+  }
+
+  function updateGate(entryIndex: number, gateIndex: number, patch: Partial<StatGateDoc>) {
+    const entry = entries[entryIndex]
+    const stat_gates = entry.stat_gates.map((gate, j) => (j === gateIndex ? { ...gate, ...patch } : gate))
+    updateEntry(entryIndex, { stat_gates })
+  }
+
+  function commitNumber(field: string, raw: string, commit: (n: number) => void) {
+    if (/^-?\d+$/.test(raw)) {
+      commit(Number(raw))
+      setPendingNumbers((prev) => {
+        if (!(field in prev)) return prev
+        const next = { ...prev }
+        delete next[field]
+        return next
+      })
+    } else {
+      setPendingNumbers((prev) => ({ ...prev, [field]: raw }))
+    }
+  }
+
+  function clearPending(field: string) {
+    setPendingNumbers((prev) => {
+      if (!(field in prev)) return prev
+      const next = { ...prev }
+      delete next[field]
+      return next
+    })
+  }
+
+  function addGate() {
+    const entry = entries[selectedIndex]
+    const firstStatId = draft.stats[0]?.id ?? ''
+    const newIndex = entry.stat_gates.length
+    updateEntry(selectedIndex, { stat_gates: [...entry.stat_gates, { id: firstStatId, at_least: 0 }] })
+    requestAnimationFrame(() => {
+      document
+        .getElementById(`builder-field-achievements.${selectedStartId}.${selectedIndex}.stat_gates.${newIndex}.id`)
+        ?.focus()
+    })
+  }
+
+  function removeGate(gateIndex: number) {
+    const entry = entries[selectedIndex]
+    const nextGates = entry.stat_gates.filter((_, j) => j !== gateIndex)
+    updateEntry(selectedIndex, { stat_gates: nextGates })
+    requestAnimationFrame(() => {
+      if (nextGates.length === 0) {
+        addGateButtonRef.current?.focus()
+        return
+      }
+      const focusIndex = gateIndex < nextGates.length ? gateIndex : nextGates.length - 1
+      document
+        .getElementById(`builder-field-achievements.${selectedStartId}.${selectedIndex}.stat_gates.${focusIndex}.id`)
+        ?.focus()
+    })
   }
 
   function selectStart(startId: string) {
@@ -407,6 +501,56 @@ export function AchievementsTab(props: TabProps) {
                 error={fieldError(`achievements.${selectedStartId}.${selectedIndex}.min_turn`)}
                 onChange={(value) => updateEntry(selectedIndex, { min_turn: value })}
               />
+
+              <fieldset className="builder-field builder-achievements-gates">
+                <legend>{t('builder.achievements.gates')}</legend>
+                <p className="field-hint">{t('builder.achievements.gates.hint')}</p>
+                {draft.stats.length === 0 ? <p className="field-hint">{t('builder.achievements.gates.noStats')}</p> : null}
+                {selectedEntry.stat_gates.map((gate, j) => {
+                  const idField = `achievements.${selectedStartId}.${selectedIndex}.stat_gates.${j}.id`
+                  const atLeastField = `achievements.${selectedStartId}.${selectedIndex}.stat_gates.${j}.at_least`
+                  return (
+                    <div className="builder-achievements-gateRow" key={j}>
+                      <div className="builder-field">
+                        <label htmlFor={`builder-field-${idField}`}>{t('builder.achievements.gates.stat')}</label>
+                        <select
+                          id={`builder-field-${idField}`}
+                          value={gate.id}
+                          onChange={(e) => updateGate(selectedIndex, j, { id: e.target.value })}
+                        >
+                          {draft.stats.some((stat) => stat.id === gate.id) ? null : (
+                            <option value={gate.id}>{gate.id}</option>
+                          )}
+                          {draft.stats.map((stat) => (
+                            <option key={stat.id} value={stat.id}>
+                              {stat.name.trim() || stat.id}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <RequiredIntegerField
+                        id={`builder-field-${atLeastField}`}
+                        label={t('builder.achievements.gates.atLeast')}
+                        value={gate.at_least}
+                        pending={pendingNumbers[atLeastField]}
+                        error={fieldError(atLeastField)}
+                        onChangeRaw={(raw) => commitNumber(atLeastField, raw, (n) => updateGate(selectedIndex, j, { at_least: n }))}
+                        onBlur={() => clearPending(atLeastField)}
+                      />
+                      <button
+                        type="button"
+                        aria-label={t('builder.achievements.gates.remove.title', { id: gate.id })}
+                        onClick={() => removeGate(j)}
+                      >
+                        {t('common.remove')}
+                      </button>
+                    </div>
+                  )
+                })}
+                <button type="button" ref={addGateButtonRef} onClick={addGate} disabled={draft.stats.length === 0}>
+                  {t('builder.achievements.gates.add')}
+                </button>
+              </fieldset>
             </div>
           ) : null}
         </div>

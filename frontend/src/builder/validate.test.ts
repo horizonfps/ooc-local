@@ -495,4 +495,88 @@ describe('validateDraft', () => {
     const absentErrors = validateDraft(draft({ starts: { default: { ...draft().starts.default, achievements: undefined } } }))
     expect(absentErrors.some((e) => e.tab === 'achievements')).toBe(false)
   })
+
+  it('flags a gate pointing to a stat that does not exist', () => {
+    const errors = validateDraft(
+      draft({
+        stats: [],
+        starts: {
+          default: {
+            ...draft().starts.default,
+            achievements: [achievement({ stat_gates: [{ id: 'rep', at_least: 5 }] })],
+          },
+        },
+      }),
+    )
+    const gateErrors = errors.filter((e) => e.tab === 'achievements' && e.field === 'achievements.default.0.stat_gates.0.id')
+    expect(gateErrors).toHaveLength(1)
+    expect(gateErrors[0].message).toBe(t('builder.validate.gateUnknownStat', { id: 'rep' }))
+  })
+
+  it('flags two gates for the same stat on the same entry', () => {
+    const errors = validateDraft(
+      draft({
+        stats: [stat({ id: 'rep' })],
+        starts: {
+          default: {
+            ...draft().starts.default,
+            achievements: [
+              achievement({
+                stat_gates: [
+                  { id: 'rep', at_least: 5 },
+                  { id: 'rep', at_least: 10 },
+                ],
+              }),
+            ],
+          },
+        },
+      }),
+    )
+    expect(errors.some((e) => e.field === 'achievements.default.0.stat_gates.0.id')).toBe(false)
+    const dupeErrors = errors.filter((e) => e.field === 'achievements.default.0.stat_gates.1.id')
+    expect(dupeErrors).toHaveLength(1)
+    expect(dupeErrors[0].message).toBe(t('builder.validate.gateDuplicate', { id: 'rep' }))
+  })
+
+  it('does not stack an unknown-stat error with a duplicate error on the same line', () => {
+    const errors = validateDraft(
+      draft({
+        stats: [],
+        starts: {
+          default: {
+            ...draft().starts.default,
+            achievements: [
+              achievement({
+                stat_gates: [
+                  { id: 'rep', at_least: 5 },
+                  { id: 'rep', at_least: 10 },
+                ],
+              }),
+            ],
+          },
+        },
+      }),
+    )
+    const line1Errors = errors.filter((e) => e.field === 'achievements.default.0.stat_gates.1.id')
+    expect(line1Errors).toHaveLength(1)
+    expect(line1Errors[0].message).toBe(t('builder.validate.gateUnknownStat', { id: 'rep' }))
+  })
+
+  it('does not flag two different achievements gating the same stat', () => {
+    const errors = validateDraft(
+      draft({
+        stats: [stat({ id: 'rep' })],
+        starts: {
+          default: {
+            ...draft().starts.default,
+            achievements: [
+              achievement({ id: 'a1', stat_gates: [{ id: 'rep', at_least: 5 }] }),
+              achievement({ id: 'a2', stat_gates: [{ id: 'rep', at_least: 10 }] }),
+            ],
+          },
+        },
+      }),
+    )
+    expect(errors.some((e) => e.tab === 'achievements')).toBe(false)
+  })
 })

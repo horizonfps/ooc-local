@@ -502,6 +502,15 @@ export const builderEn = {
   'builder.achievements.minTurn.hint': 'Nothing is judged before this turn. Empty means no gate.',
   'builder.validate.achievementIdTaken': '{slug} is already used in this start.',
   'builder.validate.minTurnPositive': 'The minimum turn must be 1 or greater. Leave it empty for no gate.',
+  'builder.achievements.gates': 'Stat gates',
+  'builder.achievements.gates.hint': 'Checked by the engine before the model is asked. All of them must pass.',
+  'builder.achievements.gates.add': 'Add gate',
+  'builder.achievements.gates.stat': 'Stat',
+  'builder.achievements.gates.atLeast': 'At least',
+  'builder.achievements.gates.remove.title': 'Remove the gate on {id}',
+  'builder.achievements.gates.noStats': 'This scenario has no stats yet. Declare one in the Stats tab to gate by value.',
+  'builder.validate.gateUnknownStat': 'There is no stat with the id {id}.',
+  'builder.validate.gateDuplicate': 'There is already a gate for {id}.',
 
   // Builder media tab
   'builder.media.heading': 'Media',
@@ -1047,6 +1056,15 @@ export const builderPtBr: Record<keyof typeof builderEn, string> = {
   'builder.achievements.minTurn.hint': 'Nada é julgado antes deste turno. Vazio significa sem trava.',
   'builder.validate.achievementIdTaken': '{slug} já está em uso neste começo.',
   'builder.validate.minTurnPositive': 'O turno mínimo precisa ser 1 ou maior. Deixe vazio para não ter trava.',
+  'builder.achievements.gates': 'Travas de atributo',
+  'builder.achievements.gates.hint': 'Aferidas pelo engine antes de perguntar ao modelo. Todas precisam passar.',
+  'builder.achievements.gates.add': 'Adicionar trava',
+  'builder.achievements.gates.stat': 'Atributo',
+  'builder.achievements.gates.atLeast': 'No mínimo',
+  'builder.achievements.gates.remove.title': 'Remover a trava de {id}',
+  'builder.achievements.gates.noStats': 'Este cenário ainda não tem atributos. Declare um na aba Atributos para travar por valor.',
+  'builder.validate.gateUnknownStat': 'Não existe atributo com o id {id}.',
+  'builder.validate.gateDuplicate': 'Já existe uma trava para {id}.',
 
   // Builder media tab
   'builder.media.heading': 'Mídia',

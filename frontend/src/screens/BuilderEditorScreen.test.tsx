@@ -592,6 +592,7 @@ describe('BuilderEditorScreen', () => {
     const achievementB = { id: 'b1', name: 'From B', type: 'ending', rarity: 'rare', hint: 'psst', condition: 'y', min_turn: 3, stat_gates: [{ id: 'rep', at_least: 5 }] }
     const doc = {
       ...DOCUMENT,
+      stats: [{ id: 'rep', name: 'Rep', icon: null, color: null, min: 0, max: 100, default: 50, description: null, levels: [] }],
       starts: {
         default: { ...DOCUMENT.starts.default, achievements: [achievementA] },
         other: { ...DOCUMENT.starts.default, id: 'other', name: 'Other start', achievements: [achievementB] },
