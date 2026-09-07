@@ -238,6 +238,41 @@ def test_put_identical_document_does_not_change_revision_or_mtime(client, scenar
     assert (scenario_dir / "characters" / "chloe.yaml").stat().st_mtime_ns == char_before
 
 
+ACHIEVEMENT_START = """\
+name: Começo
+prologue: prologo com acentuação
+opening_scene: cena
+suggestions: []
+hud:
+  location: patio
+  time: 08:00
+  weather: clear
+achievements:
+- id: primeira-alianca
+  name: Escolhi um lado
+  type: achievement
+  rarity: common
+  condition: cond
+"""
+
+
+def test_put_identical_document_with_achievement_present_leaves_file_byte_identical(
+    client, scenarios_root
+):
+    scenario_dir = _write_scenario(scenarios_root, "exemplo-escola", starts={"default.yaml": ACHIEVEMENT_START})
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+    assert doc["starts"]["default"]["achievements"][0]["id"] == "primeira-alianca"
+
+    before = (scenario_dir / "starts" / "default.yaml").read_bytes()
+    mtime_before = (scenario_dir / "starts" / "default.yaml").stat().st_mtime_ns
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 200
+    assert (scenario_dir / "starts" / "default.yaml").read_bytes() == before
+    assert (scenario_dir / "starts" / "default.yaml").stat().st_mtime_ns == mtime_before
+
+
 def test_put_identical_document_with_dynamic_stat_fields_leaves_files_byte_identical(
     client, scenarios_root
 ):
@@ -683,3 +718,173 @@ def test_put_os_replace_failure_returns_500_and_emits_event(client, scenarios_ro
     assert response.status_code == 500
     assert response.json()["detail"] == "write failed"
     assert any(event == "builder_doc_write_failed" for event, _ in events)
+
+
+def test_put_with_achievements_writes_block_in_canonical_key_order(client, scenarios_root):
+    scenario_dir = _write_scenario(scenarios_root, "exemplo-escola")
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+
+    doc["starts"]["default"]["achievements"] = [
+        {
+            "id": "primeira-alianca",
+            "name": "Escolhi um lado",
+            "type": "achievement",
+            "rarity": "rare",
+            "hint": "uma dica",
+            "condition": "cond",
+            "min_turn": 4,
+            "stat_gates": [{"id": "reputacao", "at_least": 50}],
+        }
+    ]
+    doc["stats"] = [
+        {
+            "id": "reputacao",
+            "name": "Reputação",
+            "icon": None,
+            "color": None,
+            "min": 0,
+            "max": 100,
+            "default": 50,
+            "description": None,
+            "levels": [],
+        }
+    ]
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 200
+    text = (scenario_dir / "starts" / "default.yaml").read_text(encoding="utf-8")
+    achievements_start = text.index("achievements:")
+    block = text[achievements_start:]
+    positions = [block.index(f"{key}:") for key in ("id", "name", "type", "rarity", "hint", "condition", "min_turn", "stat_gates")]
+    assert positions == sorted(positions)
+
+    reread = client.get("/api/builder/scenarios/exemplo-escola").json()
+    achievements = reread["starts"]["default"]["achievements"]
+    assert achievements[0]["id"] == "primeira-alianca"
+    assert achievements[0]["stat_gates"][0]["id"] == "reputacao"
+
+
+def test_put_with_achievement_without_optionals_omits_hint_min_turn_and_stat_gates(
+    client, scenarios_root
+):
+    scenario_dir = _write_scenario(scenarios_root, "exemplo-escola")
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+
+    doc["starts"]["default"]["achievements"] = [
+        {
+            "id": "sem-opcionais",
+            "name": "Sem opcionais",
+            "type": "achievement",
+            "rarity": "common",
+            "hint": None,
+            "condition": "cond",
+            "min_turn": None,
+            "stat_gates": [],
+        }
+    ]
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 200
+    text = (scenario_dir / "starts" / "default.yaml").read_text(encoding="utf-8")
+    block = text[text.index("achievements:") :]
+    assert "hint:" not in block
+    assert "min_turn:" not in block
+    assert "stat_gates:" not in block
+
+
+def test_put_without_achievements_does_not_write_key_and_roundtrip_is_byte_identical(
+    client, scenarios_root
+):
+    scenario_dir = _write_scenario(scenarios_root, "exemplo-escola")
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+
+    before = (scenario_dir / "starts" / "default.yaml").read_bytes()
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 200
+    text = (scenario_dir / "starts" / "default.yaml").read_text(encoding="utf-8")
+    assert "achievements" not in text
+    assert (scenario_dir / "starts" / "default.yaml").read_bytes() == before
+
+
+def test_put_with_duplicate_achievement_id_returns_422_list_detail_and_writes_nothing(
+    client, scenarios_root
+):
+    scenario_dir = _write_scenario(scenarios_root, "exemplo-escola")
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+    before = (scenario_dir / "starts" / "default.yaml").read_bytes()
+
+    achievement = {
+        "id": "dup",
+        "name": "A",
+        "type": "achievement",
+        "rarity": "common",
+        "hint": None,
+        "condition": "cond",
+        "min_turn": None,
+        "stat_gates": [],
+    }
+    doc["starts"]["default"]["achievements"] = [achievement, dict(achievement)]
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert isinstance(detail, list)
+    assert all("loc" in item and "msg" in item for item in detail)
+    assert (scenario_dir / "starts" / "default.yaml").read_bytes() == before
+
+
+def test_put_with_achievement_min_turn_zero_returns_422_list_detail(client, scenarios_root):
+    scenario_dir = _write_scenario(scenarios_root, "exemplo-escola")
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+    before = (scenario_dir / "starts" / "default.yaml").read_bytes()
+
+    doc["starts"]["default"]["achievements"] = [
+        {
+            "id": "a",
+            "name": "A",
+            "type": "achievement",
+            "rarity": "common",
+            "hint": None,
+            "condition": "cond",
+            "min_turn": 0,
+            "stat_gates": [],
+        }
+    ]
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 422
+    assert isinstance(response.json()["detail"], list)
+    assert (scenario_dir / "starts" / "default.yaml").read_bytes() == before
+
+
+def test_put_with_achievement_gate_unknown_stat_returns_422_string_detail(client, scenarios_root):
+    scenario_dir = _write_scenario(scenarios_root, "exemplo-escola")
+    doc = client.get("/api/builder/scenarios/exemplo-escola").json()
+    before = (scenario_dir / "starts" / "default.yaml").read_bytes()
+
+    doc["starts"]["default"]["achievements"] = [
+        {
+            "id": "a",
+            "name": "A",
+            "type": "achievement",
+            "rarity": "common",
+            "hint": None,
+            "condition": "cond",
+            "min_turn": None,
+            "stat_gates": [{"id": "fantasma", "at_least": 1}],
+        }
+    ]
+
+    response = client.put("/api/builder/scenarios/exemplo-escola", json=doc)
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert isinstance(detail, str)
+    assert detail.startswith("1 erro(s):")
+    assert (scenario_dir / "starts" / "default.yaml").read_bytes() == before

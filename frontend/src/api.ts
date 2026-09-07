@@ -148,6 +148,18 @@ export type CommandDoc = { name: string; description: string; prompt: string }
 
 export type HudDefaults = { location: string; time: string; weather: string }
 
+export type StatGateDoc = { id: string; at_least: number }
+export type AchievementDoc = {
+  id: string
+  name: string
+  type: 'achievement' | 'ending'
+  rarity: 'common' | 'rare' | 'epic' | 'legendary'
+  hint: string | null
+  condition: string
+  min_turn: number | null
+  stat_gates: StatGateDoc[]
+}
+
 export type StartDoc = {
   id: string
   name: string
@@ -158,6 +170,7 @@ export type StartDoc = {
   play_guide: string | null
   suggestions: string[]
   hud: HudDefaults
+  achievements?: AchievementDoc[]
   characters: string[] | null
 }
 

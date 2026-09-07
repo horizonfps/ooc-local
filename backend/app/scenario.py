@@ -89,6 +89,52 @@ class HudDefaults(BaseModel):
         return validate_weather(value)
 
 
+_ACHIEVEMENT_ID_RE = re.compile(r"^[a-z0-9-]+$")
+
+
+class StatGate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    at_least: int
+
+
+class AchievementDef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+    type: Literal["achievement", "ending"]
+    rarity: Literal["common", "rare", "epic", "legendary"] = "common"
+    hint: str | None = None
+    condition: str
+    min_turn: int | None = Field(default=None, ge=1)
+    stat_gates: list[StatGate] = []
+
+    @field_validator("id")
+    @classmethod
+    def _validate_id(cls, value: str) -> str:
+        if not _ACHIEVEMENT_ID_RE.match(value):
+            raise ValueError(f"invalid achievement id '{value}', expected [a-z0-9-]+")
+        return value
+
+    @field_validator("name", "condition")
+    @classmethod
+    def _validate_required_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be empty")
+        return value
+
+    @field_validator("hint")
+    @classmethod
+    def _validate_hint(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
+
 class StartConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -101,6 +147,7 @@ class StartConfig(BaseModel):
     play_guide: str | None = None
     suggestions: list[str] = []
     hud: HudDefaults
+    achievements: list[AchievementDef] = []
     characters: list[str] | None = None
 
     @field_validator("conflict", "mission")
@@ -110,6 +157,15 @@ class StartConfig(BaseModel):
             return None
         value = value.strip()
         return value or None
+
+    @model_validator(mode="after")
+    def _unique_achievement_ids(self) -> "StartConfig":
+        seen: set[str] = set()
+        for achievement in self.achievements:
+            if achievement.id in seen:
+                raise ValueError(f"duplicate achievement id '{achievement.id}'")
+            seen.add(achievement.id)
+        return self
 
 
 _STAT_ID_RE = re.compile(r"^[a-z0-9_-]+$")
@@ -421,6 +477,7 @@ def load_scenario(scenario_id: str) -> LoadedScenario:
     lorebook = _load_lorebook(scenario_dir)
     commands = _load_commands(scenario_dir)
 
+    declared_stat_ids = {stat.id for stat in stats}
     for start in starts.values():
         if start.characters is not None:
             unknown = [char_id for char_id in start.characters if char_id not in characters]
@@ -429,6 +486,17 @@ def load_scenario(scenario_id: str) -> LoadedScenario:
                     scenario_dir / "starts" / f"{start.id}.yaml",
                     f"unknown character ids: {unknown}",
                 )
+        unknown_gates = [
+            gate.id
+            for achievement in start.achievements
+            for gate in achievement.stat_gates
+            if gate.id not in declared_stat_ids
+        ]
+        if unknown_gates:
+            raise ScenarioError(
+                scenario_dir / "starts" / f"{start.id}.yaml",
+                f"unknown stat ids in achievement gates: {unknown_gates}",
+            )
 
     if meta.default_start not in starts:
         raise ScenarioError(

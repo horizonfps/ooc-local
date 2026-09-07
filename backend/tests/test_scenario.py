@@ -638,3 +638,220 @@ def test_scenario_path_traversal_raises(monkeypatch, tmp_path, scenario_id):
         assert False, "expected ScenarioError"
     except ScenarioError:
         pass
+
+
+ACHIEVEMENT_START = DEFAULT_START + """\
+achievements:
+  - id: primeira-alianca
+    name: Escolhi um lado
+    type: achievement
+    condition: O jogador se comprometeu publicamente.
+  - id: caderno-queimado
+    name: Ninguém mais lê isso
+    type: ending
+    rarity: legendary
+    condition: O caderno foi destruído.
+"""
+
+
+def test_achievements_happy_path_loads_in_order_with_defaults(monkeypatch, tmp_path):
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": ACHIEVEMENT_START})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+    achievements = scenario.starts["default"].achievements
+
+    assert [a.id for a in achievements] == ["primeira-alianca", "caderno-queimado"]
+    assert achievements[0].type == "achievement"
+    assert achievements[0].rarity == "common"
+    assert achievements[0].hint is None
+    assert achievements[0].min_turn is None
+    assert achievements[1].type == "ending"
+    assert achievements[1].rarity == "legendary"
+
+
+def test_achievements_with_stat_gate_declared_stat_loads(monkeypatch, tmp_path):
+    start = DEFAULT_START + """\
+achievements:
+  - id: reputacao-alta
+    name: Reputação alta
+    type: achievement
+    condition: A reputação subiu.
+    min_turn: 1
+    stat_gates:
+      - id: reputacao
+        at_least: 50
+"""
+    scenario_dir = _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start})
+    (scenario_dir / "stats.yaml").write_text(
+        "- id: reputacao\n  name: Reputação\n  max: 100\n  default: 0\n", encoding="utf-8"
+    )
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    gate = scenario.starts["default"].achievements[0].stat_gates[0]
+    assert gate.id == "reputacao"
+    assert gate.at_least == 50
+
+
+def test_achievements_absent_is_empty_list(monkeypatch, tmp_path):
+    _write_scenario(tmp_path, "exemplo-escola")
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.starts["default"].achievements == []
+
+
+def test_achievement_hint_blank_becomes_none(monkeypatch, tmp_path):
+    start = DEFAULT_START + """\
+achievements:
+  - id: a
+    name: A
+    type: achievement
+    condition: cond
+    hint: "   "
+"""
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.starts["default"].achievements[0].hint is None
+
+
+def test_achievement_min_turn_one_loads(monkeypatch, tmp_path):
+    start = DEFAULT_START + """\
+achievements:
+  - id: a
+    name: A
+    type: achievement
+    condition: cond
+    min_turn: 1
+"""
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.starts["default"].achievements[0].min_turn == 1
+
+
+def test_achievement_same_id_in_different_starts_loads(monkeypatch, tmp_path):
+    start_a = DEFAULT_START + """\
+achievements:
+  - id: mesmo-id
+    name: A
+    type: achievement
+    condition: cond
+"""
+    start_b = VILLAIN_START + """\
+achievements:
+  - id: mesmo-id
+    name: B
+    type: ending
+    condition: cond
+"""
+    _write_scenario(
+        tmp_path,
+        "exemplo-escola",
+        starts={"default.yaml": start_a, "rota-vilao.yaml": start_b},
+    )
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+
+    assert scenario.starts["default"].achievements[0].id == "mesmo-id"
+    assert scenario.starts["rota-vilao"].achievements[0].id == "mesmo-id"
+
+
+@pytest.mark.parametrize(
+    "achievement_yaml",
+    [
+        "achievements:\n  - id: a\n    name: A\n    condition: cond\n",
+        "achievements:\n  - id: a\n    name: A\n    type: achievement\n    condition: '   '\n",
+        "achievements:\n  - id: a\n    name: '   '\n    type: achievement\n    condition: cond\n",
+        "achievements:\n  - id: a\n    name: A\n    type: achievement\n    rarity: mitica\n    condition: cond\n",
+        "achievements:\n  - id: a\n    name: A\n    type: achievement\n    condition: cond\n    min_turn: 0\n",
+        "achievements:\n  - id: A_id\n    name: A\n    type: achievement\n    condition: cond\n",
+        "achievements:\n  - id: conquista-ção\n    name: A\n    type: achievement\n    condition: cond\n",
+        "achievements:\n  - id: 'conquista id'\n    name: A\n    type: achievement\n    condition: cond\n",
+    ],
+)
+def test_achievement_invalid_fields_raise(monkeypatch, tmp_path, achievement_yaml):
+    start = DEFAULT_START + achievement_yaml
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    try:
+        load_scenario("exemplo-escola")
+        assert False, "expected ScenarioError"
+    except ScenarioError:
+        pass
+
+
+def test_achievement_duplicate_id_in_same_start_raises(monkeypatch, tmp_path):
+    start = DEFAULT_START + """\
+achievements:
+  - id: dup
+    name: A
+    type: achievement
+    condition: cond
+  - id: dup
+    name: B
+    type: ending
+    condition: cond2
+"""
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    try:
+        load_scenario("exemplo-escola")
+        assert False, "expected ScenarioError"
+    except ScenarioError as exc:
+        assert "dup" in exc.reason
+
+
+def test_achievement_stat_gate_unknown_stat_raises(monkeypatch, tmp_path):
+    start = DEFAULT_START + """\
+achievements:
+  - id: a
+    name: A
+    type: achievement
+    condition: cond
+    stat_gates:
+      - id: fantasma
+        at_least: 1
+"""
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    try:
+        load_scenario("exemplo-escola")
+        assert False, "expected ScenarioError"
+    except ScenarioError as exc:
+        assert "fantasma" in exc.reason
+
+
+def test_achievement_stat_gate_broken_scenario_skipped_from_list_and_emits(monkeypatch, tmp_path):
+    start = DEFAULT_START + """\
+achievements:
+  - id: a
+    name: A
+    type: achievement
+    condition: cond
+    stat_gates:
+      - id: fantasma
+        at_least: 1
+"""
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    events = []
+    monkeypatch.setattr("app.scenario.emit", lambda event, **props: events.append((event, props)))
+
+    result = list_scenarios()
+
+    assert result == []
+    assert events and events[0][0] == "scenario_invalid"
