@@ -228,6 +228,18 @@ async def _maybe_compact(
     return messages, error
 
 
+def _utility_model(config: Config) -> str | None:
+    role = config.models.get("utility")
+    return role.model if role is not None else None
+
+
+def _utility_structured(config: Config) -> bool:
+    role = config.models.get("utility")
+    if role is None:
+        return False
+    return config.providers[role.provider].structured_output == "json_schema"
+
+
 async def run_turn(
     session_id: str,
     message: str,
@@ -373,6 +385,7 @@ async def run_turn(
                     turn=ctx.row.hud.turn,
                     error=str(exc),
                     duration_ms=int((time.monotonic() - director_started) * 1000),
+                    model=_utility_model(config),
                 )
             except Exception as exc:  # defensive: local providers return creative garbage
                 emit(
@@ -381,6 +394,7 @@ async def run_turn(
                     turn=ctx.row.hud.turn,
                     error=str(exc),
                     duration_ms=int((time.monotonic() - director_started) * 1000),
+                    model=_utility_model(config),
                 )
             if decision is not None:
                 ids, reason, raw = decision
@@ -404,7 +418,8 @@ async def run_turn(
                         added=[char_id for char_id in ids if char_id not in before],
                         removed=[char_id for char_id in before if char_id not in ids],
                         duration_ms=director_duration_ms,
-                        model=config.models["utility"].model,
+                        model=_utility_model(config),
+                        structured=_utility_structured(config),
                     )
                 else:
                     emit(
@@ -415,6 +430,8 @@ async def run_turn(
                         raw=raw[:DIRECTOR_RAW_LOG_CHARS],
                         kept=ctx.cast_ids,
                         duration_ms=director_duration_ms,
+                        model=_utility_model(config),
+                        structured=_utility_structured(config),
                     )
 
         prompt_message = format_player_message(message, mode, ctx.scenario.meta.locale)
@@ -497,6 +514,7 @@ async def run_turn(
                     turn=new_hud.turn,
                     error=str(exc),
                     duration_ms=int((time.monotonic() - judge_started) * 1000),
+                    model=_utility_model(config),
                 )
             except Exception as exc:  # defensive: local providers return creative garbage
                 emit(
@@ -505,6 +523,7 @@ async def run_turn(
                     turn=new_hud.turn,
                     error=str(exc),
                     duration_ms=int((time.monotonic() - judge_started) * 1000),
+                    model=_utility_model(config),
                 )
             else:
                 judge_duration_ms = int((time.monotonic() - judge_started) * 1000)
@@ -529,7 +548,8 @@ async def run_turn(
                             {"id": rejection.id, "reason": rejection.reason} for rejection in rejections
                         ],
                         duration_ms=judge_duration_ms,
-                        model=config.models["utility"].model,
+                        model=_utility_model(config),
+                        structured=_utility_structured(config),
                     )
                 else:
                     emit(
@@ -539,6 +559,8 @@ async def run_turn(
                         reason=judge_reason,
                         raw=judge_raw[:JUDGE_RAW_LOG_CHARS],
                         duration_ms=judge_duration_ms,
+                        model=_utility_model(config),
+                        structured=_utility_structured(config),
                     )
 
         if config.flag("minds"):
@@ -554,6 +576,7 @@ async def run_turn(
                     turn=new_hud.turn,
                     error=str(exc),
                     duration_ms=int((time.monotonic() - minds_started) * 1000),
+                    model=_utility_model(config),
                 )
             except Exception as exc:  # defensive: local providers return creative garbage
                 emit(
@@ -562,6 +585,7 @@ async def run_turn(
                     turn=new_hud.turn,
                     error=str(exc),
                     duration_ms=int((time.monotonic() - minds_started) * 1000),
+                    model=_utility_model(config),
                 )
             else:
                 minds_duration_ms = int((time.monotonic() - minds_started) * 1000)
@@ -586,7 +610,8 @@ async def run_turn(
                             {"id": rejection.id, "reason": rejection.reason} for rejection in rejections
                         ],
                         duration_ms=minds_duration_ms,
-                        model=config.models["utility"].model,
+                        model=_utility_model(config),
+                        structured=_utility_structured(config),
                     )
                 else:
                     emit(
@@ -596,6 +621,8 @@ async def run_turn(
                         reason=minds_reason,
                         raw=minds_raw[:MINDS_RAW_LOG_CHARS],
                         duration_ms=minds_duration_ms,
+                        model=_utility_model(config),
+                        structured=_utility_structured(config),
                     )
 
         stat_change_count = len(stat_events)

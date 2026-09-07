@@ -6,6 +6,7 @@ from app.director import (
     DIRECTOR_OPTIONS,
     DIRECTOR_WINDOW_TURNS,
     DirectorError,
+    SceneResponse,
     build_director_messages,
     decide_scene,
     parse_scene,
@@ -96,10 +97,10 @@ def _hud() -> HudState:
     return HudState(turn=3, location="patio", time="09:30", weather="cloudy")
 
 
-def _config():
+def _config(structured_output="none"):
     return Config.model_validate(
         {
-            "providers": {"local": {"base_url": "http://x/v1"}},
+            "providers": {"local": {"base_url": "http://x/v1", "structured_output": structured_output}},
             "models": {"utility": {"provider": "local", "model": "m"}},
         }
     )
@@ -394,3 +395,46 @@ def test_build_director_messages_flattens_pipes_and_newlines_in_cast_line(monkey
     cast_line = next(line for line in body.split("\n") if line.startswith("chloe |"))
 
     assert cast_line == "chloe | Chloe | aluna do / clube | tier 2"
+
+
+# --- schema ----------------------------------------------------------------
+
+
+def test_director_options_schema_describes_scene_list_of_str():
+    schema = DIRECTOR_OPTIONS.json_schema
+    assert schema["properties"]["scene"]["items"]["type"] == "string"
+    assert schema["properties"]["scene"]["type"] == "array"
+
+
+def test_scene_response_schema_is_strict_compatible():
+    schema = SceneResponse.model_json_schema()
+    assert schema["additionalProperties"] is False
+    assert schema["required"] == ["scene"]
+
+
+def test_decide_scene_payload_carries_schema_when_structured_output_enabled(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+    captured = {}
+    original_init = OpenAICompatProvider.__init__
+
+    def spy_init(self, provider_config, options):
+        original_init(self, provider_config, options)
+        captured["provider"] = self
+
+    monkeypatch.setattr(OpenAICompatProvider, "__init__", spy_init)
+
+    _decide_with_response(scenario, monkeypatch, '{"scene": []}', config=_config("json_schema"))
+
+    payload = captured["provider"].build_payload([], "m")
+    assert payload["response_format"]["json_schema"]["name"] == "scene"
+
+
+def test_decide_scene_prose_response_is_still_rejected_with_schema_declared(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+
+    ids, reason, _ = _decide_with_response(
+        scenario, monkeypatch, "claro, chloe está na cena", config=_config("json_schema")
+    )
+
+    assert ids is None
+    assert reason == "invalid_json"

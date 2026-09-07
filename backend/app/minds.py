@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.cast import MindView
 from app.config import Config
@@ -10,7 +10,30 @@ from app.llm.base import ChatMessage, GenerationOptions
 from app.llm.openai_compat import OpenAICompatProvider
 from app.scenario import LoadedScenario
 
-MINDS_OPTIONS = GenerationOptions(max_tokens=300, temperature=0.2, timeout_s=45.0)
+
+class MindEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    attitude: str
+    emoji: str
+    event: str
+
+
+class MindsResponse(BaseModel):
+    entries: dict[str, MindEntry] = {}
+
+
+MINDS_SCHEMA = {
+    "type": "object",
+    "additionalProperties": MindEntry.model_json_schema(),
+}
+MINDS_OPTIONS = GenerationOptions(
+    max_tokens=300,
+    temperature=0.2,
+    timeout_s=45.0,
+    json_schema=MINDS_SCHEMA,
+    schema_name="minds",
+)
 MIND_FIELD_CHARS = 120
 EMOJI_CHARS = 4
 MIND_FIELDS = ("attitude", "emoji", "event")

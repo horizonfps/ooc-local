@@ -68,14 +68,24 @@ def _write_scenario(root, scenario_id="exemplo-escola", *, allow_dynamic_stats=F
     return scenario_path
 
 
-def _config(flags=None, allow_dynamic_stats=False):
+def _config(flags=None, allow_dynamic_stats=False, structured_output="none"):
     return Config.model_validate(
         {
-            "providers": {"local": {"base_url": "http://x/v1"}},
+            "providers": {"local": {"base_url": "http://x/v1", "structured_output": structured_output}},
             "models": {
                 "narrator": {"provider": "local", "model": "narrator-model"},
                 "utility": {"provider": "local", "model": "utility-model"},
             },
+            "flags": {"director": False, **(flags or {})},
+        }
+    )
+
+
+def _config_without_utility(flags=None):
+    return Config.model_validate(
+        {
+            "providers": {"local": {"base_url": "http://x/v1"}},
+            "models": {"narrator": {"provider": "local", "model": "narrator-model"}},
             "flags": {"director": False, **(flags or {})},
         }
     )
@@ -107,9 +117,18 @@ def _stream_events(response) -> list[dict]:
     return events
 
 
-def _setup(scenarios_root, monkeypatch, *, flags=None, allow_dynamic_stats=False, stats=STATS_YAML):
+def _setup(
+    scenarios_root,
+    monkeypatch,
+    *,
+    flags=None,
+    allow_dynamic_stats=False,
+    stats=STATS_YAML,
+    structured_output="none",
+    config=None,
+):
     _write_scenario(scenarios_root, allow_dynamic_stats=allow_dynamic_stats, stats=stats)
-    config = _config(flags, allow_dynamic_stats)
+    config = config or _config(flags, allow_dynamic_stats, structured_output)
     monkeypatch.setattr(main, "load_config", lambda: config)
     monkeypatch.setattr(turn, "load_config", lambda: config)
     return TestClient(main.app)
@@ -439,3 +458,93 @@ def test_judge_stat_event_carries_dynamic_definition():
                                "name": "Confiança", "min": 0, "max": 20}
     assert dynamic_kind == getattr(hud.dynamic_stats["confianca"], "kind", None)
     assert declared_payload == {"id": "reputacao", "delta": 3, "value": 43, "source": "judge"}
+
+
+# --- structured output telemetry ----------------------------------------------
+
+
+def test_structured_output_enabled_marks_judge_and_minds_applied(scenarios_root, monkeypatch):
+    client = _setup(scenarios_root, monkeypatch, structured_output="json_schema")
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    monkeypatch.setattr(
+        OpenAICompatProvider,
+        "stream_chat",
+        _route_by_model(["voce conversa com a Chloe."], '{"stats": {"reputacao": -5}}'),
+    )
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
+
+    _turn(client, session["id"])
+
+    applied = [props for name, props in emitted if name == "judge_applied"]
+    assert applied[0]["structured"] is True
+    assert applied[0]["model"] == "utility-model"
+
+    minds_applied = [props for name, props in emitted if name == "minds_applied"]
+    assert minds_applied[0]["structured"] is True
+    assert minds_applied[0]["model"] == "utility-model"
+
+
+def test_structured_output_disabled_by_default_marks_applied_events(scenarios_root, monkeypatch):
+    client = _setup(scenarios_root, monkeypatch)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    monkeypatch.setattr(
+        OpenAICompatProvider,
+        "stream_chat",
+        _route_by_model(["voce conversa com a Chloe."], '{"stats": {"reputacao": -5}}'),
+    )
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
+
+    _turn(client, session["id"])
+
+    applied = [props for name, props in emitted if name == "judge_applied"]
+    assert applied[0]["structured"] is False
+    assert applied[0]["model"] == "utility-model"
+
+    minds_applied = [props for name, props in emitted if name == "minds_applied"]
+    assert minds_applied[0]["structured"] is False
+
+
+def test_judge_rejected_carries_model_and_structured(scenarios_root, monkeypatch):
+    client = _setup(scenarios_root, monkeypatch, flags={"minds": False}, structured_output="json_schema")
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            yield "isso nao e json"
+        else:
+            yield "voce continua."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
+
+    _turn(client, session["id"])
+
+    rejected = [props for name, props in emitted if name == "judge_rejected"]
+    assert rejected[0]["model"] == "utility-model"
+    assert rejected[0]["structured"] is True
+
+
+def test_config_without_utility_role_fails_gracefully_with_model_none(scenarios_root, monkeypatch):
+    client = _setup(scenarios_root, monkeypatch, config=_config_without_utility())
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    async def fake_stream(self, messages, model):
+        yield "voce continua."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
+
+    events = _turn(client, session["id"])
+
+    assert events[-1]["hud"]["turn"] == 1
+
+    judge_failed = [props for name, props in emitted if name == "judge_failed"]
+    minds_failed = [props for name, props in emitted if name == "minds_failed"]
+    assert judge_failed[0]["model"] is None
+    assert minds_failed[0]["model"] is None

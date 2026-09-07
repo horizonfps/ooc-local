@@ -8,7 +8,10 @@ from app.judge import (
     DYNAMIC_STAT_NAME_CHARS,
     JUDGE_NARRATOR_CHARS,
     JUDGE_OPTIONS,
+    JUDGE_OPTIONS_DYNAMIC,
     JudgeError,
+    JudgementDynamicResponse,
+    JudgementResponse,
     StatChange,
     StatRejection,
     apply_judgement,
@@ -134,10 +137,10 @@ def _hud(**overrides) -> HudState:
     return HudState(**base)
 
 
-def _config():
+def _config(structured_output="none"):
     return Config.model_validate(
         {
-            "providers": {"local": {"base_url": "http://x/v1"}},
+            "providers": {"local": {"base_url": "http://x/v1", "structured_output": structured_output}},
             "models": {"utility": {"provider": "local", "model": "m"}},
         }
     )
@@ -792,3 +795,76 @@ def test_judge_options_tokens_temperature_timeout():
     assert JUDGE_OPTIONS.max_tokens == 200
     assert JUDGE_OPTIONS.temperature == 0.1
     assert JUDGE_OPTIONS.timeout_s == 45.0
+
+
+# --- schemas -------------------------------------------------------------------
+
+
+def test_judge_options_schema_has_no_new_field():
+    assert "new" not in JUDGE_OPTIONS.json_schema["properties"]
+    assert "stats" in JUDGE_OPTIONS.json_schema["properties"]
+
+
+def test_judge_options_dynamic_schema_has_new_field():
+    assert "new" in JUDGE_OPTIONS_DYNAMIC.json_schema["properties"]
+    assert "stats" in JUDGE_OPTIONS_DYNAMIC.json_schema["properties"]
+
+
+def test_judgement_schemas_are_strict_compatible():
+    for schema in (
+        JudgementResponse.model_json_schema(),
+        JudgementDynamicResponse.model_json_schema(),
+    ):
+        assert schema["additionalProperties"] is False
+
+
+def test_judge_turn_dynamic_scenario_builds_provider_with_dynamic_options(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path, allow_dynamic_stats=True)
+    captured = {}
+    original_init = OpenAICompatProvider.__init__
+
+    def spy_init(self, provider_config, options):
+        captured["options"] = options
+        original_init(self, provider_config, options)
+
+    monkeypatch.setattr(OpenAICompatProvider, "__init__", spy_init)
+
+    _judge_with_response(scenario, monkeypatch, '{"stats": {}}')
+
+    assert captured["options"] is JUDGE_OPTIONS_DYNAMIC
+
+
+def test_judge_turn_payload_carries_schema_when_structured_output_enabled(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+    captured = {}
+    original_init = OpenAICompatProvider.__init__
+
+    def spy_init(self, provider_config, options):
+        original_init(self, provider_config, options)
+        captured["provider"] = self
+
+    monkeypatch.setattr(OpenAICompatProvider, "__init__", spy_init)
+
+    _judge_with_response(scenario, monkeypatch, '{"stats": {}}', config=_config("json_schema"))
+
+    payload = captured["provider"].build_payload([], "m")
+    assert payload["response_format"]["json_schema"]["name"] == "judgement"
+
+
+def test_judge_turn_payload_has_no_response_format_when_structured_output_disabled(
+    monkeypatch, tmp_path
+):
+    scenario = _load(monkeypatch, tmp_path)
+    captured = {}
+    original_init = OpenAICompatProvider.__init__
+
+    def spy_init(self, provider_config, options):
+        original_init(self, provider_config, options)
+        captured["provider"] = self
+
+    monkeypatch.setattr(OpenAICompatProvider, "__init__", spy_init)
+
+    _judge_with_response(scenario, monkeypatch, '{"stats": {}}', config=_config("none"))
+
+    payload = captured["provider"].build_payload([], "m")
+    assert "response_format" not in payload
