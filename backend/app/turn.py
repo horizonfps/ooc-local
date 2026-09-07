@@ -248,6 +248,11 @@ def _utility_model(config: Config) -> str | None:
     return role.model if role is not None else None
 
 
+def _narrator_model(config: Config) -> str | None:
+    role = config.models.get("narrator")
+    return role.model if role is not None else None
+
+
 def _utility_structured(config: Config) -> bool:
     role = config.models.get("utility")
     if role is None:
@@ -709,7 +714,10 @@ async def run_turn(
                                     milestone_text, _ = parse_tags(raw_milestone)
                                     milestone_text, _ = strip_engine_echo(milestone_text)
                                     milestone_text = milestone_text.strip()
-                                    text = milestone_text or None
+                                    if milestone_text:
+                                        text = milestone_text
+                                    else:
+                                        milestone_error = "empty milestone after cleanup"
                                 except EpilogueError as exc:
                                     milestone_error = str(exc)
                                 emit(
@@ -720,7 +728,7 @@ async def run_turn(
                                     achievement_id=achievement.id,
                                     chars=len(text) if text else 0,
                                     duration_ms=int((time.monotonic() - milestone_started) * 1000),
-                                    model=_utility_model(config),
+                                    model=_narrator_model(config),
                                     error=milestone_error,
                                 )
                             view = UnlockedView(
@@ -773,7 +781,7 @@ async def run_turn(
                                 achievement_id=ending.id,
                                 chars=len(ending_text) if ending_text else 0,
                                 duration_ms=int((time.monotonic() - ending_started) * 1000),
-                                model=_utility_model(config),
+                                model=_narrator_model(config),
                                 error=ending_error,
                             )
                             if ending_text is not None:

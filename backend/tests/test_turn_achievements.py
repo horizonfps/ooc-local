@@ -307,9 +307,19 @@ def test_ending_grants_epilogue_and_locks_session(scenarios_root, monkeypatch):
             ['{"verdicts": [{"id": "marco-e-final", "met": true}, {"id": "final-feliz", "met": true}]}'],
         ),
     )
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
+    append_calls = []
+    original_append_events = turn.append_events
+    monkeypatch.setattr(
+        turn,
+        "append_events",
+        lambda *args, **kwargs: (append_calls.append((args, kwargs)), original_append_events(*args, **kwargs))[1],
+    )
 
     _turn(client, session["id"])
     _turn(client, session["id"])
+    append_calls.clear()
     status, events = _turn(client, session["id"])
     assert status == 200
 
@@ -323,9 +333,34 @@ def test_ending_grants_epilogue_and_locks_session(scenarios_root, monkeypatch):
     assert achievements_payload[1]["type"] == "ending"
     assert events[ended_idx]["ended"]["achievementId"] == "final-feliz"
 
-    stored_kinds = [e.kind for e in sessions.read_events(session["id"])]
+    # The achievement, ending and session_ended events must land in the same
+    # append_events call as `hud`; splitting it reopens a replay inconsistency window.
+    post_block_calls = [
+        call for call in append_calls
+        if any(kind in ("achievement", "session_ended") for kind, _ in call[0][1])
+    ]
+    assert len(post_block_calls) == 1
+    call_args, call_kwargs = post_block_calls[0]
+    recorded_kinds = [kind for kind, _ in call_args[1]]
+    assert recorded_kinds.count("achievement") == 2
+    assert "session_ended" in recorded_kinds
+    assert call_kwargs.get("hud") is not None
+
+    stored = sessions.read_events(session["id"])
+    stored_kinds = [e.kind for e in stored]
     assert stored_kinds.count("achievement") == 2
     assert stored_kinds.index("session_ended") == len(stored_kinds) - 1
+
+    achievement_events = [e for e in stored if e.kind == "achievement"]
+    assert achievement_events[0].payload["id"] == "marco-e-final"
+    assert achievement_events[1].payload["id"] == "final-feliz"
+    assert achievement_events[0].seq < achievement_events[1].seq
+
+    written = [props for name, props in emitted if name == "epilogue_written"]
+    assert {props["kind"]: props["model"] for props in written} == {
+        "milestone": "narrator-model",
+        "ending": "narrator-model",
+    }
 
     status2, _ = _turn(client, session["id"])
     assert status2 == 409
@@ -361,6 +396,7 @@ def test_epilogue_error_does_not_end_session(scenarios_root, monkeypatch):
 
     written = [props for name, props in emitted if name == "epilogue_written" and props["kind"] == "ending"]
     assert written[0]["error"] is not None
+    assert written[0]["model"] == "narrator-model"
 
     status2, _ = _turn(client, session["id"])
     assert status2 == 200
@@ -431,6 +467,8 @@ def test_milestone_failure_records_event_without_text(scenarios_root, monkeypatc
         yield "turno normal"
 
     monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
 
     _turn(client, session["id"])
     _turn(client, session["id"])
@@ -440,6 +478,42 @@ def test_milestone_failure_records_event_without_text(scenarios_root, monkeypatc
     stored = [e for e in sessions.read_events(session["id"]) if e.kind == "achievement"]
     assert len(stored) == 1
     assert "text" not in stored[0].payload
+
+    written = [props for name, props in emitted if name == "epilogue_written" and props["kind"] == "milestone"]
+    assert written[0]["error"] is not None
+    assert written[0]["model"] == "narrator-model"
+
+
+def test_milestone_empty_after_cleanup_is_treated_as_failure(scenarios_root, monkeypatch):
+    client = _setup(scenarios_root, monkeypatch)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    monkeypatch.setattr(
+        OpenAICompatProvider,
+        "stream_chat",
+        _route(
+            ["t1", "t2", "t3", "[LOC:sala]"],
+            ['{"verdicts": [{"id": "primeira-descoberta", "met": true}]}'],
+        ),
+    )
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
+
+    _turn(client, session["id"])
+    _turn(client, session["id"])
+    status, events = _turn(client, session["id"])
+    assert status == 200
+
+    stored = [e for e in sessions.read_events(session["id"]) if e.kind == "achievement"]
+    assert len(stored) == 1
+    assert "text" not in stored[0].payload
+
+    hud_event = next(e for e in events if "hud" in e)
+    assert hud_event["hud"]["location"] == "patio"
+
+    written = [props for name, props in emitted if name == "epilogue_written" and props["kind"] == "milestone"]
+    assert written[0]["error"] is not None
+    assert written[0]["chars"] == 0
 
 
 def test_three_achievements_cap_milestone_calls(scenarios_root, monkeypatch):
@@ -574,22 +648,40 @@ def test_command_turn_never_checks_even_at_threshold(scenarios_root, monkeypatch
     session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
     session_id = session["id"]
 
+    utility_calls = []
+
     async def fake_stream(self, messages, model):
-        yield "turno normal"
+        if model == "utility-model":
+            utility_calls.append(messages)
+            yield '{"verdicts": [{"id": "primeira-descoberta", "met": true}]}'
+        else:
+            yield "turno normal"
 
     monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
 
+    # Three normal turns bring hud.turn to the check threshold. min_turn (3) makes
+    # the achievement eligible, so the third normal turn unlocks it legitimately.
     _turn(client, session_id)
     _turn(client, session_id)
+    _turn(client, session_id)
+    detail = client.get(f"/api/sessions/{session_id}").json()
+    assert detail["hud"]["turn"] == 3
+    utility_calls.clear()
+    stored_before = [e for e in sessions.read_events(session_id) if e.kind == "achievement"]
 
     emitted = []
     monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
     status, events = _turn(client, session_id, message="/diary")
     assert status == 200
 
+    # Command turns don't call `advance`, so hud.turn stays at the threshold,
+    # yet the command path returns before the achievement block: no check happens.
+    detail_after = client.get(f"/api/sessions/{session_id}").json()
+    assert detail_after["hud"]["turn"] == 3
+    assert utility_calls == []
     assert [name for name, _ in emitted if name.startswith("achievements_")] == []
-    stored = [e for e in sessions.read_events(session_id) if e.kind == "achievement"]
-    assert stored == []
+    stored_after = [e for e in sessions.read_events(session_id) if e.kind == "achievement"]
+    assert stored_after == stored_before
 
 
 def test_prose_from_utility_rejects_and_writes_nothing(scenarios_root, monkeypatch):
