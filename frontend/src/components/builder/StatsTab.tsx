@@ -12,7 +12,7 @@ function nextSuggestedStatId(existing: readonly string[]): string {
 }
 
 function newStat(id: string): StatDef {
-  return { id, name: '', icon: null, color: null, min: 0, max: 100, default: 50, description: null, levels: [] }
+  return { id, name: '', icon: null, color: null, min: 0, max: 100, default: 50, description: null, levels: [], max_delta: null }
 }
 
 function IntegerField(props: {
@@ -52,6 +52,50 @@ function IntegerField(props: {
       {message ? (
         <p role="alert" id={errorId} className="field-error">
           {message}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+function OptionalIntegerField(props: {
+  id: string
+  label: string
+  hint: string
+  hintId: string
+  value: number | null
+  error: string | null
+  onChange: (value: number | null) => void
+  className?: string
+}) {
+  const { id, label, hint, hintId, value, error, onChange, className } = props
+  const errorId = `${id}-error`
+  return (
+    <div className={['builder-field', className].filter(Boolean).join(' ')}>
+      <label htmlFor={id}>{label}</label>
+      <input
+        id={id}
+        type="number"
+        step={1}
+        inputMode="numeric"
+        value={value === null ? '' : String(value)}
+        onChange={(e) => {
+          const raw = e.target.value
+          if (raw.trim() === '') {
+            onChange(null)
+          } else if (/^-?\d+$/.test(raw)) {
+            onChange(Number(raw))
+          }
+        }}
+        aria-invalid={error ? 'true' : undefined}
+        aria-describedby={[error ? errorId : null, hintId].filter(Boolean).join(' ') || undefined}
+      />
+      <p className="field-hint" id={hintId}>
+        {hint}
+      </p>
+      {error ? (
+        <p role="alert" id={errorId} className="field-error">
+          {error}
         </p>
       ) : null}
     </div>
@@ -210,6 +254,18 @@ export function StatsTab(props: TabProps) {
         </label>
         <p className="field-hint">{t('builder.stats.allowDynamic.hint')}</p>
       </div>
+
+      {draft.meta.allow_dynamic_stats ? (
+        <OptionalIntegerField
+          id="builder-field-meta.max_dynamic_stats"
+          label={t('builder.stats.maxDynamic')}
+          hint={t('builder.stats.maxDynamic.hint')}
+          hintId="builder-field-meta.max_dynamic_stats-hint"
+          value={draft.meta.max_dynamic_stats ?? null}
+          error={fieldError('meta.max_dynamic_stats')}
+          onChange={(value) => onChange({ ...draft, meta: { ...draft.meta, max_dynamic_stats: value } })}
+        />
+      ) : null}
 
       {draft.stats.length === 0 ? (
         <EmptyState
@@ -413,6 +469,15 @@ export function StatsTab(props: TabProps) {
                     commitNumber(`stats.${selectedIndex}.default`, raw, (n) => updateStat(selectedIndex, { default: n }))
                   }
                   onBlur={() => clearPending(`stats.${selectedIndex}.default`)}
+                />
+                <OptionalIntegerField
+                  id={`builder-field-stats.${selectedIndex}.max_delta`}
+                  label={t('builder.stats.maxDelta')}
+                  hint={t('builder.stats.maxDelta.hint')}
+                  hintId={`builder-field-stats.${selectedIndex}.max_delta-hint`}
+                  value={selectedStat.max_delta ?? null}
+                  error={fieldError(`stats.${selectedIndex}.max_delta`)}
+                  onChange={(value) => updateStat(selectedIndex, { max_delta: value })}
                 />
               </div>
 

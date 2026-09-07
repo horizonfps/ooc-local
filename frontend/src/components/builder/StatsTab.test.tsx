@@ -64,7 +64,7 @@ function Harness(props: { initial: BuilderDraft }) {
     <>
       <StatsTab scenarioId="school" draft={draft} onChange={setDraft} errors={errors} goToTab={() => {}} />
       <pre data-testid="stats-debug">{JSON.stringify(draft.stats)}</pre>
-      <pre data-testid="dynamic-debug">{String(draft.meta.allow_dynamic_stats)}</pre>
+      <pre data-testid="dynamic-debug">{JSON.stringify(draft.meta)}</pre>
     </>
   )
 }
@@ -130,7 +130,8 @@ describe('StatsTab', () => {
 
     await user.click(screen.getByRole('checkbox', { name: t('builder.stats.allowDynamic') }))
 
-    expect(screen.getByTestId('dynamic-debug').textContent).toBe('true')
+    const meta = JSON.parse(screen.getByTestId('dynamic-debug').textContent ?? '{}')
+    expect(meta.allow_dynamic_stats).toBe(true)
   })
 
   it('shows the empty state with the toggle still visible', () => {
@@ -290,5 +291,58 @@ describe('StatsTab', () => {
     render(<Harness initial={baseDraft([stat({ min: 0, max: 100, levels: [{ from: 200, text: 'x' }] })])} />)
 
     expect(screen.getByText(t('builder.validate.levelFromRange', { min: 0, max: 100 }))).toBeInTheDocument()
+  })
+
+  it('typing the delta cap reflects in the draft and clearing it goes back to null', () => {
+    render(<Harness initial={baseDraft([stat({ max_delta: null })])} />)
+
+    const deltaInput = screen.getByLabelText(t('builder.stats.maxDelta'))
+    fireEvent.change(deltaInput, { target: { value: '500' } })
+    let stats = JSON.parse(screen.getByTestId('stats-debug').textContent ?? '[]')
+    expect(stats[0].max_delta).toBe(500)
+
+    fireEvent.change(deltaInput, { target: { value: '' } })
+    stats = JSON.parse(screen.getByTestId('stats-debug').textContent ?? '[]')
+    expect(stats[0].max_delta).toBeNull()
+  })
+
+  it('typing the dynamic stats limit with the toggle on reflects in the draft', () => {
+    const draft = baseDraft()
+    draft.meta.allow_dynamic_stats = true
+    render(<Harness initial={draft} />)
+
+    fireEvent.change(screen.getByLabelText(t('builder.stats.maxDynamic')), { target: { value: '12' } })
+
+    const meta = JSON.parse(screen.getByTestId('dynamic-debug').textContent ?? '{}')
+    expect(meta.max_dynamic_stats).toBe(12)
+  })
+
+  it('does not render the dynamic stats limit while the toggle is off', () => {
+    render(<Harness initial={baseDraft()} />)
+
+    expect(screen.queryByLabelText(t('builder.stats.maxDynamic'))).toBeNull()
+  })
+
+  it('preserves the dynamic stats limit across toggling off and back on', async () => {
+    const user = userEvent.setup()
+    render(<Harness initial={baseDraft()} />)
+
+    await user.click(screen.getByRole('checkbox', { name: t('builder.stats.allowDynamic') }))
+    fireEvent.change(screen.getByLabelText(t('builder.stats.maxDynamic')), { target: { value: '12' } })
+
+    await user.click(screen.getByRole('checkbox', { name: t('builder.stats.allowDynamic') }))
+    expect(screen.queryByLabelText(t('builder.stats.maxDynamic'))).toBeNull()
+
+    await user.click(screen.getByRole('checkbox', { name: t('builder.stats.allowDynamic') }))
+    expect(screen.getByLabelText(t('builder.stats.maxDynamic'))).toHaveValue(12)
+  })
+
+  it('flags a delta cap of zero with an alert wired by aria-describedby', () => {
+    render(<Harness initial={baseDraft([stat({ max_delta: 0 })])} />)
+
+    const message = screen.getByText(t('builder.validate.maxDeltaPositive'))
+    expect(message).toHaveAttribute('role', 'alert')
+    const deltaInput = screen.getByLabelText(t('builder.stats.maxDelta'))
+    expect(deltaInput.getAttribute('aria-describedby')).toContain(message.id)
   })
 })

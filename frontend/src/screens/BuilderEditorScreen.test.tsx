@@ -457,6 +457,39 @@ describe('BuilderEditorScreen', () => {
     expect(identityTab.className).not.toContain('is-dirty')
   })
 
+  it('marks only the Stats tab dirty when the dynamic stats limit is changed', async () => {
+    mockFetch(() => jsonResponse({ ...DOCUMENT, meta: { ...DOCUMENT.meta, allow_dynamic_stats: true } }))
+    render(<BuilderEditorScreen scenarioId="school" tab="stats" />)
+
+    const tablist = screen.getByRole('tablist', { name: t('builder.editor.tabs.label') })
+    const statsTab = within(tablist).getByRole('tab', { name: t('builder.editor.tab.stats') })
+    const identityTab = within(tablist).getByRole('tab', { name: t('builder.editor.tab.identity') })
+
+    const limitField = await screen.findByLabelText(t('builder.stats.maxDynamic'))
+    fireEvent.change(limitField, { target: { value: '12' } })
+
+    expect(statsTab.className).toContain('is-dirty')
+    expect(identityTab.className).not.toContain('is-dirty')
+  })
+
+  it('lists a zero dynamic stats limit in the validation panel and focuses the field on click', async () => {
+    const user = userEvent.setup()
+    mockFetch(() => jsonResponse({ ...DOCUMENT, meta: { ...DOCUMENT.meta, allow_dynamic_stats: true } }))
+    render(<BuilderEditorScreen scenarioId="school" tab="stats" />)
+
+    const limitField = await screen.findByLabelText(t('builder.stats.maxDynamic'))
+    fireEvent.change(limitField, { target: { value: '0' } })
+
+    await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
+
+    const jumpButton = await screen.findByRole('button', {
+      name: t('builder.editor.validation.jump', { field: t('builder.stats.maxDynamic') }),
+    })
+    await user.click(jumpButton)
+
+    expect(document.getElementById('builder-field-meta.max_dynamic_stats')).toBe(document.activeElement)
+  })
+
   it('shows seven tabs with Lorebook between Stats and Media', async () => {
     mockFetch(() => jsonResponse(DOCUMENT))
     render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
