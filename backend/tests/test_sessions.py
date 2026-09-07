@@ -157,6 +157,16 @@ def test_create_session_happy_path(scenarios_root):
     assert detail.hud.location == "patio"
 
 
+def test_get_session_new_has_no_achievements_and_is_not_ended(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    detail = sessions.create_session("exemplo-escola")
+
+    reopened = sessions.get_session(detail.id)
+
+    assert reopened.achievements == []
+    assert reopened.ended is False
+
+
 def test_create_session_scenario_not_found(scenarios_root):
     with pytest.raises(sessions.ScenarioNotFound):
         sessions.create_session("nao-existe")
@@ -216,6 +226,43 @@ def test_append_events_creates_turn_pair(scenarios_root):
     assert reopened.turns[1].index == 1
     assert reopened.turns[1].role == "narrator"
     assert reopened.turns[1].text == "voce anda"
+
+
+def test_build_turns_milestone_between_normal_turns_preserves_order_and_indices(scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+    detail = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(
+        detail.id,
+        [
+            ("player_turn", {"text": "eu ando"}),
+            ("narrator_turn", {"text": "voce anda"}),
+            (
+                "achievement",
+                {
+                    "id": "marco-1",
+                    "type": "achievement",
+                    "rarity": "rare",
+                    "name": "Marco",
+                    "turn": 1,
+                    "text": "um marco aconteceu",
+                },
+            ),
+        ],
+    )
+    sessions.append_events(
+        detail.id,
+        [("player_turn", {"text": "eu falo"}), ("narrator_turn", {"text": "voce fala"})],
+    )
+
+    reopened = sessions.get_session(detail.id)
+
+    assert [t.role for t in reopened.turns] == ["player", "narrator", "narrator", "player", "narrator"]
+    assert [t.index for t in reopened.turns] == [1, 1, 1, 2, 2]
+    assert reopened.turns[2].kind == "milestone"
+    assert reopened.turns[2].achievement.id == "marco-1"
+    assert reopened.turns[0].kind == "turn"
+    assert reopened.turns[0].achievement is None
 
 
 def test_append_events_updates_hud_and_updated_at(scenarios_root):

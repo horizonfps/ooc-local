@@ -23,6 +23,13 @@ async function detailOf(response: Response): Promise<string | null> {
 
 export type ScenarioSummary = { id: string; name: string; tagline: string | null; locale: string }
 export type HudState = { turn: number; location: string; time: string; weather: string }
+export type UnlockedView = {
+  id: string
+  name: string
+  type: 'achievement' | 'ending'
+  rarity: string
+  turn: number
+}
 export type TurnView = {
   index: number
   role: 'player' | 'narrator'
@@ -31,6 +38,8 @@ export type TurnView = {
   meta?: boolean
   suggestions?: string[]
   command?: string | null
+  kind?: 'turn' | 'milestone' | 'epilogue'
+  achievement?: UnlockedView | null
 }
 export type SessionSummary = {
   id: string
@@ -67,6 +76,8 @@ export type SessionDetail = {
   minds: Record<string, MindView>
   commands: CommandView[]
   suggestions: string[]
+  achievements?: UnlockedView[]
+  ended?: boolean
 }
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
@@ -275,6 +286,10 @@ export async function deleteSession(id: string, opts?: { keepalive?: boolean }):
   if (!response.ok) {
     throw new ApiError(response.status, await detailOf(response))
   }
+}
+
+export function reopenSession(id: string): Promise<SessionDetail> {
+  return request(`/api/sessions/${id}/reopen`, { method: 'POST' })
 }
 
 export type TurnHudPayload = HudState & {
