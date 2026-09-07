@@ -487,3 +487,127 @@ def test_dynamic_stat_event_with_broken_definition_stays_inexact(scenarios_root,
 
     assert result.turns[0].exact is False
     assert result.turns[0].hud_end.dynamic_stats["confianca"].value == 10
+
+
+def _achievement_event(achievement_id, name="Primeira", type_="story", rarity="common", turn=1):
+    return ("achievement", {"id": achievement_id, "name": name, "type": type_, "rarity": rarity, "turn": turn})
+
+
+def test_unlocked_before_progresses_across_turns(scenarios_root):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(detail.id, _turn_events("turno um", "narra um"))
+    sessions.append_events(
+        detail.id,
+        _turn_events("turno dois", "narra dois") + [_achievement_event("primeiro-passo")],
+    )
+    sessions.append_events(detail.id, _turn_events("turno tres", "narra tres"))
+
+    result = replay.replay_session(detail.id)
+
+    assert result.turns[0].unlocked_before == []
+    assert result.turns[1].unlocked_before == []
+    assert result.turns[2].unlocked_before == ["primeiro-passo"]
+
+
+def test_session_replay_unlocked_lists_ids_in_order_without_duplicates(scenarios_root):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(
+        detail.id,
+        _turn_events("turno um", "narra um") + [_achievement_event("a"), _achievement_event("b")],
+    )
+    sessions.append_events(
+        detail.id,
+        _turn_events("turno dois", "narra dois") + [_achievement_event("a")],
+    )
+
+    result = replay.replay_session(detail.id)
+
+    assert result.unlocked == ["a", "b"]
+
+
+def test_session_without_achievements_has_empty_unlocked_and_not_ended(scenarios_root):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(detail.id, _turn_events("turno um", "narra um"))
+
+    result = replay.replay_session(detail.id)
+
+    assert result.unlocked == []
+    assert result.ended is False
+    assert result.turns[0].unlocked_before == []
+
+
+def test_ended_toggles_with_end_and_reopen_events(scenarios_root):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(detail.id, _turn_events("turno um", "narra um"))
+    sessions.append_events(detail.id, [("session_ended", {"turn": 1})])
+    result_ended = replay.replay_session(detail.id)
+    assert result_ended.ended is True
+
+    sessions.append_events(detail.id, [("session_reopened", {"turn": 1})])
+    result_reopened = replay.replay_session(detail.id)
+    assert result_reopened.ended is False
+
+    sessions.append_events(detail.id, [("session_ended", {"turn": 1})])
+    result_ended_again = replay.replay_session(detail.id)
+    assert result_ended_again.ended is True
+
+
+def test_session_reopened_mid_turn_does_not_split_the_turn(scenarios_root):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(
+        detail.id,
+        [
+            ("player_turn", {"text": "eu ando"}),
+            ("session_reopened", {"turn": 1}),
+            ("narrator_turn", {"text": "voce anda"}),
+        ],
+    )
+
+    result = replay.replay_session(detail.id)
+
+    assert len(result.turns) == 1
+    assert result.turns[0].message == "eu ando"
+    assert result.turns[0].narrator_text == "voce anda"
+    assert result.ended is False
+
+
+def test_achievement_with_missing_id_marks_exact_false_on_its_own_turn(scenarios_root):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(
+        detail.id,
+        _turn_events("oi", "ola") + [("achievement", {"name": "sem id"})],
+    )
+    sessions.append_events(detail.id, _turn_events("de novo", "de novo"))
+
+    result = replay.replay_session(detail.id)
+
+    assert result.turns[0].exact is False
+    assert result.turns[1].exact is False
+    assert result.unlocked == []
+
+
+def test_valid_and_malformed_achievement_in_same_turn(scenarios_root):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(
+        detail.id,
+        _turn_events("oi", "ola") + [_achievement_event("valido"), ("achievement", {"name": "sem id"})],
+    )
+
+    result = replay.replay_session(detail.id)
+
+    assert result.turns[0].exact is False
+    assert result.unlocked == ["valido"]

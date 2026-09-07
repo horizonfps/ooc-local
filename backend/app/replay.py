@@ -5,7 +5,15 @@ from pydantic import BaseModel, ValidationError
 from app.cast import MindView, seed_cast_ids
 from app.hud import DynamicStat, HudState, advance, apply_location, ensure_stats, hud_from_start
 from app.scenario import LoadedScenario, ScenarioError, StartConfig, load_scenario
-from app.sessions import Event, ScenarioNotFound, get_session_row, read_events
+from app.sessions import (
+    ACHIEVEMENT_EVENT_KIND,
+    SESSION_ENDED_KIND,
+    SESSION_REOPENED_KIND,
+    Event,
+    ScenarioNotFound,
+    get_session_row,
+    read_events,
+)
 
 
 class TurnSnapshot(BaseModel):
@@ -26,6 +34,7 @@ class TurnSnapshot(BaseModel):
     compact: str | None
     compact_seq: int | None
     exact: bool
+    unlocked_before: list[str]
 
 
 class SessionReplay(BaseModel):
@@ -34,6 +43,8 @@ class SessionReplay(BaseModel):
     start: StartConfig
     locale: str
     turns: list[TurnSnapshot]
+    unlocked: list[str]
+    ended: bool
 
 
 def _apply_stat_event(
@@ -96,12 +107,14 @@ def replay_session(session_id: str) -> SessionReplay:
     compact: str | None = None
     compact_seq: int | None = None
     exact = True
+    unlocked: list[str] = []
+    ended = False
     history: list[Event] = []
     turns: list[TurnSnapshot] = []
     group: list[Event] | None = None
 
     def close_group(group_events: list[Event]) -> None:
-        nonlocal hud, cast_ids, minds, exact
+        nonlocal hud, cast_ids, minds, exact, unlocked
 
         player_event = group_events[0]
         narrator_event = next(
@@ -115,11 +128,13 @@ def replay_session(session_id: str) -> SessionReplay:
         cast_before = cast_ids
         minds_before = minds
         history_before = list(history)
+        unlocked_before = list(unlocked)
 
         tags = [event for event in group_events[1:] if event.kind == "tag"]
         stat_events = [event for event in group_events[1:] if event.kind == "stat"]
         cast_events = [event for event in group_events[1:] if event.kind == "cast"]
         minds_events = [event for event in group_events[1:] if event.kind == "minds"]
+        achievement_events = [event for event in group_events[1:] if event.kind == ACHIEVEMENT_EVENT_KIND]
 
         touched_ids: list[str] = []
         hud_after_tags = advance(hud_start)
@@ -169,6 +184,14 @@ def replay_session(session_id: str) -> SessionReplay:
             else:
                 exact = False
 
+        newly_unlocked: list[str] = []
+        for achievement in achievement_events:
+            achievement_id = achievement.payload.get("id")
+            if not isinstance(achievement_id, str):
+                exact = False
+                continue
+            newly_unlocked.append(achievement_id)
+
         turns.append(
             TurnSnapshot(
                 seq=narrator_event.seq,
@@ -188,6 +211,7 @@ def replay_session(session_id: str) -> SessionReplay:
                 compact=compact,
                 compact_seq=compact_seq,
                 exact=exact,
+                unlocked_before=unlocked_before,
             )
         )
 
@@ -196,6 +220,9 @@ def replay_session(session_id: str) -> SessionReplay:
         hud = hud_end
         cast_ids = cast_after
         minds = minds_after
+        for achievement_id in newly_unlocked:
+            if achievement_id not in unlocked:
+                unlocked.append(achievement_id)
 
     for event in events:
         if event.kind == "compact":
@@ -204,6 +231,9 @@ def replay_session(session_id: str) -> SessionReplay:
                 group = None
             compact = event.payload.get("text")
             compact_seq = event.payload.get("to_seq")
+            continue
+        if event.kind in (SESSION_ENDED_KIND, SESSION_REOPENED_KIND):
+            ended = event.kind == SESSION_ENDED_KIND
             continue
         if event.kind in ("player_turn", "meta_player_turn"):
             if group is not None:
@@ -224,4 +254,6 @@ def replay_session(session_id: str) -> SessionReplay:
         start=start,
         locale=scenario.meta.locale,
         turns=turns,
+        unlocked=unlocked,
+        ended=ended,
     )
