@@ -1048,4 +1048,249 @@ describe('GamePanel', () => {
       expect(screen.getByRole('button', { name: t('common.retry') })).toBeInTheDocument()
     })
   })
+
+  describe('milestones and endings', () => {
+    const milestoneTurn = {
+      index: 1,
+      role: 'narrator' as const,
+      text: 'The bell rings across the yard.',
+      kind: 'milestone' as const,
+      achievement: { id: 'first-bell', name: 'First Bell', type: 'achievement' as const, rarity: 'common', turn: 1 },
+    }
+    const epilogueTurn = {
+      index: 2,
+      role: 'narrator' as const,
+      text: 'And so the story closes.',
+      kind: 'epilogue' as const,
+      achievement: { id: 'good-end', name: 'A Good End', type: 'ending' as const, rarity: 'legendary', turn: 2 },
+    }
+
+    it('renders a milestone and an epilogue block in the history with label, name and rarity', async () => {
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ turns: [milestoneTurn, epilogueTurn] })),
+        post: () => sseResponse(['[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+
+      const milestoneBlock = document.querySelector('.game-unlock--milestone') as HTMLElement
+      expect(milestoneBlock).not.toBeNull()
+      expect(within(milestoneBlock).getByText(t('game.milestone.label'))).toBeInTheDocument()
+      expect(within(milestoneBlock).getByText('First Bell')).toBeInTheDocument()
+      expect(within(milestoneBlock).getByText(t('game.unlock.rarity', { rarity: t('game.rarity.common') }))).toBeInTheDocument()
+      expect(within(milestoneBlock).getByText('The bell rings across the yard.')).toBeInTheDocument()
+
+      const epilogueBlock = document.querySelector('.game-unlock--epilogue') as HTMLElement
+      expect(epilogueBlock).not.toBeNull()
+      expect(within(epilogueBlock).getByText(t('game.ending.label'))).toBeInTheDocument()
+      expect(within(epilogueBlock).getByText('A Good End')).toBeInTheDocument()
+
+      const name = within(epilogueBlock).getByText('A Good End')
+      expect(name).toHaveClass('game-rarity--legendary')
+    })
+
+    it('falls back to common for an unknown rarity without breaking the render', async () => {
+      const weirdTurn = { ...milestoneTurn, achievement: { ...milestoneTurn.achievement, rarity: 'mythic' } }
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ turns: [weirdTurn] })),
+        post: () => sseResponse(['[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const block = document.querySelector('.game-unlock--milestone') as HTMLElement
+      expect(within(block).getByText('First Bell')).toHaveClass('game-rarity--common')
+      expect(within(block).getByText(t('game.unlock.rarity', { rarity: t('game.rarity.common') }))).toBeInTheDocument()
+    })
+
+    it('a normal turn still renders exactly as before', async () => {
+      mockRoutedFetch({ get: () => jsonResponse(session()), post: () => sseResponse([{ delta: 'It creaks open.' }, '[DONE]']) })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await userEvent.setup().type(textarea, 'open{Enter}')
+
+      await screen.findByText('It creaks open.')
+      expect(document.querySelector('.game-unlock')).toBeNull()
+    })
+
+    it('announces the unlock with name and rarity when the stream carries achievements', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session()),
+        post: () =>
+          sseResponse([
+            { delta: 'The bell rings.' },
+            { achievements: [{ id: 'first-bell', name: 'First Bell', type: 'achievement', rarity: 'rare', turn: 1 }] },
+            '[DONE]',
+          ]),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'ring{Enter}')
+
+      await screen.findByText(t('game.milestone.announce', { name: 'First Bell', rarity: t('game.rarity.rare') }))
+    })
+
+    it('shows the ending banner with the name from achievements once ended arrives, without a refetch', async () => {
+      const user = userEvent.setup()
+      const fetchMock = mockRoutedFetch({
+        get: () => jsonResponse(session()),
+        post: () =>
+          sseResponse([
+            { delta: 'The story closes.' },
+            { achievements: [{ id: 'good-end', name: 'A Good End', type: 'ending', rarity: 'legendary', turn: 2 }] },
+            { ended: { achievementId: 'good-end' } },
+            '[DONE]',
+          ]),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const getCallsBefore = fetchMock.mock.calls.filter((c) => c[1]?.method !== 'POST').length
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'end it{Enter}')
+
+      await screen.findByText(t('game.ended.body', { name: 'A Good End' }))
+      expect(screen.queryByRole('textbox', { name: t('game.input.label') })).not.toBeInTheDocument()
+      const getCallsAfter = fetchMock.mock.calls.filter((c) => c[1]?.method !== 'POST').length
+      expect(getCallsAfter).toBe(getCallsBefore)
+    })
+
+    it('sessão que já chega ended: true nasce com o banner e sem formulário, usando session.achievements', async () => {
+      mockRoutedFetch({
+        get: () =>
+          jsonResponse(
+            session({
+              ended: true,
+              achievements: [
+                { id: 'first-bell', name: 'First Bell', type: 'achievement', rarity: 'common', turn: 1 },
+                { id: 'good-end', name: 'A Good End', type: 'ending', rarity: 'legendary', turn: 2 },
+              ],
+            }),
+          ),
+        post: () => sseResponse(['[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText(t('game.ended.body', { name: 'A Good End' }))
+      expect(screen.queryByRole('textbox', { name: t('game.input.label') })).not.toBeInTheDocument()
+    })
+
+    it('ended true without an ending entry shows the body without a name and no literal undefined', async () => {
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ ended: true, achievements: [] })),
+        post: () => sseResponse(['[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText(t('game.ended.bodyUnnamed'))
+      expect(document.body.textContent).not.toContain('undefined')
+    })
+
+    it('clicking continue calls reopenSession, hides the banner, restores the form and focuses the textarea', async () => {
+      const user = userEvent.setup()
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url.endsWith('/reopen')) return jsonResponse(session({ ended: false }))
+        if (init?.method === 'POST') return sseResponse(['[DONE]'])
+        return jsonResponse(session({ ended: true, achievements: [{ id: 'good-end', name: 'A Good End', type: 'ending', rarity: 'legendary', turn: 2 }] }))
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      render(<GamePanel sessionId="sess-1" />)
+
+      const reopenButton = await screen.findByRole('button', { name: t('game.ended.reopen') })
+      await user.click(reopenButton)
+
+      const textarea = await screen.findByRole('textbox', { name: t('game.input.label') })
+      expect(document.activeElement).toBe(textarea)
+      expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith('/reopen') && c[1]?.method === 'POST')).toBe(true)
+      expect(screen.queryByText(t('game.ended.title'))).not.toBeInTheDocument()
+    })
+
+    it('trocar de sessionId depois de encerrar zera o estado: painel novo sem banner', async () => {
+      mockRoutedFetch({
+        get: (url) =>
+          url.includes('sess-a')
+            ? jsonResponse(session({ id: 'sess-a', ended: true, achievements: [{ id: 'good-end', name: 'A Good End', type: 'ending', rarity: 'legendary', turn: 2 }] }))
+            : jsonResponse(session({ id: 'sess-b', prologue: 'Prologue B.' })),
+        post: () => sseResponse(['[DONE]']),
+      })
+      const { rerender } = render(<GamePanel sessionId="sess-a" />)
+
+      await screen.findByText(t('game.ended.title'))
+
+      rerender(<GamePanel sessionId="sess-b" />)
+
+      await screen.findByText('Prologue B.')
+      expect(screen.queryByText(t('game.ended.title'))).not.toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: t('game.input.label') })).toBeInTheDocument()
+    })
+
+    it('a reopenSession failure replaces the button with an ErrorState and the retry calls it again', async () => {
+      const user = userEvent.setup()
+      let attempts = 0
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url.endsWith('/reopen')) {
+          attempts += 1
+          return jsonResponse({}, 500)
+        }
+        if (init?.method === 'POST') return sseResponse(['[DONE]'])
+        return jsonResponse(session({ ended: true, achievements: [{ id: 'good-end', name: 'A Good End', type: 'ending', rarity: 'legendary', turn: 2 }] }))
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      render(<GamePanel sessionId="sess-1" />)
+
+      const reopenButton = await screen.findByRole('button', { name: t('game.ended.reopen') })
+      await user.click(reopenButton)
+
+      await screen.findByText(t('game.ended.reopen.error'))
+      expect(screen.queryByRole('button', { name: t('game.ended.reopen') })).not.toBeInTheDocument()
+
+      const retryButton = screen.getByRole('button', { name: t('common.retry') })
+      await user.click(retryButton)
+
+      await waitFor(() => expect(attempts).toBe(2))
+    })
+
+    it('a 409 session ended shows the banner without a name, restores the draft and refetches instead of a generic error', async () => {
+      const user = userEvent.setup()
+      let resolveSecondGet: (value: Response) => void = () => {}
+      const secondGet = new Promise<Response>((resolve) => {
+        resolveSecondGet = resolve
+      })
+      let getCount = 0
+      const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === 'POST') return jsonResponse({ detail: 'session ended' }, 409)
+        getCount += 1
+        if (getCount === 1) return jsonResponse(session())
+        return secondGet
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'push through{Enter}')
+
+      await screen.findByText(t('game.ended.bodyUnnamed'))
+      expect(screen.queryByText(t('error.unexpected.title'))).not.toBeInTheDocument()
+
+      resolveSecondGet(
+        jsonResponse(
+          session({ ended: true, achievements: [{ id: 'good-end', name: 'A Good End', type: 'ending', rarity: 'legendary', turn: 2 }] }),
+        ),
+      )
+
+      await screen.findByText(t('game.ended.body', { name: 'A Good End' }))
+    })
+  })
 })

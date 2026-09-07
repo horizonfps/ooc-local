@@ -1,0 +1,69 @@
+.game-rarity--common {
+  --rarity-color: #9aa0ab;
+  color: var(--rarity-color);
+}
+
+.game-rarity--rare {
+  --rarity-color: #4da3ff;
+  color: var(--rarity-color);
+}
+
+.game-rarity--epic {
+  --rarity-color: #b072f0;
+  color: var(--rarity-color);
+}
+
+.game-rarity--legendary {
+  --rarity-color: #f0a83c;
+  color: var(--rarity-color);
+}
+
+.game-unlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.game-unlock--epilogue {
+  border-color: rgba(255, 255, 255, 0.24);
+  padding: 16px 20px;
+}
+
+.game-unlock-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--hud-label, #9aa0ab);
+}
+
+.game-unlock-name {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.game-unlock-rarity {
+  font-size: 0.8rem;
+  color: var(--hud-label, #9aa0ab);
+}
+
+.game-ended-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.game-ended-banner-title {
+  font-weight: 700;
+  margin: 0;
+}
+
+.game-ended-banner-body {
+  margin: 0;
+}

@@ -14,6 +14,7 @@ import { TurnText, findUnclosedBracket } from './TurnText'
 import {
   ApiError,
   fetchSession,
+  reopenSession,
   streamTurn,
   type CastMember,
   type CommandView,
@@ -24,12 +25,25 @@ import {
   type SessionDetail,
   type StatView,
   type TurnView,
+  type UnlockedView,
 } from '../api'
 import { classifyError, describeError, type ErrorKind } from '../errors'
-import { t } from '../i18n'
+import { t, type StringKey } from '../i18n'
 import { navigate } from '../useHashRoute'
 import { EMPTY_SCENE, reduceScene, resolveBackground, resolveSprite } from '../scene'
 import './stage.css'
+import './achievements.css'
+
+const KNOWN_RARITIES = ['common', 'rare', 'epic', 'legendary'] as const
+type KnownRarity = (typeof KNOWN_RARITIES)[number]
+
+function rarityClass(value: string | undefined | null): KnownRarity {
+  return (KNOWN_RARITIES as readonly string[]).includes(value ?? '') ? (value as KnownRarity) : 'common'
+}
+
+function rarityKey(value: string | undefined | null): StringKey {
+  return `game.rarity.${rarityClass(value)}` as StringKey
+}
 
 const STAGE_STORAGE_KEY = 'ooc-local:stage'
 
@@ -152,6 +166,11 @@ export function GamePanel(props: GamePanelProps) {
   const prevAnnounceRef = useRef<{ background: string | null; charactersKey: string } | null>(null)
   const prevCastKeyRef = useRef<string | null>(null)
   const prevStatsKeyRef = useRef<string | null>(null)
+  const [ended, setEnded] = useState<{ name: string | null } | null>(null)
+  const lastEndingRef = useRef<UnlockedView | null>(null)
+  const [reopening, setReopening] = useState(false)
+  const [reopenError, setReopenError] = useState<unknown | null>(null)
+  const [unlockAnnouncement, setUnlockAnnouncement] = useState('')
 
   const load = () => {
     setState({ phase: 'loading' })
@@ -196,6 +215,11 @@ export function GamePanel(props: GamePanelProps) {
     prevAnnounceRef.current = null
     prevCastKeyRef.current = null
     prevStatsKeyRef.current = null
+    setEnded(null)
+    lastEndingRef.current = null
+    setReopening(false)
+    setReopenError(null)
+    setUnlockAnnouncement('')
   }, [sessionId])
 
   useEffect(
@@ -214,6 +238,11 @@ export function GamePanel(props: GamePanelProps) {
       setMinds(state.session.minds)
       setSuggestions(state.session.suggestions)
       setCommands(state.session.commands)
+      if (state.session.ended) {
+        const endings = (state.session.achievements ?? []).filter((a) => a.type === 'ending')
+        const last = endings[endings.length - 1]
+        setEnded({ name: last?.name ?? null })
+      }
     }
   }, [state])
 
@@ -310,6 +339,7 @@ export function GamePanel(props: GamePanelProps) {
     setSceneAnnouncement('')
     setCastAnnouncement('')
     setStatsAnnouncement('')
+    setUnlockAnnouncement('')
 
     const controller = new AbortController()
     abortRef.current = controller
@@ -344,6 +374,21 @@ export function GamePanel(props: GamePanelProps) {
             setPending((p) =>
               p ? { index: p.index, message: p.message, text: p.text, commandLabel: p.commandLabel, status: 'error', kind: 'stream', cause: String(err) } : p,
             )
+          },
+          onAchievements: (unlocked) => {
+            const ending = unlocked.find((a) => a.type === 'ending')
+            if (ending) lastEndingRef.current = ending
+            const announcement = unlocked
+              .map((a) =>
+                a.type === 'ending'
+                  ? t('game.ending.announce', { name: a.name, rarity: t(rarityKey(a.rarity)) })
+                  : t('game.milestone.announce', { name: a.name, rarity: t(rarityKey(a.rarity)) }),
+              )
+              .join(' ')
+            setUnlockAnnouncement(announcement)
+          },
+          onEnded: () => {
+            setEnded({ name: lastEndingRef.current?.name ?? null })
           },
         },
         { signal: controller.signal, mode },
@@ -386,6 +431,13 @@ export function GamePanel(props: GamePanelProps) {
         handleDraftChange(message)
         return
       }
+      if (err instanceof ApiError && err.status === 409 && err.detail === 'session ended') {
+        setEnded({ name: null })
+        setPending(null)
+        setDraft(message)
+        load()
+        return
+      }
       const classified = classifyError(err)
       setPending((p) =>
         p
@@ -424,6 +476,24 @@ export function GamePanel(props: GamePanelProps) {
   const handleEditSuggestion = (text: string) => {
     setDraft(text)
     setFocusToken((n) => n + 1)
+  }
+
+  const handleReopen = () => {
+    setReopening(true)
+    setReopenError(null)
+    reopenSession(sessionId)
+      .then((session) => {
+        setState({ phase: 'ready', session })
+        setEnded(null)
+        lastEndingRef.current = null
+        setFocusToken((n) => n + 1)
+      })
+      .catch((err) => {
+        setReopenError(err)
+      })
+      .finally(() => {
+        setReopening(false)
+      })
   }
 
   const handleModeChange = (next: InputMode) => {
@@ -668,6 +738,22 @@ export function GamePanel(props: GamePanelProps) {
           </li>
           {turns.map((turn, i) => {
             const key = `${i}-${turn.index}-${turn.role}`
+            const kind = turn.kind ?? 'turn'
+            if (kind === 'milestone' || kind === 'epilogue') {
+              const rarity = rarityClass(turn.achievement?.rarity)
+              return (
+                <li key={key} className={`game-turn game-unlock game-unlock--${kind}`}>
+                  <span className="game-unlock-label">
+                    {kind === 'epilogue' ? t('game.ending.label') : t('game.milestone.label')}
+                  </span>
+                  <span className={`game-unlock-name game-rarity--${rarity}`}>{turn.achievement?.name ?? ''}</span>
+                  <span className="game-unlock-rarity">
+                    {t('game.unlock.rarity', { rarity: t(rarityKey(turn.achievement?.rarity)) })}
+                  </span>
+                  <TurnText text={turn.text} />
+                </li>
+              )
+            }
             if (turn.meta && turn.role === 'player') return null
             if (turn.meta) {
               return (
@@ -762,7 +848,7 @@ export function GamePanel(props: GamePanelProps) {
       </p>
 
       <p className="visually-hidden" aria-live="polite" role="status">
-        {[sceneAnnouncement, castAnnouncement, statsAnnouncement].filter(Boolean).join(' ')}
+        {[sceneAnnouncement, castAnnouncement, statsAnnouncement, unlockAnnouncement].filter(Boolean).join(' ')}
       </p>
 
       {state.phase === 'ready' && !atBottom ? (
@@ -771,7 +857,7 @@ export function GamePanel(props: GamePanelProps) {
         </button>
       ) : null}
 
-      {state.phase === 'ready' ? (
+      {ended === null && state.phase === 'ready' ? (
         <form className="game-footer" onSubmit={handleFormSubmit}>
           {turnPhase !== 'streaming' ? (
             <SuggestionChips suggestions={suggestionsView} onSend={handleSendSuggestion} onEdit={handleEditSuggestion} />
@@ -810,6 +896,22 @@ export function GamePanel(props: GamePanelProps) {
           </button>
           <p className="game-input-hint">{t('game.input.hint')}</p>
         </form>
+      ) : ended !== null ? (
+        <div className="game-footer">
+          <div className="game-ended-banner">
+            <p className="game-ended-banner-title">{t('game.ended.title')}</p>
+            <p className="game-ended-banner-body">
+              {ended.name !== null ? t('game.ended.body', { name: ended.name }) : t('game.ended.bodyUnnamed')}
+            </p>
+            {reopenError !== null ? (
+              <ErrorState title={t('error.unexpected.title')} body={t('game.ended.reopen.error')} onRetry={handleReopen} />
+            ) : (
+              <button type="button" onClick={handleReopen} disabled={reopening}>
+                {reopening ? t('game.ended.reopening') : t('game.ended.reopen')}
+              </button>
+            )}
+          </div>
+        </div>
       ) : (
         <div className="game-footer" />
       )}

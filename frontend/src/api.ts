@@ -321,9 +321,15 @@ export type TurnHandlers = {
   onHud: (hud: TurnHudPayload) => void
   onSuggestions: (suggestions: string[]) => void
   onError: (err: unknown) => void
+  onAchievements?: (unlocked: UnlockedView[]) => void
+  onEnded?: (achievementId: string) => void
 }
 
-type TurnEvent = { delta?: string; hud?: TurnHudPayload; suggestions?: string[]; error?: string }
+type TurnEvent = {
+  delta?: string; hud?: TurnHudPayload; suggestions?: string[]; error?: string
+  achievements?: UnlockedView[]
+  ended?: { achievementId: string }
+}
 
 export type TurnOptions = { signal?: AbortSignal; mode?: InputMode }
 
@@ -379,6 +385,10 @@ export async function streamTurn(sessionId: string, message: string, h: TurnHand
           h.onHud(parsed.hud)
         } else if (Array.isArray(parsed.suggestions)) {
           h.onSuggestions(parsed.suggestions)
+        } else if (Array.isArray(parsed.achievements)) {
+          h.onAchievements?.(parsed.achievements)
+        } else if (parsed.ended !== undefined) {
+          h.onEnded?.(parsed.ended.achievementId)
         }
       }
     }
