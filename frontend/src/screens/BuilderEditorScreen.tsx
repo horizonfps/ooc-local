@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ApiError, fetchScenarioDocument, saveScenarioDocument, type ScenarioDocument } from '../api'
 import { deepEqual, validateDraft } from '../builder/validate'
 import { BuilderPreview } from '../components/builder/BuilderPreview'
+import { AchievementsTab } from '../components/builder/AchievementsTab'
 import { CharactersTab } from '../components/builder/CharactersTab'
 import { CommandsTab } from '../components/builder/CommandsTab'
 import { IdentityTab } from '../components/builder/IdentityTab'
@@ -32,7 +33,17 @@ export type TabProps = {
   goToTab: (tab: BuilderTab) => void
 }
 
-const TAB_ORDER: readonly BuilderTab[] = ['identity', 'world', 'starts', 'characters', 'stats', 'lorebook', 'commands', 'media']
+const TAB_ORDER: readonly BuilderTab[] = [
+  'identity',
+  'world',
+  'starts',
+  'characters',
+  'stats',
+  'lorebook',
+  'commands',
+  'achievements',
+  'media',
+]
 
 const TAB_LABEL_KEY: Record<BuilderTab, StringKey> = {
   identity: 'builder.editor.tab.identity',
@@ -42,6 +53,7 @@ const TAB_LABEL_KEY: Record<BuilderTab, StringKey> = {
   stats: 'builder.editor.tab.stats',
   lorebook: 'builder.editor.tab.lorebook',
   commands: 'builder.editor.tab.commands',
+  achievements: 'builder.editor.tab.achievements',
   media: 'builder.editor.tab.media',
 }
 
@@ -71,8 +83,15 @@ function slice(tab: BuilderTab, draft: BuilderDraft): unknown {
     }
     case 'world':
       return { world: draft.world, world_mode: draft.meta.world_mode }
-    case 'starts':
-      return { starts: draft.starts, default_start: draft.meta.default_start }
+    case 'starts': {
+      const starts = Object.fromEntries(
+        Object.entries(draft.starts).map(([id, start]) => {
+          const { achievements: _achievements, ...rest } = start
+          return [id, rest]
+        }),
+      )
+      return { starts, default_start: draft.meta.default_start }
+    }
     case 'characters':
       return draft.characters
     case 'stats':
@@ -81,6 +100,10 @@ function slice(tab: BuilderTab, draft: BuilderDraft): unknown {
       return draft.lorebook
     case 'commands':
       return draft.commands
+    case 'achievements':
+      return Object.fromEntries(
+        Object.entries(draft.starts).map(([id, start]) => [id, start.achievements ?? []]),
+      )
     case 'media':
       return null
   }
@@ -134,6 +157,17 @@ function demoEdit(tab: BuilderTab, draft: BuilderDraft): BuilderDraft {
         ? first.description.slice(0, -DEMO_MARK.length)
         : first.description + DEMO_MARK
       return { ...draft, commands: [{ ...first, description: nextDescription }, ...rest] }
+    }
+    case 'achievements': {
+      const startEntry = Object.entries(draft.starts).find(([, start]) => (start.achievements ?? []).length > 0)
+      if (!startEntry) return draft
+      const [startId, start] = startEntry
+      const [first, ...rest] = start.achievements ?? []
+      const nextName = first.name.endsWith(DEMO_MARK) ? first.name.slice(0, -DEMO_MARK.length) : first.name + DEMO_MARK
+      return {
+        ...draft,
+        starts: { ...draft.starts, [startId]: { ...start, achievements: [{ ...first, name: nextName }, ...rest] } },
+      }
     }
     case 'media':
       return draft
@@ -657,6 +691,8 @@ export function BuilderEditorScreen(props: { scenarioId: string; tab: BuilderTab
                   <LorebookTab {...tabProps} />
                 ) : activeTab === 'commands' ? (
                   <CommandsTab {...tabProps} />
+                ) : activeTab === 'achievements' ? (
+                  <AchievementsTab {...tabProps} />
                 ) : activeTab === 'media' ? (
                   <MediaTab {...tabProps} />
                 ) : (

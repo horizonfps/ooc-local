@@ -93,7 +93,7 @@ describe('BuilderEditorScreen', () => {
     expect(await screen.findByRole('heading', { name: 'The School' })).toBeInTheDocument()
     const tablist = screen.getByRole('tablist', { name: t('builder.editor.tabs.label') })
     const tabs = within(tablist).getAllByRole('tab')
-    expect(tabs).toHaveLength(8)
+    expect(tabs).toHaveLength(9)
     const worldTab = within(tablist).getByRole('tab', { name: t('builder.editor.tab.world') })
     expect(worldTab).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText(t('builder.editor.clean'))).toBeInTheDocument()
@@ -105,7 +105,7 @@ describe('BuilderEditorScreen', () => {
 
     const tablist = await screen.findByRole('tablist', { name: t('builder.editor.tabs.label') })
     const tabs = within(tablist).getAllByRole('tab')
-    expect(tabs).toHaveLength(8)
+    expect(tabs).toHaveLength(9)
     expect(tabs[4]).toHaveTextContent(t('builder.editor.tab.stats'))
   })
 
@@ -496,7 +496,7 @@ describe('BuilderEditorScreen', () => {
 
     const tablist = await screen.findByRole('tablist', { name: t('builder.editor.tabs.label') })
     const tabs = within(tablist).getAllByRole('tab')
-    expect(tabs).toHaveLength(8)
+    expect(tabs).toHaveLength(9)
     expect(tabs[5]).toHaveTextContent(t('builder.editor.tab.lorebook'))
   })
 
@@ -546,7 +546,7 @@ describe('BuilderEditorScreen', () => {
     expect(document.activeElement).toBe(nameInput)
   })
 
-  it('shows the eight tabs in the final order', async () => {
+  it('shows the nine tabs in the final order', async () => {
     mockFetch(() => jsonResponse(DOCUMENT))
     render(<BuilderEditorScreen scenarioId="school" tab="identity" />)
 
@@ -560,8 +560,57 @@ describe('BuilderEditorScreen', () => {
       t('builder.editor.tab.stats'),
       t('builder.editor.tab.lorebook'),
       t('builder.editor.tab.commands'),
+      t('builder.editor.tab.achievements'),
       t('builder.editor.tab.media'),
     ])
+  })
+
+  it('marks only the Achievements tab dirty when editing an achievement, and only Starts when editing the prologue', async () => {
+    const doc = {
+      ...DOCUMENT,
+      starts: {
+        default: { ...DOCUMENT.starts.default, achievements: [{ id: 'a1', name: 'Untitled', type: 'achievement', rarity: 'common', hint: null, condition: 'x', min_turn: null, stat_gates: [] }] },
+      },
+    }
+    mockFetch(() => jsonResponse(doc))
+    render(<BuilderEditorScreen scenarioId="school" tab="achievements" />)
+
+    const nameField = await screen.findByLabelText(t('builder.achievements.name'))
+    const tablist = screen.getByRole('tablist', { name: t('builder.editor.tabs.label') })
+    const achievementsTab = within(tablist).getByRole('tab', { name: t('builder.editor.tab.achievements') })
+    const startsTab = within(tablist).getByRole('tab', { name: t('builder.editor.tab.starts') })
+
+    fireEvent.change(nameField, { target: { value: 'First step' } })
+
+    expect(achievementsTab.className).toContain('is-dirty')
+    expect(startsTab.className).not.toContain('is-dirty')
+  })
+
+  it('"go to field" leads to the achievement field, selecting its start', async () => {
+    const user = userEvent.setup()
+    const invalidDoc = {
+      ...DOCUMENT,
+      starts: {
+        default: { ...DOCUMENT.starts.default, achievements: [{ id: '', name: '', type: 'achievement', rarity: 'common', hint: null, condition: '', min_turn: null, stat_gates: [] }] },
+      },
+    }
+    mockFetch(() => jsonResponse(invalidDoc))
+    render(<BuilderEditorScreen scenarioId="school" tab="achievements" />)
+
+    const hintField = await screen.findByLabelText(t('builder.achievements.hint'))
+    fireEvent.change(hintField, { target: { value: 'A clue' } })
+    await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
+
+    const summary = await screen.findByText(t('builder.editor.validation.summaryTitle'))
+    const panel = summary.closest('.builder-editor-validation') as HTMLElement
+    const idJump = within(panel)
+      .getAllByRole('button')
+      .find((btn) => btn.textContent?.includes(t('builder.achievements.id')))
+    expect(idJump).toBeTruthy()
+    await user.click(idJump as HTMLElement)
+
+    const idInput = document.getElementById('builder-field-achievements.default.0.id')
+    expect(document.activeElement).toBe(idInput)
   })
 
   it('marks only the Commands tab dirty when editing a prompt', async () => {

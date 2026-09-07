@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BuilderDraft } from '../screens/BuilderEditorScreen'
-import type { CommandDoc, LoreEntryDoc, StatDef } from '../api'
+import type { AchievementDoc, CommandDoc, LoreEntryDoc, StatDef } from '../api'
 import { validateDraft } from './validate'
 import { t } from '../i18n'
 
@@ -36,6 +36,20 @@ function command(overrides: Partial<CommandDoc> = {}): CommandDoc {
     name: 'fofoca',
     description: 'O que andam dizendo',
     prompt: 'Fora da narrativa, liste o que os NPCs estao comentando.',
+    ...overrides,
+  }
+}
+
+function achievement(overrides: Partial<AchievementDoc> = {}): AchievementDoc {
+  return {
+    id: 'primeiro-passo',
+    name: 'Primeiro passo',
+    type: 'achievement',
+    rarity: 'common',
+    hint: null,
+    condition: 'O jogador cruzou o portão da escola.',
+    min_turn: null,
+    stat_gates: [],
     ...overrides,
   }
 }
@@ -380,5 +394,105 @@ describe('validateDraft', () => {
       errors.some((e) => e.tab === 'commands' && e.field === 'commands.0.prompt' && e.message === t('builder.field.required')),
     ).toBe(true)
     expect(errors.some((e) => e.tab === 'commands' && e.field === 'commands.0.description')).toBe(false)
+  })
+
+  it('does not complain about a start with no achievements', () => {
+    const errors = validateDraft(draft())
+    expect(errors.some((e) => e.tab === 'achievements')).toBe(false)
+  })
+
+  it('flags an empty achievement id with a single error, not also a duplicate error', () => {
+    const errors = validateDraft(
+      draft({
+        starts: {
+          default: { ...draft().starts.default, achievements: [achievement({ id: '' }), achievement({ id: '' })] },
+        },
+      }),
+    )
+    const idErrors = errors.filter((e) => e.tab === 'achievements' && e.field === 'achievements.default.0.id')
+    expect(idErrors).toHaveLength(1)
+    expect(idErrors[0].message).toBe(t('builder.field.required'))
+  })
+
+  it('flags an achievement id outside the pattern', () => {
+    const errors = validateDraft(
+      draft({ starts: { default: { ...draft().starts.default, achievements: [achievement({ id: 'Primeiro_Passo' })] } } }),
+    )
+    expect(
+      errors.some(
+        (e) => e.tab === 'achievements' && e.field === 'achievements.default.0.id' && e.message === t('builder.field.slugInvalid'),
+      ),
+    ).toBe(true)
+  })
+
+  it('flags a duplicated achievement id within the same start, but not across starts', () => {
+    const withDupe = validateDraft(
+      draft({
+        starts: {
+          default: {
+            ...draft().starts.default,
+            achievements: [achievement({ id: 'a1' }), achievement({ id: 'a1' })],
+          },
+        },
+      }),
+    )
+    expect(
+      withDupe.some(
+        (e) =>
+          e.tab === 'achievements' &&
+          e.field === 'achievements.default.1.id' &&
+          e.message === t('builder.validate.achievementIdTaken', { slug: 'a1' }),
+      ),
+    ).toBe(true)
+
+    const acrossStarts = validateDraft(
+      draft({
+        starts: {
+          default: { ...draft().starts.default, achievements: [achievement({ id: 'a1' })] },
+          other: { ...draft().starts.default, id: 'other', achievements: [achievement({ id: 'a1' })] },
+        },
+      }),
+    )
+    expect(acrossStarts.some((e) => e.tab === 'achievements')).toBe(false)
+  })
+
+  it('flags an empty name and an empty condition', () => {
+    const errors = validateDraft(
+      draft({
+        starts: {
+          default: { ...draft().starts.default, achievements: [achievement({ name: '', condition: '' })] },
+        },
+      }),
+    )
+    expect(
+      errors.some((e) => e.tab === 'achievements' && e.field === 'achievements.default.0.name' && e.message === t('builder.field.required')),
+    ).toBe(true)
+    expect(
+      errors.some(
+        (e) => e.tab === 'achievements' && e.field === 'achievements.default.0.condition' && e.message === t('builder.field.required'),
+      ),
+    ).toBe(true)
+  })
+
+  it('flags min_turn 0 and accepts null or absent', () => {
+    const zeroErrors = validateDraft(
+      draft({ starts: { default: { ...draft().starts.default, achievements: [achievement({ min_turn: 0 })] } } }),
+    )
+    expect(
+      zeroErrors.some(
+        (e) =>
+          e.tab === 'achievements' &&
+          e.field === 'achievements.default.0.min_turn' &&
+          e.message === t('builder.validate.minTurnPositive'),
+      ),
+    ).toBe(true)
+
+    const nullErrors = validateDraft(
+      draft({ starts: { default: { ...draft().starts.default, achievements: [achievement({ min_turn: null })] } } }),
+    )
+    expect(nullErrors.some((e) => e.tab === 'achievements' && e.field === 'achievements.default.0.min_turn')).toBe(false)
+
+    const absentErrors = validateDraft(draft({ starts: { default: { ...draft().starts.default, achievements: undefined } } }))
+    expect(absentErrors.some((e) => e.tab === 'achievements')).toBe(false)
   })
 })
