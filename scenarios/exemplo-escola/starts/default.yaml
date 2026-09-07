@@ -4,7 +4,7 @@ prologue: >
   você chega, mochila nova pesando mais do que devia. Sete e cinquenta da
   manhã, céu limpo, o sol já esquentando o asfalto do pátio. Você é o aluno
   novo do 3º B — mudou de cidade no meio do ano, o que já é ruim o bastante
-  sem contar que não conhece uma alma ali dentro.
+  sem contar que, tirando a Mika, não conhece uma alma ali dentro.
 
   Grupos se formam e se desfazem nas escadas, conversas que param quando você
   passa perto. Uma garota de cabelo preso, postura ereta, comanda uma roda
@@ -31,12 +31,13 @@ conflict: >
   cresceu com o jogador e por isso vira o fio que costura os dois grupos.
 mission: >
   O jogador é o aluno novo do 3º B, chegando no primeiro dia de aula depois de
-  uma mudança de cidade, sem história prévia com ninguém dali. Ele chega sem
-  saber nada do caderno e precisa decidir, aos poucos, se investiga, se ignora,
-  ou se vira peça no jogo de alguém. Ser o único ponto de vista de fora é o que
-  permite que outros personagens confiem a ele informações que não confiariam
-  entre si, e é também o que o torna alvo de desconfiança: gente nova pode ser
-  usada por qualquer lado.
+  uma mudança de cidade. A Mika é a única história prévia que ele tem ali: os
+  dois cresceram juntos antes da mudança, e ninguém mais da turma o conhece.
+  Ele chega sem saber nada do caderno e precisa decidir, aos poucos, se
+  investiga, se ignora, ou se vira peça no jogo de alguém. Estar de fora da
+  treta entre Chloe e Ashlee é o que permite que outros personagens confiem a
+  ele informações que não confiariam entre si, e é também o que o torna alvo de
+  desconfiança: gente nova pode ser usada por qualquer lado.
 play_guide: >
   Você pode puxar assunto com quem quiser, seguir Mika até a sala, ou reparar
   no caderno que Chloe escondeu. Nada aqui tem resposta certa — a escola só

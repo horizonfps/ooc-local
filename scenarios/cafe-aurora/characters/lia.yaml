@@ -1,0 +1,14 @@
+name: Lia Fontes
+role: Cliente fixa da mesa da janela, ilustradora freelancer
+appearance: 28 anos, cabelo preto preso com um lápis, casaco verde grande demais,
+  sempre com um caderno de desenho aberto.
+personality: Observadora e irônica, mas evita conflito; desenha as pessoas do café
+  sem pedir.
+voice: Frases curtas, humor seco, muda de assunto quando o assunto é ela.
+mind:
+  feeling: abalada com o bilhete, tentando disfarçar
+  goal: descobrir quem sabe o segredo dela sem se expor
+emotions:
+- default
+- smile
+- sad

@@ -1,0 +1,13 @@
+name: default
+prologue: O sino da porta anuncia mais uma manhã no Café Aurora. Você amarra o avental
+  atrás do balcão enquanto a máquina de espresso aquece. Na mesa perto da janela,
+  um bilhete dobrado espera por alguém — e você ainda não sabe que ele mudará o seu
+  dia.
+opening_scene: O jogador é barista do Café Aurora. Manhã de terça, movimento fraco.
+  Lia, a cliente fixa da janela, acabou de encontrar um bilhete anônimo na mesa dela.
+  Rui, o dono, finge organizar a estante de xícaras enquanto observa.
+suggestions: []
+hud:
+  location: Café Aurora
+  time: 08:00
+  weather: clear
