@@ -586,6 +586,46 @@ describe('BuilderEditorScreen', () => {
     expect(startsTab.className).not.toContain('is-dirty')
   })
 
+  it('saving after editing start A achievements sends start B achievements untouched in the PUT body', async () => {
+    const user = userEvent.setup()
+    const achievementA = { id: 'a1', name: 'From A', type: 'achievement', rarity: 'common', hint: null, condition: 'x', min_turn: null, stat_gates: [] }
+    const achievementB = { id: 'b1', name: 'From B', type: 'ending', rarity: 'rare', hint: 'psst', condition: 'y', min_turn: 3, stat_gates: [{ id: 'rep', at_least: 5 }] }
+    const doc = {
+      ...DOCUMENT,
+      starts: {
+        default: { ...DOCUMENT.starts.default, achievements: [achievementA] },
+        other: { ...DOCUMENT.starts.default, id: 'other', name: 'Other start', achievements: [achievementB] },
+      },
+    }
+    let putBody: unknown = null
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url !== '/api/builder/scenarios/school') throw new Error(`unexpected fetch ${url}`)
+      if (init?.method === 'PUT') {
+        putBody = JSON.parse(String(init.body))
+        return jsonResponse({ revision: 'rev-2' })
+      }
+      return jsonResponse(doc)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<BuilderEditorScreen scenarioId="school" tab="achievements" />)
+
+    const startSelect = await screen.findByRole('tabpanel').then((panel) =>
+      within(panel).getByLabelText(t('builder.achievements.startLabel')),
+    )
+    expect((startSelect as HTMLSelectElement).value).toBe('default')
+
+    const nameField = screen.getByLabelText(t('builder.achievements.name'))
+    fireEvent.change(nameField, { target: { value: 'From A, edited' } })
+
+    await user.click(screen.getByRole('button', { name: t('builder.editor.save') }))
+
+    expect(await screen.findByText(t('builder.editor.clean'))).toBeInTheDocument()
+    const sentStarts = (putBody as { starts: Record<string, { achievements?: unknown[] }> }).starts
+    expect(sentStarts.default.achievements).toEqual([{ ...achievementA, name: 'From A, edited' }])
+    expect(sentStarts.other.achievements).toEqual([achievementB])
+  })
+
   it('"go to field" leads to the achievement field, selecting its start', async () => {
     const user = userEvent.setup()
     const invalidDoc = {
