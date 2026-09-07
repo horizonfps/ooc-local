@@ -438,6 +438,8 @@ async def run_turn(
             config = load_config()
         if ctx is None:
             ctx = load_turn_context(session_id)
+        if not config.flag("memory") and ctx.memories:
+            ctx = ctx.model_copy(update={"memories": []})
         role = config.models["narrator"]
         role_model = role.model
         provider = OpenAICompatProvider(config.providers[role.provider])

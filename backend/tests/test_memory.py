@@ -815,3 +815,56 @@ def test_memory_flag_off_disables_everything(scenarios_root, monkeypatch):
     assert not any(name.startswith("memories_") for name, _ in emitted)
     memory_events = [e for e in sessions.read_events(session["id"]) if e.kind == "memory"]
     assert memory_events == []
+
+
+def test_memory_flag_off_drops_section_and_flag_back_on_restores_it(scenarios_root, monkeypatch):
+    config_on = _config()
+    client = _setup(scenarios_root, monkeypatch, config=config_on)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    sessions.append_events(
+        session["id"],
+        [
+            (
+                "memory",
+                {
+                    "entries": [
+                        {
+                            "id": "fato",
+                            "category": "long_term",
+                            "text": "fato permanente",
+                            "turn": 1,
+                            "source": "engine",
+                        }
+                    ]
+                },
+            )
+        ],
+    )
+
+    def _captured_system(reply="{}"):
+        captured = {}
+        fake = _route_by_model(["narra."], reply)
+
+        async def capturing_stream(self, messages, model):
+            if model == "narrator-model":
+                captured["system"] = messages[0].content
+            async for delta in fake(self, messages, model):
+                yield delta
+
+        monkeypatch.setattr(OpenAICompatProvider, "stream_chat", capturing_stream)
+        _turn(client, session["id"])
+        return captured["system"]
+
+    config_off = _config(flags={"memory": False})
+    monkeypatch.setattr(main, "load_config", lambda: config_off)
+    off_system = _captured_system()
+    assert "## MEMÓRIAS" not in off_system
+
+    monkeypatch.setattr(main, "load_config", lambda: config_on)
+    on_system = _captured_system()
+    assert "## MEMÓRIAS" in on_system
+    assert "fato permanente" in on_system
+
+    memory_events = [e for e in sessions.read_events(session["id"]) if e.kind == "memory"]
+    assert len(memory_events) == 1
