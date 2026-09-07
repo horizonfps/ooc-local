@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { GamePanel } from './GamePanel'
+import { GamePanel, buildAchievementTurns } from './GamePanel'
 import { t } from '../i18n'
 import type { CommandView, SessionDetail, StatView } from '../api'
 
@@ -1466,38 +1466,79 @@ describe('GamePanel', () => {
       expect(getCallsAfter).toBe(getCallsBefore)
     })
 
-    it('assembles the milestone turn with the same index, kind and achievement a GET would return for the same event', async () => {
+    it('produces markup for the milestone block identical to what a GET would render for the same event', async () => {
+      const achievement = { id: 'first-bell', name: 'First Bell', type: 'achievement' as const, rarity: 'rare', turn: 1 }
+      const milestoneText = 'The bell rings across the yard.'
+
       const user = userEvent.setup()
       mockRoutedFetch({
         get: () => jsonResponse(session()),
-        post: () =>
-          sseResponse([
-            { delta: 'The bell rings.' },
-            {
-              achievements: [
-                { id: 'first-bell', name: 'First Bell', type: 'achievement', rarity: 'rare', turn: 1, text: 'The bell rings across the yard.' },
-              ],
-            },
-            '[DONE]',
-          ]),
+        post: () => sseResponse([{ delta: 'The bell rings.' }, { achievements: [{ ...achievement, text: milestoneText }] }, '[DONE]']),
       })
-      render(<GamePanel sessionId="sess-1" />)
+      const { unmount } = render(<GamePanel sessionId="sess-1" />)
 
       await screen.findByText('Once upon a time.')
       const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
       await user.type(textarea, 'ring{Enter}')
 
-      const milestoneText = await screen.findByText('The bell rings across the yard.')
-      const block = milestoneText.closest('.game-unlock--milestone') as HTMLElement
-      expect(block).not.toBeNull()
-      // `_build_turns` does not increment `index` for the achievement branch: the block
-      // must carry the index of the turn that unlocked it, this session's first turn.
-      expect(block.getAttribute('data-turn-index')).toBe('1')
-      expect(within(block).getByText('First Bell')).toHaveClass('game-rarity--rare')
-      // `turn.achievement` must match `UnlockedView` exactly, the same as what the
-      // `GET` returns for the same event: no `text` field bleeding into it.
-      const achievement = JSON.parse(block.getAttribute('data-achievement') ?? 'null')
-      expect(achievement).toEqual({ id: 'first-bell', name: 'First Bell', type: 'achievement', rarity: 'rare', turn: 1 })
+      const streamedBlock = (await screen.findByText(milestoneText)).closest('.game-unlock--milestone') as HTMLElement
+      const streamedHtml = streamedBlock.outerHTML
+      unmount()
+
+      // Same event, but the way `_build_turns` would surface it on a `GET`: a
+      // turn with kind "milestone" carrying the text and the achievement.
+      mockRoutedFetch({
+        get: () =>
+          jsonResponse(
+            session({ turns: [{ index: 1, role: 'narrator', text: milestoneText, kind: 'milestone', achievement }] }),
+          ),
+        post: () => sseResponse(['[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const refetchedBlock = (await screen.findByText(milestoneText)).closest('.game-unlock--milestone') as HTMLElement
+      expect(streamedHtml).toBe(refetchedBlock.outerHTML)
+    })
+
+    it('buildAchievementTurns strips text from the achievement, so the object matches what a GET returns', () => {
+      const result = buildAchievementTurns(
+        [{ id: 'first-bell', name: 'First Bell', type: 'achievement', rarity: 'rare', turn: 1, text: 'The bell rings across the yard.' }],
+        1,
+      )
+      expect(result).toEqual([
+        {
+          index: 1,
+          role: 'narrator',
+          text: 'The bell rings across the yard.',
+          kind: 'milestone',
+          achievement: { id: 'first-bell', name: 'First Bell', type: 'achievement', rarity: 'rare', turn: 1 },
+        },
+      ])
+    })
+
+    it('buildAchievementTurns tags an ending as epilogue and keeps the current index unchanged', () => {
+      const result = buildAchievementTurns(
+        [{ id: 'good-end', name: 'A Good End', type: 'ending', rarity: 'legendary', turn: 2, text: 'And so the story closes.' }],
+        3,
+      )
+      expect(result).toEqual([
+        {
+          index: 3,
+          role: 'narrator',
+          text: 'And so the story closes.',
+          kind: 'epilogue',
+          achievement: { id: 'good-end', name: 'A Good End', type: 'ending', rarity: 'legendary', turn: 2 },
+        },
+      ])
+    })
+
+    it('buildAchievementTurns skips items with no text', () => {
+      const result = buildAchievementTurns(
+        [{ id: 'first-bell', name: 'First Bell', type: 'achievement', rarity: 'rare', turn: 1 }],
+        1,
+      )
+      expect(result).toEqual([])
     })
 
     it('renders the epilogue block alongside the ending banner as soon as the stream carries its text', async () => {
