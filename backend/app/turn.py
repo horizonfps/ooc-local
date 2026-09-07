@@ -5,6 +5,15 @@ from collections.abc import AsyncIterator
 
 from pydantic import BaseModel
 
+from app.achievements import (
+    ACHIEVEMENT_CHECK_EVERY,
+    ACHIEVEMENT_RAW_LOG_CHARS,
+    ACHIEVEMENT_WINDOW_TURNS,
+    AchievementError,
+    apply_verdicts,
+    eligible,
+    judge_achievements,
+)
 from app.cast import MindView, cast_event, minds_event, resolve_cast, seed_cast_ids
 from app.cleanup import strip_engine_echo
 from app.commands import ResolvedCommand, build_meta_user_message
@@ -18,6 +27,7 @@ from app.compact import (
 )
 from app.config import Config, load_config
 from app.director import DIRECTOR_RAW_LOG_CHARS, DIRECTOR_WINDOW_TURNS, DirectorError, decide_scene
+from app.epilogue import EPILOGUE_WINDOW_TURNS, EpilogueError, write_ending, write_milestone
 from app.hud import (
     HudState,
     advance,
@@ -37,12 +47,16 @@ from app.observability import emit
 from app.prompt import MASTER_PROMPT_VERSION, build_master_prompt, format_player_message
 from app.scenario import Character, LoadedScenario, LoreEntry, ScenarioError, StartConfig, load_scenario
 from app.sessions import (
+    ACHIEVEMENT_EVENT_KIND,
+    SESSION_ENDED_KIND,
     Event,
     ScenarioNotFound,
     SessionRow,
+    UnlockedView,
     append_events,
     get_compact,
     get_session_row,
+    read_achievements,
     read_cast_ids,
     read_events,
     read_minds,
@@ -52,6 +66,7 @@ from app.tags import Tag, parse_tags
 
 WINDOW_TURNS = 18
 TURN_ERROR_CODE = "turn_failed"
+MAX_MILESTONES_PER_TURN = 2
 
 
 class TurnContext(BaseModel):
@@ -230,6 +245,11 @@ async def _maybe_compact(
 
 def _utility_model(config: Config) -> str | None:
     role = config.models.get("utility")
+    return role.model if role is not None else None
+
+
+def _narrator_model(config: Config) -> str | None:
+    role = config.models.get("narrator")
     return role.model if role is not None else None
 
 
@@ -625,11 +645,202 @@ async def run_turn(
                         structured=_utility_structured(config),
                     )
 
+        unlocked_views: list[UnlockedView] = []
+        ended_id: str | None = None
+
+        if config.flag("achievements") and new_hud.turn % ACHIEVEMENT_CHECK_EVERY == 0:
+            achievements_started = time.monotonic()
+            try:
+                unlocked_ids = [view.id for view in read_achievements(session_id)]
+                candidates = eligible(ctx.start.achievements, new_hud, unlocked_ids)
+                emit(
+                    "achievements_checked",
+                    session_id=session_id,
+                    turn=new_hud.turn,
+                    candidates=len(candidates),
+                    called=bool(candidates),
+                )
+                if candidates:
+                    achievement_window = events_to_messages(
+                        history_events(session_id, None)[-(ACHIEVEMENT_WINDOW_TURNS * 2) :],
+                        ctx.scenario.meta.locale,
+                    )
+                    verdicts, reason, raw = await judge_achievements(
+                        ctx.scenario, candidates, message, clean_text, achievement_window, config
+                    )
+                    achievements_duration_ms = int((time.monotonic() - achievements_started) * 1000)
+                    if verdicts is None:
+                        emit(
+                            "achievements_rejected",
+                            session_id=session_id,
+                            turn=new_hud.turn,
+                            reason=reason,
+                            raw=raw[:ACHIEVEMENT_RAW_LOG_CHARS],
+                            duration_ms=achievements_duration_ms,
+                            model=_utility_model(config),
+                            structured=_utility_structured(config),
+                        )
+                    else:
+                        unlocked, rejections = apply_verdicts(candidates, verdicts)
+                        ending = next((a for a in unlocked if a.type == "ending"), None)
+                        emit(
+                            "achievements_applied",
+                            session_id=session_id,
+                            turn=new_hud.turn,
+                            ids=[a.id for a in unlocked],
+                            ending_id=ending.id if ending is not None else None,
+                            rejected=[
+                                {"id": rejection.id, "reason": rejection.reason}
+                                for rejection in rejections
+                            ],
+                            duration_ms=achievements_duration_ms,
+                            model=_utility_model(config),
+                            structured=_utility_structured(config),
+                        )
+
+                        milestones_written = 0
+                        for achievement in unlocked:
+                            if achievement.type == "ending":
+                                continue
+                            text: str | None = None
+                            if milestones_written < MAX_MILESTONES_PER_TURN:
+                                milestones_written += 1
+                                milestone_started = time.monotonic()
+                                milestone_error: str | None = None
+                                try:
+                                    raw_milestone = await write_milestone(
+                                        ctx.scenario, achievement, achievement_window, config
+                                    )
+                                    milestone_text, _ = parse_tags(raw_milestone)
+                                    milestone_text, _ = strip_engine_echo(milestone_text)
+                                    milestone_text = milestone_text.strip()
+                                    if milestone_text:
+                                        text = milestone_text
+                                    else:
+                                        milestone_error = "empty milestone after cleanup"
+                                except EpilogueError as exc:
+                                    milestone_error = str(exc)
+                                emit(
+                                    "epilogue_written",
+                                    session_id=session_id,
+                                    turn=new_hud.turn,
+                                    kind="milestone",
+                                    achievement_id=achievement.id,
+                                    chars=len(text) if text else 0,
+                                    duration_ms=int((time.monotonic() - milestone_started) * 1000),
+                                    model=_narrator_model(config),
+                                    error=milestone_error,
+                                )
+                            view = UnlockedView(
+                                id=achievement.id,
+                                name=achievement.name,
+                                type=achievement.type,
+                                rarity=achievement.rarity,
+                                turn=new_hud.turn,
+                            )
+                            post_events.append((
+                                ACHIEVEMENT_EVENT_KIND,
+                                {
+                                    "id": achievement.id,
+                                    "name": achievement.name,
+                                    "type": achievement.type,
+                                    "rarity": achievement.rarity,
+                                    "turn": new_hud.turn,
+                                    **({"text": text} if text else {}),
+                                },
+                            ))
+                            unlocked_views.append(view)
+
+                        if ending is not None:
+                            compact_text, compact_seq = get_compact(session_id)
+                            epilogue_window = events_to_messages(
+                                history_events(session_id, compact_seq)[-(EPILOGUE_WINDOW_TURNS * 2) :],
+                                ctx.scenario.meta.locale,
+                            )
+                            ending_started = time.monotonic()
+                            ending_error: str | None = None
+                            ending_text: str | None = None
+                            try:
+                                raw_ending = await write_ending(
+                                    ctx.scenario, ending, epilogue_window, compact_text, config
+                                )
+                                cleaned, _ = parse_tags(raw_ending)
+                                cleaned, _ = strip_engine_echo(cleaned)
+                                cleaned = cleaned.strip()
+                                if cleaned:
+                                    ending_text = cleaned
+                                else:
+                                    ending_error = "empty epilogue after cleanup"
+                            except EpilogueError as exc:
+                                ending_error = str(exc)
+                            emit(
+                                "epilogue_written",
+                                session_id=session_id,
+                                turn=new_hud.turn,
+                                kind="ending",
+                                achievement_id=ending.id,
+                                chars=len(ending_text) if ending_text else 0,
+                                duration_ms=int((time.monotonic() - ending_started) * 1000),
+                                model=_narrator_model(config),
+                                error=ending_error,
+                            )
+                            if ending_text is not None:
+                                post_events.append((
+                                    ACHIEVEMENT_EVENT_KIND,
+                                    {
+                                        "id": ending.id,
+                                        "name": ending.name,
+                                        "type": ending.type,
+                                        "rarity": ending.rarity,
+                                        "turn": new_hud.turn,
+                                        "text": ending_text,
+                                    },
+                                ))
+                                unlocked_views.append(
+                                    UnlockedView(
+                                        id=ending.id,
+                                        name=ending.name,
+                                        type=ending.type,
+                                        rarity=ending.rarity,
+                                        turn=new_hud.turn,
+                                    )
+                                )
+                                post_events.append((SESSION_ENDED_KIND, {"turn": new_hud.turn, "achievement_id": ending.id}))
+                                ended_id = ending.id
+                                emit(
+                                    "session_ended",
+                                    session_id=session_id,
+                                    turn=new_hud.turn,
+                                    achievement_id=ending.id,
+                                )
+            except AchievementError as exc:
+                emit(
+                    "achievements_failed",
+                    session_id=session_id,
+                    turn=new_hud.turn,
+                    error=str(exc),
+                    duration_ms=int((time.monotonic() - achievements_started) * 1000),
+                    model=_utility_model(config),
+                )
+            except Exception as exc:  # defensive: local providers return creative garbage
+                emit(
+                    "achievements_failed",
+                    session_id=session_id,
+                    turn=new_hud.turn,
+                    error=str(exc),
+                    duration_ms=int((time.monotonic() - achievements_started) * 1000),
+                    model=_utility_model(config),
+                )
+
         stat_change_count = len(stat_events)
         if post_events:
             append_events(session_id, post_events, hud=new_hud)
 
         hud = new_hud
+        if unlocked_views:
+            yield {"achievements": [view.model_dump() for view in unlocked_views]}
+        if ended_id is not None:
+            yield {"ended": {"achievementId": ended_id}}
         yield {"hud": hud_payload(ctx, new_hud)}
         emit_game_turn(None)
     except Exception as exc:
