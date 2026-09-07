@@ -59,6 +59,7 @@ from app.memory import (
     memory_event,
     merge_memories,
     read_memories,
+    render_memories,
 )
 from app.minds import MINDS_RAW_LOG_CHARS, MindsError, merge_minds, think_minds
 from app.observability import emit
@@ -454,6 +455,15 @@ async def run_turn(
                 ids=lore_ids(ctx.scenario, ctx.lore),
                 tokens=estimate_tokens(render_lore(ctx.lore) or ""),
                 candidates=sum(1 for entry in ctx.scenario.lorebook.values() if entry.enabled),
+            )
+
+        if config.flag("memory") and ctx.memories:
+            emit(
+                "memories_injected",
+                session_id=session_id,
+                turn=ctx.row.hud.turn,
+                count=len(ctx.memories),
+                tokens=estimate_tokens(render_memories(ctx.memories, ctx.scenario.meta.locale) or ""),
             )
 
         if command is not None:

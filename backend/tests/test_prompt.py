@@ -692,4 +692,26 @@ def test_build_master_prompt_memories_labels_en_locale(monkeypatch, tmp_path):
     prompt = build_master_prompt(scenario, start, _hud(), characters, memories=_memories())
 
     assert "## MEMORIES" in prompt
-    assert "fato permanente" in prompt
+    assert "Permanent facts:" in prompt
+    assert "Relationships:" in prompt
+    assert "Goals:" in prompt
+    assert "Temporary state:" in prompt
+    assert "Player's note (written by the player):" in prompt
+    assert "Fatos permanentes" not in prompt
+    assert "Relações" not in prompt
+
+
+def test_build_master_prompt_memories_labels_pt_br_locale(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+    start = scenario.start()
+    characters = list(scenario.characters.values())
+
+    prompt = build_master_prompt(scenario, start, _hud(), characters, memories=_memories())
+
+    assert "Fatos permanentes:" in prompt
+    assert "Relações:" in prompt
+    assert "Objetivos:" in prompt
+    assert "Estado passageiro:" in prompt
+    assert "Nota do jogador (escrita por ele mesmo):" in prompt
+    assert "Permanent facts" not in prompt
+    assert "Relationships" not in prompt

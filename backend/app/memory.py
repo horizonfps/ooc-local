@@ -59,9 +59,13 @@ MEMORIES_SCHEMA = {
                     "category": {"type": "string"},
                     "text": {"type": "string"},
                 },
+                "required": ["id", "category", "text"],
+                "additionalProperties": False,
             },
         }
     },
+    "required": ["entries"],
+    "additionalProperties": False,
 }
 MEMORY_OPTIONS = GenerationOptions(
     max_tokens=400,
@@ -251,7 +255,12 @@ def merge_memories(
         cap = MEMORY_CAPS.get(category, len(category_entries))
         category_entries.sort(key=lambda entry: entry.turn)
         while len(category_entries) > cap:
-            evicted.append(category_entries.pop(0))
+            index = next(
+                (i for i, entry in enumerate(category_entries) if entry.source != "player"), None
+            )
+            if index is None:
+                break
+            evicted.append(category_entries.pop(index))
         entries.extend(category_entries)
 
     return entries, rejections, evicted

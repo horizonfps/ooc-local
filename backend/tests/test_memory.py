@@ -7,6 +7,7 @@ from app import main, sessions, turn
 from app.config import Config
 from app.llm.openai_compat import OpenAICompatProvider
 from app.memory import (
+    MEMORIES_SCHEMA,
     MemoryEntry,
     MemoryRejection,
     merge_memories,
@@ -222,6 +223,74 @@ def test_merge_memories_preserves_player_source_against_replacement():
     assert rejections[0].reason == "player_owned"
 
 
+def test_memories_schema_is_strict_compatible():
+    assert MEMORIES_SCHEMA["additionalProperties"] is False
+    assert MEMORIES_SCHEMA["required"] == ["entries"]
+    item_schema = MEMORIES_SCHEMA["properties"]["entries"]["items"]
+    assert item_schema["additionalProperties"] is False
+    assert set(item_schema["required"]) == {"id", "category", "text"}
+
+
+def test_merge_memories_evicts_non_player_before_player_entry():
+    previous = [
+        MemoryEntry(id="p", category="goal", text="nota do jogador", turn=1, source="player"),
+        *(
+            MemoryEntry(id=f"g{i}", category="goal", text=f"objetivo {i}", turn=i)
+            for i in range(2, 7)
+        ),
+    ]
+    proposed = [{"id": "g7", "category": "goal", "text": "objetivo 7"}]
+    entries, _, evicted = merge_memories(previous, proposed, turn=7)
+    assert all(entry.id != "p" for entry in evicted)
+    assert any(entry.id == "p" for entry in entries)
+
+
+def test_parse_memories_tolerates_code_fenced_json():
+    from app.memory import parse_memories
+
+    raw = (
+        "```json\n"
+        '{"entries": [{"id": "caderno", "category": "long_term", "text": "prometi devolver"}]}\n'
+        "```"
+    )
+    entries, reason = parse_memories(raw)
+    assert reason is None
+    assert entries == [{"id": "caderno", "category": "long_term", "text": "prometi devolver"}]
+
+
+def test_parse_memories_rejects_pure_prose():
+    from app.memory import parse_memories
+
+    entries, reason = parse_memories("isso não é json, é prosa livre")
+    assert entries is None
+    assert reason == "invalid_json"
+
+
+def test_build_memory_messages_includes_current_memories_and_window(scenarios_root):
+    from app.memory import build_memory_messages
+    from app.llm.base import ChatMessage
+    from app.scenario import load_scenario
+
+    _write_scenario(scenarios_root)
+    scenario = load_scenario("exemplo-escola")
+    memories = [MemoryEntry(id="fato", category="long_term", text="fato conhecido", turn=1)]
+    window = [
+        ChatMessage(role="user", content="eu ando pelo patio"),
+        ChatMessage(role="assistant", content="a narradora descreve o patio"),
+    ]
+
+    messages = build_memory_messages(scenario, memories, window, "eu sigo", "ela responde")
+
+    assert len(messages) == 2
+    assert messages[0].role == "system"
+    user_content = messages[1].content
+    assert "fato | long_term | fato conhecido" in user_content
+    assert "eu ando pelo patio" in user_content
+    assert "a narradora descreve o patio" in user_content
+    assert "eu sigo" in user_content
+    assert "ela responde" in user_content
+
+
 def test_render_memories_empty_is_none():
     assert render_memories([], "pt-br") is None
 
@@ -251,11 +320,21 @@ def test_turn_not_multiple_of_k_does_not_call_utility(scenarios_root, monkeypatc
     client = _setup(scenarios_root, monkeypatch)
     session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
 
-    emitted = []
-    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
-    _run_turns(client, session, monkeypatch, 2)
+    calls = {"n": 0}
 
-    assert not any(name == "memories_checked" for name, _ in emitted)
+    async def counting_stream(self, messages, model):
+        if model == "utility-model":
+            calls["n"] += 1
+            yield '{"entries": []}'
+        else:
+            for delta in ["a narradora fala."]:
+                yield delta
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", counting_stream)
+    for _ in range(2):
+        _turn(client, session["id"])
+
+    assert calls["n"] == 0
 
 
 def test_turn_three_with_valid_proposal_records_one_event(scenarios_root, monkeypatch):
@@ -313,17 +392,14 @@ def test_turn_four_prompt_contains_memories_section(scenarios_root, monkeypatch)
     _run_turns(client, session, monkeypatch, 3, utility_reply)
 
     captured = {}
-    original_stream = OpenAICompatProvider.stream_chat
+    fake = _route_by_model(["mais narração."], '{"entries": []}')
 
     async def capturing_stream(self, messages, model):
         if model == "narrator-model":
             captured["system"] = messages[0].content
-        async for delta in original_stream(self, messages, model):
+        async for delta in fake(self, messages, model):
             yield delta
 
-    monkeypatch.setattr(
-        OpenAICompatProvider, "stream_chat", _route_by_model(["mais narração."], '{"entries": []}')
-    )
     monkeypatch.setattr(OpenAICompatProvider, "stream_chat", capturing_stream)
 
     _turn(client, session["id"])
@@ -337,15 +413,14 @@ def test_session_without_memory_has_no_section(scenarios_root, monkeypatch):
     session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
 
     captured = {}
-    original_stream = OpenAICompatProvider.stream_chat
+    fake = _route_by_model(["narra."], "{}")
 
     async def capturing_stream(self, messages, model):
         if model == "narrator-model":
             captured["system"] = messages[0].content
-        async for delta in original_stream(self, messages, model):
+        async for delta in fake(self, messages, model):
             yield delta
 
-    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", _route_by_model(["narra."], "{}"))
     monkeypatch.setattr(OpenAICompatProvider, "stream_chat", capturing_stream)
 
     _turn(client, session["id"])
@@ -398,15 +473,14 @@ def test_user_note_seeded_appears_last_in_section(scenarios_root, monkeypatch):
     )
 
     captured = {}
-    original_stream = OpenAICompatProvider.stream_chat
+    fake = _route_by_model(["narra."], "{}")
 
     async def capturing_stream(self, messages, model):
         if model == "narrator-model":
             captured["system"] = messages[0].content
-        async for delta in original_stream(self, messages, model):
+        async for delta in fake(self, messages, model):
             yield delta
 
-    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", _route_by_model(["narra."], "{}"))
     monkeypatch.setattr(OpenAICompatProvider, "stream_chat", capturing_stream)
 
     _turn(client, session["id"])
@@ -429,6 +503,52 @@ def test_duplicate_proposal_generates_no_event(scenarios_root, monkeypatch):
     _run_turns(client, session, monkeypatch, 3, utility_reply)
     memory_events_after_second = [e for e in sessions.read_events(session["id"]) if e.kind == "memory"]
     assert len(memory_events_after_second) == 1
+
+
+def test_memories_applied_payload_reports_categories_and_changes(scenarios_root, monkeypatch):
+    client = _setup(scenarios_root, monkeypatch)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    sessions.append_events(
+        session["id"],
+        [
+            (
+                "memory",
+                {
+                    "entries": [
+                        {
+                            "id": "caderno",
+                            "category": "long_term",
+                            "text": "prometi devolver",
+                            "turn": 1,
+                            "source": "engine",
+                        }
+                    ]
+                },
+            )
+        ],
+    )
+
+    utility_reply = json.dumps(
+        {
+            "entries": [
+                {"id": "caderno", "category": "long_term", "text": "prometi devolver amanha"},
+                {"id": "objetivo", "category": "goal", "text": "achar a sala"},
+            ]
+        }
+    )
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
+    _run_turns(client, session, monkeypatch, 3, utility_reply)
+
+    applied = [props for name, props in emitted if name == "memories_applied"]
+    assert len(applied) == 1
+    payload = applied[0]
+    assert payload["added"] == ["objetivo"]
+    assert payload["updated"] == ["caderno"]
+    assert payload["evicted"] == []
+    assert payload["by_category"] == {"long_term": 1, "goal": 1}
+    assert payload["rejected"] == []
 
 
 def test_category_cap_evicts_fifo_only_from_that_category(scenarios_root, monkeypatch):
@@ -482,7 +602,33 @@ def test_player_memory_survives_two_extractions(scenarios_root, monkeypatch):
     memory_events = [e for e in sessions.read_events(session["id"]) if e.kind == "memory"]
     last_entries = memory_events[-1].payload["entries"] if memory_events else []
     note = next((e for e in last_entries if e["id"] == "nota"), None)
-    assert note is None or note["text"] == "nota do jogador"
+    assert note is not None and note["text"] == "nota do jogador"
+
+
+def test_rewind_drops_memories_extracted_after_the_target_turn(scenarios_root, monkeypatch):
+    from app.memory import read_memories
+    from app.sessions import rewind_session
+
+    client = _setup(scenarios_root, monkeypatch)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    empty_reply = '{"entries": []}'
+    add_a_reply = json.dumps({"entries": [{"id": "a", "category": "long_term", "text": "fato a"}]})
+    add_b_reply = json.dumps({"entries": [{"id": "b", "category": "long_term", "text": "fato b"}]})
+
+    for reply in (empty_reply, empty_reply, add_a_reply, empty_reply, empty_reply, add_b_reply):
+        monkeypatch.setattr(
+            OpenAICompatProvider, "stream_chat", _route_by_model(["narra."], reply)
+        )
+        _turn(client, session["id"])
+
+    assert {e.id for e in read_memories(session["id"])} == {"a", "b"}
+
+    rewind_session(session["id"], 4)
+    assert {e.id for e in read_memories(session["id"])} == {"a"}
+
+    rewind_session(session["id"], 2)
+    assert read_memories(session["id"]) == []
 
 
 def test_read_memories_survives_corrupted_event(scenarios_root, monkeypatch):
@@ -571,17 +717,77 @@ def test_no_utility_role_skips_call(scenarios_root, monkeypatch):
     client = _setup(scenarios_root, monkeypatch, config=_config(with_utility=False))
     session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
 
+    calls = {"n": 0}
+
+    async def counting_stream(self, messages, model):
+        if model == "utility-model":
+            calls["n"] += 1
+            yield "{}"
+        else:
+            for delta in ["narra."]:
+                yield delta
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", counting_stream)
     emitted = []
     monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
-    monkeypatch.setattr(
-        OpenAICompatProvider, "stream_chat", _route_by_model(["narra."], "{}")
-    )
     events = None
     for _ in range(3):
         events = _turn(client, session["id"])
 
+    assert calls["n"] == 0
     assert any(name == "memories_failed" for name, _ in emitted)
     assert events[-1].get("hud") is not None
+
+
+def test_memories_injected_emitted_with_token_count(scenarios_root, monkeypatch):
+    client = _setup(scenarios_root, monkeypatch)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    sessions.append_events(
+        session["id"],
+        [
+            (
+                "memory",
+                {
+                    "entries": [
+                        {
+                            "id": "fato",
+                            "category": "long_term",
+                            "text": "fato permanente",
+                            "turn": 1,
+                            "source": "engine",
+                        }
+                    ]
+                },
+            )
+        ],
+    )
+
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
+    monkeypatch.setattr(
+        OpenAICompatProvider, "stream_chat", _route_by_model(["narra."], '{"entries": []}')
+    )
+    _turn(client, session["id"])
+
+    injected = [props for name, props in emitted if name == "memories_injected"]
+    assert len(injected) == 1
+    assert injected[0]["count"] == 1
+    assert injected[0]["tokens"] > 0
+
+
+def test_memories_injected_not_emitted_without_memories(scenarios_root, monkeypatch):
+    client = _setup(scenarios_root, monkeypatch)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
+    monkeypatch.setattr(
+        OpenAICompatProvider, "stream_chat", _route_by_model(["narra."], '{"entries": []}')
+    )
+    _turn(client, session["id"])
+
+    assert not any(name == "memories_injected" for name, _ in emitted)
 
 
 def test_memory_flag_off_disables_everything(scenarios_root, monkeypatch):
