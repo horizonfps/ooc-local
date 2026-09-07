@@ -191,6 +191,12 @@ async def _maybe_compact(
         return build_context(session_id, message, ctx=ctx), None
 
     current_compact, current_seq = get_compact(session_id)
+    # A legacy session (column carries text, no `compact` event exists yet)
+    # only has that text living in read_blocks' transient fallback. If this
+    # round compacts, the fallback must be persisted as a real event now, or
+    # it silently disappears once a second compaction sees a non-empty event
+    # list and stops falling back to the column.
+    legacy_bootstrap = current_compact is not None and not read_events(session_id, kinds=("compact",))
     blocks = read_blocks(session_id, current_compact)
     composed = compose(blocks, locale)
     full = history_events(session_id, current_seq)
@@ -203,9 +209,12 @@ async def _maybe_compact(
         ctx=ctx,
     )
 
-    reserve_tokens = max(COMPACT_RESERVE_TOKENS, estimate_tokens(composed))
+    # Reserve headroom for the next block's own size, not the whole composite
+    # already baked into messages[0]: reserving the composite's size on top of
+    # a system message that already contains it double-counts it and shrinks
+    # the live window far more than needed.
     n = select_window(
-        messages[0], messages[1:-1], messages[-1], WINDOW_TURNS, COMPACT_KEEP_TURNS, reserve_tokens
+        messages[0], messages[1:-1], messages[-1], WINDOW_TURNS, COMPACT_KEEP_TURNS, COMPACT_RESERVE_TOKENS
     )
     if n == 0:
         return messages, None
@@ -216,12 +225,22 @@ async def _maybe_compact(
     error: str | None = None
     new_block_text: str | None = None
     layer: CompactBlock | None = None
+    all_blocks: list[CompactBlock] = blocks
+    new_composed = composed
     try:
         new_block_text = await compact_block(None, outgoing, locale)
     except CompactError as exc:
         error = str(exc)
         messages = [messages[0], *messages[1 + n :]]
     else:
+        if legacy_bootstrap:
+            set_compact(
+                session_id,
+                current_compact,
+                0,
+                {"text": current_compact, "level": 1, "from_seq": 0, "to_seq": 0},
+            )
+
         from_seq = full[0].seq
         covered_seq = full[n - 1].seq
         new_block = CompactBlock(text=new_block_text, from_seq=from_seq, to_seq=covered_seq, level=1)
@@ -242,16 +261,18 @@ async def _maybe_compact(
             },
         )
         if needs_merge(all_blocks):
+            merge_started = time.monotonic()
+            oldest = sorted(all_blocks, key=lambda b: b.from_seq)[:COMPACT_MERGE_BLOCKS]
+            merge_error: str | None = None
             try:
                 layer = await merge_oldest(all_blocks, locale)
-            except CompactError:
+            except CompactError as exc:
                 layer = None
+                merge_error = str(exc)
             else:
-                merged_seqs = {(b.from_seq, b.to_seq) for b in sorted(
-                    (b for b in all_blocks if b.level == 1), key=lambda b: b.from_seq
-                )[:COMPACT_MERGE_BLOCKS]}
+                merged_seqs = {(b.from_seq, b.to_seq) for b in oldest}
                 all_blocks = [layer] + [
-                    b for b in all_blocks if not (b.level == 1 and (b.from_seq, b.to_seq) in merged_seqs)
+                    b for b in all_blocks if (b.from_seq, b.to_seq) not in merged_seqs
                 ]
                 new_composed = compose(all_blocks, locale)
                 set_compact(
@@ -265,6 +286,18 @@ async def _maybe_compact(
                         "to_seq": layer.to_seq,
                     },
                 )
+            emit(
+                "compact_merged",
+                session_id=session_id,
+                merged_blocks=len(oldest),
+                from_seq=oldest[0].from_seq,
+                to_seq=oldest[-1].to_seq,
+                in_tokens=sum(estimate_tokens(b.text) for b in oldest),
+                out_tokens=0 if layer is None else estimate_tokens(layer.text),
+                duration_ms=int((time.monotonic() - merge_started) * 1000),
+                error=merge_error,
+                model=_utility_model(config),
+            )
         messages = build_context(
             session_id,
             message,
@@ -286,6 +319,13 @@ async def _maybe_compact(
                 dropped_turns=dropped // 2,
                 compact_tokens=estimate_tokens(new_composed),
             )
+        emit(
+            "compact_composed",
+            session_id=session_id,
+            blocks=len(all_blocks),
+            layers=sum(1 for b in all_blocks if b.level != 1),
+            composed_tokens=estimate_tokens(new_composed),
+        )
 
     emit(
         "compact_run",
@@ -299,7 +339,7 @@ async def _maybe_compact(
         to_seq=None if error else full[n - 1].seq,
         covered_seq=None if error else full[n - 1].seq,
         level=2 if layer is not None else 1,
-        blocks=len(blocks) + (0 if error else 1),
+        blocks=len(blocks) if error else len(all_blocks),
     )
     return messages, error
 

@@ -734,11 +734,13 @@ def test_second_compaction_appends_a_second_block(scenarios_root, monkeypatch):
     _push_long_pairs(session["id"])
 
     responses = iter(["Primeiro resumo.", "Segundo resumo."])
+    captured_narrator = []
 
     async def fake_stream(self, messages, model):
         if model == "utility-model":
             yield next(responses)
         else:
+            captured_narrator.append(messages)
             yield "voce continua andando."
 
     monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
@@ -766,6 +768,11 @@ def test_second_compaction_appends_a_second_block(scenarios_root, monkeypatch):
     assert "Primeiro resumo." in composed
     assert "Segundo resumo." in composed
     assert composed.index("Primeiro resumo.") < composed.index("Segundo resumo.")
+
+    narrator_system = captured_narrator[-1][0].content
+    assert "RESUMO DA CAMPANHA" in narrator_system
+    assert "Primeiro resumo." in narrator_system
+    assert "Segundo resumo." in narrator_system
 
 
 def test_second_compaction_prompt_has_only_the_outgoing_turns(scenarios_root, monkeypatch):
@@ -895,6 +902,65 @@ def test_fourth_block_triggers_a_merge_into_a_level_two_layer(scenarios_root, mo
     assert "Resumo 3." in composed
     assert "Resumo 4." in composed
     assert "Resumo 5." in composed
+
+
+def test_second_merge_folds_a_level_two_layer_back_in(scenarios_root, monkeypatch):
+    """Level-2 layers are never exempt from future merges: once the total
+    block count (level-1 plus level-2) passes COMPACT_MAX_BLOCKS again, the
+    oldest two blocks -- which now includes the earlier layer -- fold again.
+    Otherwise the composed text grows without the bound
+    COMPACT_COMPOSED_MAX_TOKENS is meant to enforce."""
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    responses = iter(
+        [
+            "Resumo 1.",
+            "Resumo 2.",
+            "Resumo 3.",
+            "Resumo 4.",
+            "Resumo 5.",
+            "Fusao 1.",
+            "Resumo 6.",
+            "Fusao 2.",
+        ]
+    )
+    utility_calls = []
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            utility_calls.append(messages)
+            yield next(responses)
+        else:
+            yield "voce continua andando."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    for turno in range(6):
+        _push_long_pairs(session["id"], offset=turno * 18)
+        with client.stream(
+            "POST", f"/api/sessions/{session['id']}/turn", json={"message": f"turno {turno}"}
+        ) as response:
+            _stream_events(response)
+
+    assert len(utility_calls) == 8
+
+    compact_events = [e for e in sessions.read_events(session["id"]) if e.kind == "compact"]
+    levels = [e.payload["level"] for e in compact_events]
+    assert levels.count(2) == 2
+
+    composed = sessions.get_compact(session["id"])[0]
+    assert "Fusao 2." in composed
+    assert "Fusao 1." not in composed
+    assert "Resumo 3." not in composed
+    assert "Resumo 4." in composed
+    assert "Resumo 5." in composed
+    assert "Resumo 6." in composed
+    assert estimate_tokens(composed) < compact.COMPACT_COMPOSED_MAX_TOKENS
 
 
 def test_merge_failure_keeps_new_block_and_composed_stays_with_level_one_blocks(scenarios_root, monkeypatch):
@@ -1407,6 +1473,64 @@ def test_legacy_session_with_compact_text_and_null_compact_seq_includes_full_his
     contents = [m.content for m in narrator_messages]
     assert "fala legada" in contents
     assert "resposta legada" in contents
+
+
+def test_legacy_session_compacting_twice_keeps_the_legacy_text_in_the_composed(
+    scenarios_root, monkeypatch
+):
+    """A session created before this PR has legacy text in the column and no
+    `compact` event. The first new-code compaction must persist that legacy
+    text as a real event, or the second compaction (which only sees events,
+    not the column) silently drops it from the composed text."""
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    conn = sqlite3.connect(sessions.db_path())
+    conn.execute("UPDATE sessions SET compact = ? WHERE id = ?", ("Resumo legado.", session["id"]))
+    conn.commit()
+    conn.close()
+
+    assert sessions.read_events(session["id"], kinds=("compact",)) == []
+
+    _push_long_pairs(session["id"])
+
+    responses = iter(["Primeiro resumo novo.", "Segundo resumo novo."])
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            yield next(responses)
+        else:
+            yield "voce continua andando."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "turno 1"}
+    ) as response:
+        _stream_events(response)
+
+    composed_after_first = sessions.get_compact(session["id"])[0]
+    assert "Resumo legado." in composed_after_first
+    assert "Primeiro resumo novo." in composed_after_first
+
+    compact_events = [e for e in sessions.read_events(session["id"]) if e.kind == "compact"]
+    assert any(e.payload["text"] == "Resumo legado." for e in compact_events)
+
+    _push_long_pairs(session["id"], offset=18)
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "turno 2"}
+    ) as response:
+        _stream_events(response)
+
+    composed_after_second = sessions.get_compact(session["id"])[0]
+    assert "Resumo legado." in composed_after_second
+    assert "Primeiro resumo novo." in composed_after_second
+    assert "Segundo resumo novo." in composed_after_second
 
 
 # ---------------------------------------------------------------------------

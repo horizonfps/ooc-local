@@ -133,26 +133,22 @@ class CompactBlock(BaseModel):
     level: int = 1
 
 
-def read_blocks(session_id: str, fallback_text: str | None) -> list[CompactBlock]:
-    """Blocks stacked from `compact` events, defensive item by item like
-    read_minds: a malformed payload is dropped, never raised. Level-2 blocks
-    replace the level-1 blocks whose range they contain. Falls back to a
-    single block wrapping the legacy `sessions.compact` column when there is
-    no event at all."""
-    events = read_events(session_id, kinds=("compact",))
-    raw: list[CompactBlock] = []
-    for event in events:
-        payload = event.payload
-        text = payload.get("text")
-        from_seq = payload.get("from_seq")
-        to_seq = payload.get("to_seq")
-        if not isinstance(text, str) or not isinstance(from_seq, int) or not isinstance(to_seq, int):
-            continue
-        level = payload.get("level", 1)
-        if not isinstance(level, int):
-            level = 1
-        raw.append(CompactBlock(text=text, from_seq=from_seq, to_seq=to_seq, level=level))
+def parse_compact_payload(payload: dict) -> CompactBlock | None:
+    """Defensive item-by-item validation, in the mold of read_minds: a
+    malformed payload is dropped, never raised."""
+    text = payload.get("text")
+    from_seq = payload.get("from_seq")
+    to_seq = payload.get("to_seq")
+    if not isinstance(text, str) or not isinstance(from_seq, int) or not isinstance(to_seq, int):
+        return None
+    level = payload.get("level", 1)
+    if not isinstance(level, int):
+        level = 1
+    return CompactBlock(text=text, from_seq=from_seq, to_seq=to_seq, level=level)
 
+
+def effective_blocks(raw: list[CompactBlock]) -> list[CompactBlock]:
+    """Level-2 blocks replace the level-1 blocks whose range they contain."""
     layers = [block for block in raw if block.level != 1]
     blocks = list(layers)
     for block in raw:
@@ -163,8 +159,28 @@ def read_blocks(session_id: str, fallback_text: str | None) -> list[CompactBlock
         )
         if not covered:
             blocks.append(block)
+    return blocks
 
-    if not blocks and fallback_text is not None:
+
+def read_blocks(session_id: str, fallback_text: str | None) -> list[CompactBlock]:
+    """Blocks stacked from `compact` events. Falls back to a single block
+    wrapping the legacy `sessions.compact` column only when there is no
+    `compact` event at all: once any event exists, the events are
+    authoritative and the column is just their composed projection. A
+    session bootstrapped from a legacy column must have that column's text
+    persisted as a real event on its first compaction (see
+    `_maybe_compact`), or it silently disappears the moment a second
+    compaction runs and events stop being empty."""
+    events = read_events(session_id, kinds=("compact",))
+    raw: list[CompactBlock] = []
+    for event in events:
+        block = parse_compact_payload(event.payload)
+        if block is not None:
+            raw.append(block)
+
+    blocks = effective_blocks(raw)
+
+    if not raw and fallback_text is not None:
         return [CompactBlock(text=fallback_text, from_seq=0, to_seq=0, level=1)]
 
     return blocks
@@ -187,14 +203,17 @@ def compose(blocks: list[CompactBlock], locale: str) -> str:
 
 
 def needs_merge(blocks: list[CompactBlock]) -> bool:
-    return sum(1 for block in blocks if block.level == 1) > COMPACT_MAX_BLOCKS
+    """Counts every block, level-1 or level-2: level-2 layers are never
+    re-merged otherwise, so the composed text would grow without the bound
+    COMPACT_COMPOSED_MAX_TOKENS is meant to enforce."""
+    return len(blocks) > COMPACT_MAX_BLOCKS
 
 
 async def merge_oldest(blocks: list[CompactBlock], locale: str) -> CompactBlock:
-    """Folds the COMPACT_MERGE_BLOCKS oldest level-1 blocks into one level-2
-    layer, with one utility call."""
-    level1 = sorted((block for block in blocks if block.level == 1), key=lambda block: block.from_seq)
-    oldest = level1[:COMPACT_MERGE_BLOCKS]
+    """Folds the COMPACT_MERGE_BLOCKS oldest blocks, of any level, into one
+    level-2 layer, with one utility call."""
+    ordered = sorted(blocks, key=lambda block: block.from_seq)
+    oldest = ordered[:COMPACT_MERGE_BLOCKS]
     outgoing = [ChatMessage(role="system", content=block.text) for block in oldest]
     text = await compact_block(None, outgoing, locale)
     return CompactBlock(text=text, from_seq=oldest[0].from_seq, to_seq=oldest[-1].to_seq, level=2)
