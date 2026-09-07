@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GalleryScreen } from './GalleryScreen'
@@ -90,11 +90,34 @@ describe('GalleryScreen', () => {
     expect(screen.getByText('Fight the strongest foe.')).toBeInTheDocument()
   })
 
-  it('shows a progress line with the totals', async () => {
+  it('shows a progress line with the four distinct totals', async () => {
+    const gallery: Gallery = { ...BASE_GALLERY, totals: { achievements: 7, achievementsUnlocked: 3, endings: 11, endingsUnlocked: 9 } }
+    mockFetch(() => jsonResponse(gallery))
+    render(<GalleryScreen scenarioId="school" />)
+
+    await screen.findByText('Start A')
+    const progress = document.querySelector('.gallery-progress')
+    expect(progress).not.toBeNull()
+    const text = progress!.textContent ?? ''
+    expect(text).toMatch(/\b3\b/)
+    expect(text).toMatch(/\b7\b/)
+    expect(text).toMatch(/\b9\b/)
+    expect(text).toMatch(/\b11\b/)
+  })
+
+  it('shows the rarity label for rare, epic and legendary entries, not just common', async () => {
     mockFetch(() => jsonResponse(BASE_GALLERY))
     render(<GalleryScreen scenarioId="school" />)
 
-    expect(await screen.findByText(t('gallery.progress', { achievements: 2, achievementsUnlocked: 1, endings: 1, endingsUnlocked: 0 }))).toBeInTheDocument()
+    await screen.findByText('Start A')
+    const rareItem = document.querySelector('#gallery-entry-start-a-achievements-0') as HTMLElement
+    expect(within(rareItem).getByText(t('game.rarity.rare'))).toBeInTheDocument()
+
+    const legendaryItem = document.querySelector('#gallery-entry-start-a-achievements-1') as HTMLElement
+    expect(within(legendaryItem).getByText(t('game.rarity.legendary'))).toBeInTheDocument()
+
+    const epicItem = document.querySelector('#gallery-entry-start-a-endings-0') as HTMLElement
+    expect(within(epicItem).getByText(t('game.rarity.epic'))).toBeInTheDocument()
   })
 
   it('shows the no-hint line for a locked entry without a hint', async () => {
@@ -104,12 +127,15 @@ describe('GalleryScreen', () => {
     expect(await screen.findByText(t('gallery.locked.noHint'))).toBeInTheDocument()
   })
 
-  it('brings the screen-reader text for a locked entry', async () => {
+  it('brings the screen-reader text for a locked entry inside a visually-hidden element', async () => {
     mockFetch(() => jsonResponse(BASE_GALLERY))
     render(<GalleryScreen scenarioId="school" />)
 
     const texts = await screen.findAllByText(t('gallery.locked.sr'))
     expect(texts.length).toBeGreaterThan(0)
+    for (const node of texts) {
+      expect(node).toHaveClass('visually-hidden')
+    }
   })
 
   it('falls back to common class and label for an unknown rarity', async () => {
@@ -197,6 +223,72 @@ describe('GalleryScreen', () => {
     render(<GalleryScreen scenarioId="missing" />)
 
     expect(await screen.findByText(t('gallery.notFound.title'))).toBeInTheDocument()
+  })
+
+  it('shows a working back button on the 404 state', async () => {
+    const user = userEvent.setup()
+    location.hash = '#/gallery/missing'
+    mockFetch(() => jsonResponse({}, 404))
+    render(<GalleryScreen scenarioId="missing" />)
+
+    await screen.findByText(t('gallery.notFound.title'))
+    const back = screen.getByRole('button', { name: t('common.back') })
+    await user.click(back)
+    expect(location.hash).toBe('#/')
+  })
+
+  it('does not crash and omits the date for an unlocked entry with an unparseable unlockedAt', async () => {
+    const gallery: Gallery = {
+      ...BASE_GALLERY,
+      starts: [
+        {
+          id: 'start-a',
+          name: 'Start A',
+          achievements: [
+            { id: 'broken-date', name: 'Broken Date', rarity: 'rare', hint: null, unlocked: true, unlockedAt: 'not-a-date', sessionId: 's1', turn: 3 },
+          ],
+          endings: [],
+        },
+      ],
+    }
+    mockFetch(() => jsonResponse(gallery))
+    render(<GalleryScreen scenarioId="school" />)
+
+    expect(await screen.findByText('Broken Date')).toBeInTheDocument()
+    expect(document.querySelector('.gallery-entry-when')).toBeNull()
+  })
+
+  it('omits the turn when the entry has no turn recorded', async () => {
+    const gallery: Gallery = {
+      ...BASE_GALLERY,
+      starts: [
+        {
+          id: 'start-a',
+          name: 'Start A',
+          achievements: [
+            { id: 'no-turn', name: 'No Turn', rarity: 'rare', hint: null, unlocked: true, unlockedAt: new Date().toISOString(), sessionId: 's1', turn: null },
+          ],
+          endings: [],
+        },
+      ],
+    }
+    mockFetch(() => jsonResponse(gallery))
+    render(<GalleryScreen scenarioId="school" />)
+
+    await screen.findByText('No Turn')
+    const when = document.querySelector('.gallery-entry-when')
+    expect(when).not.toBeNull()
+    expect(when!.textContent).not.toMatch(/Turn 0/)
+    expect(when!.textContent).not.toContain('Turn')
+  })
+
+  it('renders the achievements list before the endings list within a start', async () => {
+    mockFetch(() => jsonResponse(BASE_GALLERY))
+    render(<GalleryScreen scenarioId="school" />)
+
+    await screen.findByText('Start A')
+    const headings = document.querySelectorAll('.gallery-section h3')
+    expect(Array.from(headings).map((h) => h.textContent)).toEqual([t('gallery.achievements.heading'), t('gallery.endings.heading')])
   })
 
   it('shows a loading skeleton with a Loading node while fetching', async () => {

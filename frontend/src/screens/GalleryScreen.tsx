@@ -48,8 +48,17 @@ type GalleryState =
   | { status: 'notFound' }
   | { status: 'loaded'; gallery: Gallery }
 
+function unlockedWhen(entry: GalleryEntry): string | null {
+  const timestamp = entry.unlockedAt ? new Date(entry.unlockedAt).getTime() : NaN
+  const when = Number.isFinite(timestamp) ? formatRelativeTime(entry.unlockedAt as string, intlLocale) : null
+  if (entry.turn != null && when != null) return t('gallery.unlocked.when', { turn: entry.turn, when })
+  if (when != null) return when
+  return null
+}
+
 function GalleryEntryItem(props: { entry: GalleryEntry; elementId: string }) {
   const { entry, elementId } = props
+  const when = entry.unlocked ? unlockedWhen(entry) : null
   return (
     <li id={elementId} className={`gallery-entry${entry.unlocked ? ' is-unlocked' : ''}`}>
       <span className={`gallery-entry-name game-rarity--${rarityOf(entry.rarity)}`}>
@@ -58,9 +67,7 @@ function GalleryEntryItem(props: { entry: GalleryEntry; elementId: string }) {
       {entry.unlocked ? null : <span className="visually-hidden">{t('gallery.locked.sr')}</span>}
       <span className="gallery-entry-rarity">{t(rarityKey(entry.rarity))}</span>
       {entry.unlocked ? (
-        <span className="gallery-entry-when">
-          {t('gallery.unlocked.when', { turn: entry.turn ?? 0, when: formatRelativeTime(entry.unlockedAt ?? '', intlLocale) })}
-        </span>
+        when != null ? <span className="gallery-entry-when">{when}</span> : null
       ) : (
         <span className="gallery-entry-hint">{entry.hint ? entry.hint : t('gallery.locked.noHint')}</span>
       )}
