@@ -86,9 +86,53 @@
   text-underline-offset: 3px;
 }
 
+.statBars__group {
+  margin-top: 6px;
+}
+
+.statBars__groupHeading {
+  margin: 0 0 4px;
+  font-size: 0.75rem;
+  color: var(--hud-label, #9aa0ab);
+}
+
+.statBars__chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.statBars__chip {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.statBars__chipName {
+  color: var(--hud-value, #f2f3f5);
+  font-size: 0.95rem;
+}
+
+.statBars__chipValue {
+  color: var(--hud-value, #f2f3f5);
+  font-size: 0.95rem;
+}
+
+.statBars__chip--highlight .statBars__chipName,
+.statBars__chip--highlight .statBars__chipValue {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .statBars__name,
-  .statBars__value {
+  .statBars__value,
+  .statBars__chipName,
+  .statBars__chipValue {
     transition: font-weight 200ms ease;
   }
 }
@@ -98,7 +142,8 @@
     padding: 4px 16px;
   }
 
-  .statBars__name {
+  .statBars__name,
+  .statBars__chipName {
     font-size: 0.8rem;
   }
 }

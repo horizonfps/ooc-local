@@ -84,6 +84,9 @@ export const gameEn = {
   'hud.weather.fog': 'Fog',
   'hud.weather.night': 'Night',
   'hud.weather.unknown': 'Unknown',
+  'hud.items.heading': 'Items',
+  'hud.skills.heading': 'Skills',
+  'hud.item.count': '×{value}',
 
   // Turn text
   'turnText.speakerLabel': '{name} says',
@@ -177,6 +180,9 @@ export const gamePtBr: Record<keyof typeof gameEn, string> = {
   'hud.weather.fog': 'Neblina',
   'hud.weather.night': 'Noite',
   'hud.weather.unknown': 'Desconhecido',
+  'hud.items.heading': 'Itens',
+  'hud.skills.heading': 'Habilidades',
+  'hud.item.count': '×{value}',
 
   // Turn text
   'turnText.speakerLabel': '{name} diz',
