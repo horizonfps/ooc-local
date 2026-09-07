@@ -30,6 +30,7 @@ class ProviderConfig(BaseModel):
     api_key_env: str = "OOC_LOCAL_API_KEY"
     structured_output: Literal["json_schema", "none"] = "none"
     system_mode: Literal["system", "fold_into_user"] = "system"
+    supports_temperature: bool = True
 
     @property
     def api_key(self) -> str:

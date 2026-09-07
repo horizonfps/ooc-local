@@ -141,3 +141,56 @@ def test_reasoning_effort_coexists_with_other_options():
 def test_reasoning_effort_none_is_validation_error():
     with pytest.raises(ValidationError):
         GenerationOptions(reasoning_effort="none")
+
+
+def test_supports_temperature_false_omits_temperature_key():
+    config = ProviderConfig(base_url="http://x/v1", supports_temperature=False)
+    options = GenerationOptions(temperature=0.7)
+    provider = OpenAICompatProvider(config, options)
+    messages = [ChatMessage(role="user", content="hi")]
+
+    payload = provider.build_payload(messages, "m")
+
+    assert "temperature" not in payload
+
+
+def test_supports_temperature_false_keeps_other_fields():
+    config = ProviderConfig(base_url="http://x/v1", supports_temperature=False, structured_output="json_schema")
+    options = GenerationOptions(
+        temperature=0.7,
+        max_tokens=42,
+        json_schema={"type": "object"},
+        schema_name="s",
+    )
+    provider = OpenAICompatProvider(config, options)
+    messages = [ChatMessage(role="user", content="hi")]
+
+    payload = provider.build_payload(messages, "m")
+
+    assert "temperature" not in payload
+    assert payload["max_tokens"] == 42
+    assert payload["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {"name": "s", "schema": {"type": "object"}, "strict": True},
+    }
+
+
+def test_supports_temperature_true_keeps_temperature_key():
+    config = ProviderConfig(base_url="http://x/v1", supports_temperature=True)
+    options = GenerationOptions(temperature=0.7)
+    provider = OpenAICompatProvider(config, options)
+    messages = [ChatMessage(role="user", content="hi")]
+
+    payload = provider.build_payload(messages, "m")
+
+    assert payload["temperature"] == 0.7
+
+
+def test_supports_temperature_false_without_temperature_option_is_fine():
+    config = ProviderConfig(base_url="http://x/v1", supports_temperature=False)
+    provider = OpenAICompatProvider(config)
+    messages = [ChatMessage(role="user", content="hi")]
+
+    payload = provider.build_payload(messages, "m")
+
+    assert "temperature" not in payload
