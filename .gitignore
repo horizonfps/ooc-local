@@ -6,3 +6,6 @@ dist/
 .pytest_cache/
 CLAUDE.local.md
 .playwright-mcp/
+
+# Local subscription proxy: 43MB binary, credentials, logs.
+proxy/
