@@ -41,3 +41,13 @@ def test_provider_without_system_mode_defaults_to_system():
 def test_provider_rejects_unknown_system_mode():
     with pytest.raises(ValidationError):
         ProviderConfig(base_url="http://x/v1", system_mode="cloak")
+
+
+def test_provider_without_supports_temperature_defaults_to_true():
+    config = ProviderConfig(base_url="http://x/v1")
+    assert config.supports_temperature is True
+
+
+def test_provider_accepts_supports_temperature_false():
+    config = ProviderConfig(base_url="http://x/v1", supports_temperature=False)
+    assert config.supports_temperature is False

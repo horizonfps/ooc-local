@@ -36,6 +36,7 @@ class OpenAICompatProvider(LLMProvider):
         self.api_key_env = provider.api_key_env
         self.structured_output = provider.structured_output
         self.system_mode = provider.system_mode
+        self.supports_temperature = provider.supports_temperature
         self.options = options or GenerationOptions()
 
     def build_payload(self, messages: list[ChatMessage], model: str) -> dict:
@@ -48,7 +49,7 @@ class OpenAICompatProvider(LLMProvider):
         }
         if self.options.max_tokens is not None:
             payload["max_tokens"] = self.options.max_tokens
-        if self.options.temperature is not None:
+        if self.options.temperature is not None and self.supports_temperature:
             payload["temperature"] = self.options.temperature
         if self.options.reasoning_effort is not None:
             payload["reasoning_effort"] = self.options.reasoning_effort

@@ -17,7 +17,10 @@ de verdade e tag `fase-N`.
   openai-compat local serve como provider alternativo. Provider que substitui o
   `system` da requisição pelo próprio (ex.: proxy sobre credencial OAuth) usa
   `system_mode: fold_into_user`, que dobra as instruções na primeira mensagem
-  do usuário; default é `system`, sem mudança de comportamento.
+  do usuário; default é `system`, sem mudança de comportamento. Provider que
+  rejeita o campo `temperature` usa `supports_temperature: false`, que omite a
+  chave do payload mesmo com a opção de geração definindo um valor; default é
+  `true`, sem mudança de comportamento.
 
 ## Git
 
