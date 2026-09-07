@@ -49,6 +49,18 @@ from app.judge import JUDGE_RAW_LOG_CHARS, JudgeError, StatChange, apply_judgeme
 from app.llm.base import ChatMessage
 from app.llm.openai_compat import OpenAICompatProvider
 from app.lore import LORE_SCAN_TURNS, build_scan_text, lore_ids, render_lore, select_lore
+from app.memory import (
+    MEMORY_CHECK_EVERY,
+    MEMORY_RAW_LOG_CHARS,
+    MEMORY_WINDOW_TURNS,
+    MemoryEntry,
+    MemoryError,
+    extract_memories,
+    memory_event,
+    merge_memories,
+    read_memories,
+    render_memories,
+)
 from app.minds import MINDS_RAW_LOG_CHARS, MindsError, merge_minds, think_minds
 from app.observability import emit
 from app.prompt import MASTER_PROMPT_VERSION, build_master_prompt, format_player_message
@@ -85,6 +97,7 @@ class TurnContext(BaseModel):
     cast_ids: list[str]
     minds: dict[str, MindView] = {}
     lore: list[LoreEntry] = []
+    memories: list[MemoryEntry] = []
 
 
 
@@ -116,8 +129,15 @@ def load_turn_context(session_id: str) -> TurnContext:
     characters = [scenario.characters[char_id] for char_id in ids]
     row = row.model_copy(update={"hud": ensure_stats(row.hud, scenario.stats)})
     minds = read_minds(session_id)
+    memories = read_memories(session_id)
     return TurnContext(
-        row=row, scenario=scenario, start=start, characters=characters, cast_ids=ids, minds=minds
+        row=row,
+        scenario=scenario,
+        start=start,
+        characters=characters,
+        cast_ids=ids,
+        minds=minds,
+        memories=memories,
     )
 
 
@@ -165,7 +185,14 @@ def build_context(
         ctx = load_turn_context(session_id)
 
     system = build_master_prompt(
-        ctx.scenario, ctx.start, ctx.row.hud, ctx.characters, compact, ctx.minds, lore=ctx.lore
+        ctx.scenario,
+        ctx.start,
+        ctx.row.hud,
+        ctx.characters,
+        compact,
+        ctx.minds,
+        lore=ctx.lore,
+        memories=ctx.memories,
     )
 
     if history is None:
@@ -411,6 +438,8 @@ async def run_turn(
             config = load_config()
         if ctx is None:
             ctx = load_turn_context(session_id)
+        if not config.flag("memory") and ctx.memories:
+            ctx = ctx.model_copy(update={"memories": []})
         role = config.models["narrator"]
         role_model = role.model
         provider = OpenAICompatProvider(config.providers[role.provider])
@@ -430,11 +459,27 @@ async def run_turn(
                 candidates=sum(1 for entry in ctx.scenario.lorebook.values() if entry.enabled),
             )
 
+        if config.flag("memory") and ctx.memories:
+            emit(
+                "memories_injected",
+                session_id=session_id,
+                turn=ctx.row.hud.turn,
+                count=len(ctx.memories),
+                tokens=estimate_tokens(render_memories(ctx.memories, ctx.scenario.meta.locale) or ""),
+            )
+
         if command is not None:
             hud = ctx.row.hud
             compact, compact_seq = get_compact(session_id)
             system = build_master_prompt(
-                ctx.scenario, ctx.start, ctx.row.hud, ctx.characters, compact, minds=ctx.minds, lore=ctx.lore
+                ctx.scenario,
+                ctx.start,
+                ctx.row.hud,
+                ctx.characters,
+                compact,
+                minds=ctx.minds,
+                lore=ctx.lore,
+                memories=ctx.memories,
             )
             # Turns already folded into the summary stay out of the meta window too.
             window = events_to_messages(
@@ -742,6 +787,91 @@ async def run_turn(
                         reason=minds_reason,
                         raw=minds_raw[:MINDS_RAW_LOG_CHARS],
                         duration_ms=minds_duration_ms,
+                        model=_utility_model(config),
+                        structured=_utility_structured(config),
+                    )
+
+        if config.flag("memory") and new_hud.turn % MEMORY_CHECK_EVERY == 0:
+            memory_started = time.monotonic()
+            try:
+                memory_window = events_to_messages(
+                    history_events(session_id, None)[-(MEMORY_WINDOW_TURNS * 2) :],
+                    ctx.scenario.meta.locale,
+                )
+                proposed, memory_reason, memory_raw = await extract_memories(
+                    ctx.scenario, ctx.memories, memory_window, message, clean_text, config
+                )
+            except MemoryError as exc:
+                emit(
+                    "memories_failed",
+                    session_id=session_id,
+                    turn=new_hud.turn,
+                    error=str(exc),
+                    duration_ms=int((time.monotonic() - memory_started) * 1000),
+                    model=_utility_model(config),
+                )
+            except Exception as exc:  # defensive: local providers return creative garbage
+                emit(
+                    "memories_failed",
+                    session_id=session_id,
+                    turn=new_hud.turn,
+                    error=str(exc),
+                    duration_ms=int((time.monotonic() - memory_started) * 1000),
+                    model=_utility_model(config),
+                )
+            else:
+                memory_duration_ms = int((time.monotonic() - memory_started) * 1000)
+                emit(
+                    "memories_checked",
+                    session_id=session_id,
+                    turn=new_hud.turn,
+                    current=len(ctx.memories),
+                    called=True,
+                )
+                if proposed is not None:
+                    entries, rejections, evicted = merge_memories(ctx.memories, proposed, new_hud.turn)
+                    if entries != ctx.memories:
+                        pending_memory_event = memory_event(entries)
+                        post_events.append(pending_memory_event)
+                        added = [
+                            entry.id
+                            for entry in entries
+                            if entry.id not in {prev.id for prev in ctx.memories}
+                        ]
+                        prev_by_id = {prev.id: prev for prev in ctx.memories}
+                        updated = [
+                            entry.id
+                            for entry in entries
+                            if entry.id in prev_by_id and prev_by_id[entry.id] != entry
+                        ]
+                        by_category: dict[str, int] = {}
+                        for entry in entries:
+                            by_category[entry.category] = by_category.get(entry.category, 0) + 1
+                        ctx = ctx.model_copy(update={"memories": entries})
+                        emit(
+                            "memories_applied",
+                            session_id=session_id,
+                            turn=new_hud.turn,
+                            added=added,
+                            updated=updated,
+                            evicted=[entry.id for entry in evicted],
+                            by_category=by_category,
+                            rejected=[
+                                {"id": rejection.id, "reason": rejection.reason}
+                                for rejection in rejections
+                            ],
+                            duration_ms=memory_duration_ms,
+                            model=_utility_model(config),
+                            structured=_utility_structured(config),
+                        )
+                else:
+                    emit(
+                        "memories_rejected",
+                        session_id=session_id,
+                        turn=new_hud.turn,
+                        reason=memory_reason,
+                        raw=memory_raw[:MEMORY_RAW_LOG_CHARS],
+                        duration_ms=memory_duration_ms,
                         model=_utility_model(config),
                         structured=_utility_structured(config),
                     )

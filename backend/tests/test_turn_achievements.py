@@ -152,7 +152,13 @@ def _config(flags=None, with_utility=True):
         {
             "providers": {"local": {"base_url": "http://x/v1"}},
             "models": models,
-            "flags": {"director": False, "hud_judge": False, "minds": False, **(flags or {})},
+            "flags": {
+                "director": False,
+                "hud_judge": False,
+                "minds": False,
+                "memory": False,
+                **(flags or {}),
+            },
         }
     )
 
