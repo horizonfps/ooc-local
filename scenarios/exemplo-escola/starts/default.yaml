@@ -81,6 +81,15 @@ achievements:
       O jogador leu, com os próprios olhos, alguma página do caderno preto da
       Chloe.
     min_turn: 4
+  - id: fim-do-primeiro-dia
+    name: Sobrevivi ao primeiro dia
+    type: ending
+    rarity: common
+    hint: Todo primeiro dia acaba, de um jeito ou de outro.
+    condition: >
+      O primeiro dia de aula terminou e o jogador já saiu da escola, com o que
+      ele construiu ou estragou hoje ficando como está.
+    min_turn: 8
   - id: caderno-queimado
     name: Ninguém mais lê isso
     type: ending

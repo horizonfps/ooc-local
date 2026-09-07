@@ -243,11 +243,12 @@ def test_example_scenario_achievements_ids_types_and_order():
         "primeiro-nome",
         "escolhi-um-lado",
         "li-o-caderno",
+        "fim-do-primeiro-dia",
         "caderno-queimado",
         "expulso-do-3b",
     ]
     assert [a.type for a in achievements].count("achievement") == 3
-    assert [a.type for a in achievements].count("ending") == 2
+    assert [a.type for a in achievements].count("ending") == 3
 
 
 def test_example_scenario_achievements_rarities_cover_the_enum():
