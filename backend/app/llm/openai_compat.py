@@ -11,15 +11,36 @@ class ProviderAuthError(RuntimeError):
     """Missing or rejected API key, distinct from a transport failure."""
 
 
+SYSTEM_INSTRUCTIONS_TAG = "system-instructions"
+SYSTEM_FOLD_ACK = "Understood."
+
+
+def _fold_system_into_user(messages: list[ChatMessage]) -> list[ChatMessage]:
+    system = [m for m in messages if m.role == "system"]
+    if not system:
+        return messages
+    text = "\n".join(m.content for m in system)
+    wrapped = f"<{SYSTEM_INSTRUCTIONS_TAG}>\n{text}\n</{SYSTEM_INSTRUCTIONS_TAG}>"
+    rest = [m for m in messages if m.role != "system"]
+    return [
+        ChatMessage(role="user", content=wrapped),
+        ChatMessage(role="assistant", content=SYSTEM_FOLD_ACK),
+        *rest,
+    ]
+
+
 class OpenAICompatProvider(LLMProvider):
     def __init__(self, provider: ProviderConfig, options: GenerationOptions | None = None):
         self.base_url = provider.base_url.rstrip("/")
         self.api_key = provider.api_key
         self.api_key_env = provider.api_key_env
         self.structured_output = provider.structured_output
+        self.system_mode = provider.system_mode
         self.options = options or GenerationOptions()
 
     def build_payload(self, messages: list[ChatMessage], model: str) -> dict:
+        if self.system_mode == "fold_into_user":
+            messages = _fold_system_into_user(messages)
         payload: dict = {
             "model": model,
             "messages": [m.model_dump() for m in messages],
