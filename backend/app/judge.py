@@ -4,7 +4,7 @@ import json
 import re
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.config import Config
 from app.hud import DynamicStat, HudState
@@ -12,7 +12,6 @@ from app.llm.base import ChatMessage, GenerationOptions
 from app.llm.openai_compat import OpenAICompatProvider
 from app.scenario import LoadedScenario, StatDef
 
-JUDGE_OPTIONS = GenerationOptions(max_tokens=200, temperature=0.1, timeout_s=45.0)
 JUDGE_NARRATOR_CHARS = 1200
 JUDGE_RAW_LOG_CHARS = 200
 DYNAMIC_STAT_NAME_CHARS = 40
@@ -78,6 +77,43 @@ class StatChange(BaseModel):
 class StatRejection(BaseModel):
     id: str
     reason: str
+
+
+class JudgementNewStat(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+    value: int
+    max: int
+    min: int = 0
+    kind: Literal["stat", "item", "skill"] = "stat"
+
+
+class JudgementResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stats: dict[str, int] = {}
+
+
+class JudgementDynamicResponse(JudgementResponse):
+    new: list[JudgementNewStat] = []
+
+
+JUDGE_OPTIONS = GenerationOptions(
+    max_tokens=200,
+    temperature=0.1,
+    timeout_s=45.0,
+    json_schema=JudgementResponse.model_json_schema(),
+    schema_name="judgement",
+)
+JUDGE_OPTIONS_DYNAMIC = GenerationOptions(
+    max_tokens=200,
+    temperature=0.1,
+    timeout_s=45.0,
+    json_schema=JudgementDynamicResponse.model_json_schema(),
+    schema_name="judgement",
+)
 
 
 def _field(value: str) -> str:
@@ -321,7 +357,8 @@ async def judge_turn(
     except KeyError:
         raise JudgeError("no utility role") from None
 
-    provider = OpenAICompatProvider(config.providers[role.provider], JUDGE_OPTIONS)
+    options = JUDGE_OPTIONS_DYNAMIC if scenario.meta.allow_dynamic_stats else JUDGE_OPTIONS
+    provider = OpenAICompatProvider(config.providers[role.provider], options)
     messages = build_judge_messages(scenario, hud, message, narrator_text, touched_ids)
 
     try:

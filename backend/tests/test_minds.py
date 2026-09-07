@@ -11,6 +11,8 @@ from app.minds import (
     MIND_SHEET_CHARS,
     MINDS_NARRATOR_CHARS,
     MINDS_OPTIONS,
+    MINDS_SCHEMA,
+    MindEntry,
     MindRejection,
     MindsError,
     build_minds_messages,
@@ -97,10 +99,10 @@ def _load(monkeypatch, tmp_path, *, locale="pt-br", characters=None):
     return load_scenario("exemplo-escola")
 
 
-def _config():
+def _config(structured_output="none"):
     return Config.model_validate(
         {
-            "providers": {"local": {"base_url": "http://x/v1"}},
+            "providers": {"local": {"base_url": "http://x/v1", "structured_output": structured_output}},
             "models": {"utility": {"provider": "local", "model": "m"}},
         }
     )
@@ -507,3 +509,50 @@ def test_think_minds_whitespace_only_response_is_invalid(monkeypatch, tmp_path):
 def test_minds_options_timeout_and_tokens():
     assert MINDS_OPTIONS.max_tokens == 300
     assert MINDS_OPTIONS.timeout_s == 45.0
+
+
+# --- schema ------------------------------------------------------------------
+
+
+def test_minds_schema_is_root_map_without_entries_key():
+    assert "entries" not in MINDS_SCHEMA
+    assert MINDS_OPTIONS.json_schema == MINDS_SCHEMA
+
+
+def test_minds_schema_additional_properties_has_the_three_mind_fields():
+    fields = MINDS_SCHEMA["additionalProperties"]["properties"]
+    assert set(fields) == {"attitude", "emoji", "event"}
+
+
+def test_mind_entry_schema_is_strict_compatible():
+    schema = MindEntry.model_json_schema()
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == {"attitude", "emoji", "event"}
+
+
+def test_think_minds_payload_carries_schema_when_structured_output_enabled(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+    captured = {}
+    original_init = OpenAICompatProvider.__init__
+
+    def spy_init(self, provider_config, options):
+        original_init(self, provider_config, options)
+        captured["provider"] = self
+
+    monkeypatch.setattr(OpenAICompatProvider, "__init__", spy_init)
+
+    _think_with_response(scenario, monkeypatch, "{}", config=_config("json_schema"))
+
+    payload = captured["provider"].build_payload([], "m")
+    assert payload["response_format"]["json_schema"]["name"] == "minds"
+
+
+def test_think_minds_prose_response_is_still_rejected_with_schema_declared(monkeypatch, tmp_path):
+    scenario = _load(monkeypatch, tmp_path)
+
+    proposed, reason, _ = _think_with_response(
+        scenario, monkeypatch, "chloe está feliz", config=_config("json_schema")
+    )
+
+    assert proposed is None
+    assert reason == "invalid_json"

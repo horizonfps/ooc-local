@@ -90,10 +90,10 @@ def _write_scenario(root, scenario_id="exemplo-escola"):
     return scenario_path
 
 
-def _config(flags=None):
+def _config(flags=None, structured_output="none"):
     return Config.model_validate(
         {
-            "providers": {"local": {"base_url": "http://x/v1"}},
+            "providers": {"local": {"base_url": "http://x/v1", "structured_output": structured_output}},
             "models": {
                 "narrator": {"provider": "local", "model": "narrator-model"},
                 "utility": {"provider": "local", "model": "utility-model"},
@@ -137,10 +137,11 @@ def _route_by_model(deltas_by_model):
     return fake_stream
 
 
-def _setup(scenarios_root, monkeypatch, flags=None):
+def _setup(scenarios_root, monkeypatch, flags=None, structured_output="none"):
     _write_scenario(scenarios_root)
-    monkeypatch.setattr(main, "load_config", lambda: _config(flags))
-    monkeypatch.setattr(turn, "load_config", lambda: _config(flags))
+    config = _config(flags, structured_output)
+    monkeypatch.setattr(main, "load_config", lambda: config)
+    monkeypatch.setattr(turn, "load_config", lambda: config)
     return TestClient(main.app)
 
 
@@ -416,3 +417,75 @@ def test_ephemeral_session_delete_removes_cast_event_too(scenarios_root, monkeyp
     delete_response = client.delete(f"/api/sessions/{session_id}")
     assert delete_response.status_code in (200, 204)
     assert sessions.read_events(session_id) == []
+
+
+def test_director_applied_carries_structured_when_provider_uses_schema(scenarios_root, monkeypatch):
+    client = _setup(scenarios_root, monkeypatch, structured_output="json_schema")
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            yield '{"scene": ["chloe", "renan"]}'
+        else:
+            yield "voce continua."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "continua"}
+    ) as response:
+        _stream_events(response)
+
+    applied = [props for name, props in emitted if name == "director_applied"]
+    assert applied[0]["structured"] is True
+    assert applied[0]["model"] == "utility-model"
+
+
+def test_director_rejected_carries_model_and_structured(scenarios_root, monkeypatch):
+    client = _setup(scenarios_root, monkeypatch, structured_output="json_schema")
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            yield '{"scene": ["ghost"]}'
+        else:
+            yield "voce continua."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "continua"}
+    ) as response:
+        _stream_events(response)
+
+    rejected = [props for name, props in emitted if name == "director_rejected"]
+    assert rejected[0]["model"] == "utility-model"
+    assert rejected[0]["structured"] is True
+
+
+def test_director_failed_carries_model(scenarios_root, monkeypatch):
+    client = _setup(scenarios_root, monkeypatch)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    emitted = []
+    monkeypatch.setattr(turn, "emit", lambda event, **props: emitted.append((event, props)))
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            raise RuntimeError("provider exploded")
+        yield "voce continua."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "continua"}
+    ) as response:
+        _stream_events(response)
+
+    failed = [props for name, props in emitted if name == "director_failed"]
+    assert failed[0]["model"] == "utility-model"

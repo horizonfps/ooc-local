@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+from pydantic import BaseModel, ConfigDict
+
 from app.cast import MAX_CAST_IN_SCENE, validate_cast_ids
 from app.config import Config
 from app.hud import HudState
@@ -9,7 +11,20 @@ from app.llm.base import ChatMessage, GenerationOptions
 from app.llm.openai_compat import OpenAICompatProvider
 from app.scenario import LoadedScenario
 
-DIRECTOR_OPTIONS = GenerationOptions(max_tokens=120, temperature=0.1, timeout_s=45.0)
+
+class SceneResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scene: list[str]
+
+
+DIRECTOR_OPTIONS = GenerationOptions(
+    max_tokens=120,
+    temperature=0.1,
+    timeout_s=45.0,
+    json_schema=SceneResponse.model_json_schema(),
+    schema_name="scene",
+)
 DIRECTOR_WINDOW_TURNS = 3
 DIRECTOR_EXCERPT_CHARS = 300
 DIRECTOR_RAW_LOG_CHARS = 200
