@@ -387,7 +387,7 @@ export async function streamTurn(sessionId: string, message: string, h: TurnHand
           h.onSuggestions(parsed.suggestions)
         } else if (Array.isArray(parsed.achievements)) {
           h.onAchievements?.(parsed.achievements)
-        } else if (parsed.ended !== undefined) {
+        } else if (parsed.ended != null) {
           h.onEnded?.(parsed.ended.achievementId)
         }
       }

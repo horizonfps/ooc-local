@@ -171,6 +171,7 @@ export function GamePanel(props: GamePanelProps) {
   const [reopening, setReopening] = useState(false)
   const [reopenError, setReopenError] = useState<unknown | null>(null)
   const [unlockAnnouncement, setUnlockAnnouncement] = useState('')
+  const endedBannerRef = useRef<HTMLDivElement>(null)
 
   const load = () => {
     setState({ phase: 'loading' })
@@ -242,6 +243,8 @@ export function GamePanel(props: GamePanelProps) {
         const endings = (state.session.achievements ?? []).filter((a) => a.type === 'ending')
         const last = endings[endings.length - 1]
         setEnded({ name: last?.name ?? null })
+      } else {
+        setEnded(null)
       }
     }
   }, [state])
@@ -302,6 +305,13 @@ export function GamePanel(props: GamePanelProps) {
     el.focus()
     el.setSelectionRange(el.value.length, el.value.length)
   }, [focusToken])
+
+  const showEndedBanner = ended !== null && state.phase !== 'error' && state.phase !== 'notFound'
+
+  useEffect(() => {
+    if (!autoFocusInput || !showEndedBanner) return
+    endedBannerRef.current?.focus()
+  }, [showEndedBanner, autoFocusInput])
 
   const handleScroll = () => {
     const el = historyRef.current
@@ -489,6 +499,12 @@ export function GamePanel(props: GamePanelProps) {
         setFocusToken((n) => n + 1)
       })
       .catch((err) => {
+        if (err instanceof ApiError && err.status === 409 && err.detail === 'session is not ended') {
+          setEnded(null)
+          lastEndingRef.current = null
+          load()
+          return
+        }
         setReopenError(err)
       })
       .finally(() => {
@@ -896,9 +912,9 @@ export function GamePanel(props: GamePanelProps) {
           </button>
           <p className="game-input-hint">{t('game.input.hint')}</p>
         </form>
-      ) : ended !== null ? (
+      ) : showEndedBanner ? (
         <div className="game-footer">
-          <div className="game-ended-banner">
+          <div className="game-ended-banner" ref={endedBannerRef} tabIndex={-1}>
             <p className="game-ended-banner-title">{t('game.ended.title')}</p>
             <p className="game-ended-banner-body">
               {ended.name !== null ? t('game.ended.body', { name: ended.name }) : t('game.ended.bodyUnnamed')}

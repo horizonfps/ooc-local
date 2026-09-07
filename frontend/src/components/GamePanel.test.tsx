@@ -1049,6 +1049,13 @@ describe('GamePanel', () => {
     })
   })
 
+  function findLiveAnnouncement(text: string): HTMLElement {
+    const regions = Array.from(document.querySelectorAll('[aria-live="polite"][role="status"]')) as HTMLElement[]
+    const match = regions.find((el) => el.textContent?.includes(text))
+    if (!match) throw new Error(`no aria-live="polite" role="status" region contains: ${text}`)
+    return match
+  }
+
   describe('milestones and endings', () => {
     const milestoneTurn = {
       index: 1,
@@ -1085,9 +1092,28 @@ describe('GamePanel', () => {
       expect(epilogueBlock).not.toBeNull()
       expect(within(epilogueBlock).getByText(t('game.ending.label'))).toBeInTheDocument()
       expect(within(epilogueBlock).getByText('A Good End')).toBeInTheDocument()
+      expect(within(epilogueBlock).getByText(t('game.unlock.rarity', { rarity: t('game.rarity.legendary') }))).toBeInTheDocument()
 
       const name = within(epilogueBlock).getByText('A Good End')
       expect(name).toHaveClass('game-rarity--legendary')
+    })
+
+    it('places a milestone and an epilogue block in chronological order around a normal turn', async () => {
+      const normalTurn = { index: 3, role: 'narrator' as const, text: 'The yard falls quiet.' }
+      mockRoutedFetch({
+        get: () => jsonResponse(session({ turns: [milestoneTurn, normalTurn, epilogueTurn] })),
+        post: () => sseResponse(['[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const items = Array.from(document.querySelectorAll('.game-history > li')).filter(
+        (li) => !li.classList.contains('game-turn--prologue'),
+      )
+      expect(items).toHaveLength(3)
+      expect(items[0]).toHaveClass('game-unlock--milestone')
+      expect(items[1].textContent).toContain('The yard falls quiet.')
+      expect(items[2]).toHaveClass('game-unlock--epilogue')
     })
 
     it('falls back to common for an unknown rarity without breaking the render', async () => {
@@ -1133,7 +1159,9 @@ describe('GamePanel', () => {
       const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
       await user.type(textarea, 'ring{Enter}')
 
-      await screen.findByText(t('game.milestone.announce', { name: 'First Bell', rarity: t('game.rarity.rare') }))
+      const announcement = t('game.milestone.announce', { name: 'First Bell', rarity: t('game.rarity.rare') })
+      await screen.findByText(announcement)
+      expect(findLiveAnnouncement(announcement)).toBeInTheDocument()
     })
 
     it('shows the ending banner with the name from achievements once ended arrives, without a refetch', async () => {
@@ -1267,7 +1295,9 @@ describe('GamePanel', () => {
         resolveSecondGet = resolve
       })
       let getCount = 0
-      const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url.endsWith('/reopen')) return jsonResponse(session({ ended: false }))
         if (init?.method === 'POST') return jsonResponse({ detail: 'session ended' }, 409)
         getCount += 1
         if (getCount === 1) return jsonResponse(session())
@@ -1291,6 +1321,121 @@ describe('GamePanel', () => {
       )
 
       await screen.findByText(t('game.ended.body', { name: 'A Good End' }))
+
+      const reopenButton = screen.getByRole('button', { name: t('game.ended.reopen') })
+      await user.click(reopenButton)
+
+      const restoredTextarea = await screen.findByRole('textbox', { name: t('game.input.label') })
+      expect(restoredTextarea).toHaveValue('push through')
+    })
+
+    it('a reopen 409 "session is not ended" reloads the session and returns to the form instead of a generic error', async () => {
+      const user = userEvent.setup()
+      let getCount = 0
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url.endsWith('/reopen')) return jsonResponse({ detail: 'session is not ended' }, 409)
+        if (init?.method === 'POST') return sseResponse(['[DONE]'])
+        getCount += 1
+        if (getCount === 1) {
+          return jsonResponse(
+            session({ ended: true, achievements: [{ id: 'good-end', name: 'A Good End', type: 'ending', rarity: 'legendary', turn: 2 }] }),
+          )
+        }
+        return jsonResponse(session({ ended: false }))
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      render(<GamePanel sessionId="sess-1" />)
+
+      const reopenButton = await screen.findByRole('button', { name: t('game.ended.reopen') })
+      await user.click(reopenButton)
+
+      await screen.findByRole('textbox', { name: t('game.input.label') })
+      expect(screen.queryByText(t('game.ended.reopen.error'))).not.toBeInTheDocument()
+      expect(screen.queryByText(t('game.ended.title'))).not.toBeInTheDocument()
+    })
+
+    it('a 409 followed by a refetch showing the session was reopened elsewhere clears the banner', async () => {
+      const user = userEvent.setup()
+      let getCount = 0
+      const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === 'POST') return jsonResponse({ detail: 'session ended' }, 409)
+        getCount += 1
+        if (getCount === 1) return jsonResponse(session())
+        return jsonResponse(session({ ended: false }))
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'push through{Enter}')
+
+      await screen.findByRole('textbox', { name: t('game.input.label') })
+      expect(screen.queryByText(t('game.ended.title'))).not.toBeInTheDocument()
+    })
+
+    it('a load that fails after a 409 shows the generic error, not the ending banner', async () => {
+      const user = userEvent.setup()
+      let getCount = 0
+      const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === 'POST') return jsonResponse({ detail: 'session ended' }, 409)
+        getCount += 1
+        if (getCount === 1) return jsonResponse(session())
+        return jsonResponse({}, 500)
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'push through{Enter}')
+
+      await screen.findByText(t('error.unexpected.title'))
+      expect(screen.queryByText(t('game.ended.title'))).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: t('game.ended.reopen') })).not.toBeInTheDocument()
+    })
+
+    it('a stream event with ended: null does not throw and does not end the session', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session()),
+        post: () => sseResponse([{ delta: 'Nothing happens.' }, { ended: null }, '[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'wait{Enter}')
+
+      await screen.findByText('Nothing happens.')
+      expect(screen.queryByText(t('game.ended.title'))).not.toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: t('game.input.label') })).toBeInTheDocument()
+    })
+
+    it('sends focus to the ending banner when the session ends', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session()),
+        post: () =>
+          sseResponse([
+            { delta: 'The story closes.' },
+            { achievements: [{ id: 'good-end', name: 'A Good End', type: 'ending', rarity: 'legendary', turn: 2 }] },
+            { ended: { achievementId: 'good-end' } },
+            '[DONE]',
+          ]),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'end it{Enter}')
+
+      await screen.findByText(t('game.ended.title'))
+      await waitFor(() => expect(document.activeElement?.className).toContain('game-ended-banner'))
     })
   })
 })
