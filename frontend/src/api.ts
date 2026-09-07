@@ -265,6 +265,24 @@ export async function deleteMedia(id: string, target: MediaTarget): Promise<void
   }
 }
 
+export type GalleryEntry = {
+  id: string
+  name: string
+  rarity: string
+  hint: string | null
+  unlocked: boolean
+  unlockedAt: string | null
+  sessionId: string | null
+  turn: number | null
+}
+export type GalleryStart = { id: string; name: string; achievements: GalleryEntry[]; endings: GalleryEntry[] }
+export type GalleryTotals = { achievements: number; achievementsUnlocked: number; endings: number; endingsUnlocked: number }
+export type Gallery = { scenarioId: string; scenarioName: string; starts: GalleryStart[]; totals: GalleryTotals }
+
+export function fetchGallery(scenarioId: string): Promise<Gallery> {
+  return request(`/api/scenarios/${scenarioId}/gallery`)
+}
+
 export function fetchSessions(): Promise<SessionSummary[]> {
   return request('/api/sessions')
 }

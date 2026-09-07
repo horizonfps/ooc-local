@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from app import builder, builder_doc, media
+from app import builder, builder_doc, gallery, media
 from app.commands import UnknownCommand, load_global_commands, resolve_command
 from app.config import load_config
 from app.llm.base import ChatMessage
@@ -39,6 +39,7 @@ init_db()
 app.include_router(builder.router)
 app.include_router(builder_doc.router)
 app.include_router(media.router)
+app.include_router(gallery.router)
 
 
 class ChatRequest(BaseModel):

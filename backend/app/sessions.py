@@ -293,6 +293,57 @@ def list_sessions() -> list[SessionSummary]:
     return summaries
 
 
+class ScenarioUnlock(BaseModel):
+    start_id: str
+    session_id: str
+    id: str
+    turn: int | None
+    created_at: str
+
+
+def read_scenario_unlocks(scenario_id: str) -> list[ScenarioUnlock]:
+    """Every achievement event of every non-ephemeral session of this scenario,
+    oldest first. A malformed payload is skipped, never raised."""
+    conn = _connect()
+    try:
+        cur = conn.execute(
+            """
+            SELECT s.start_id, s.id, e.payload, e.created_at
+            FROM events e JOIN sessions s ON s.id = e.session_id
+            WHERE s.scenario_id = ? AND s.ephemeral = 0 AND e.kind = ?
+            ORDER BY e.created_at, e.id
+            """,
+            (scenario_id, ACHIEVEMENT_EVENT_KIND),
+        )
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    unlocks: list[ScenarioUnlock] = []
+    for start_id, session_id, raw_payload, created_at in rows:
+        payload = json.loads(raw_payload)
+        if not isinstance(payload, dict):
+            emit("session_achievement_invalid", session_id=session_id, reason="payload is not a dict")
+            continue
+        achievement_id = payload.get("id")
+        if not isinstance(achievement_id, str):
+            emit("session_achievement_invalid", session_id=session_id, reason="missing or invalid id")
+            continue
+        turn = payload.get("turn")
+        if not isinstance(turn, int):
+            turn = None
+        unlocks.append(
+            ScenarioUnlock(
+                start_id=start_id,
+                session_id=session_id,
+                id=achievement_id,
+                turn=turn,
+                created_at=created_at,
+            )
+        )
+    return unlocks
+
+
 def get_session_row(session_id: str) -> SessionRow:
     conn = _connect()
     try:
