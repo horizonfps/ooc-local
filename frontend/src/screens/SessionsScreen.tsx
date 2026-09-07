@@ -139,6 +139,11 @@ export function SessionsScreen() {
         {submitError ? (
           <ErrorState title={t('error.unexpected.title')} body={t('sessions.new.error')} />
         ) : null}
+        {selectedScenarioId ? (
+          <p className="sessions-new-galleryLink">
+            <a href={`#/gallery/${selectedScenarioId}`}>{t('sessions.galleryLink')}</a>
+          </p>
+        ) : null}
       </section>
 
       <section className="sessions-list">

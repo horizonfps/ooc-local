@@ -25,11 +25,13 @@ const BUILDER_TABS: readonly BuilderTab[] = [
 export type Route =
   | { name: 'sessions' }
   | { name: 'game'; id: string }
+  | { name: 'gallery'; id: string }
   | { name: 'builderList' }
   | { name: 'builderEditor'; id: string; tab: BuilderTab }
 
 const BUILDER_EDITOR_RE = /^#\/builder\/([^/]+)\/([^/]+)\/?$/
 const BUILDER_NO_TAB_RE = /^#\/builder\/([^/]+)\/?$/
+const GALLERY_RE = /^#\/gallery\/([^/]+)\/?$/
 
 function isBuilderTab(value: string): value is BuilderTab {
   return (BUILDER_TABS as readonly string[]).includes(value)
@@ -42,6 +44,9 @@ function needsBuilderTabReplace(hash: string): boolean {
 function parseHash(hash: string): Route {
   const sessionMatch = /^#\/session\/([^/]+)$/.exec(hash)
   if (sessionMatch) return { name: 'game', id: sessionMatch[1] }
+
+  const galleryMatch = GALLERY_RE.exec(hash)
+  if (galleryMatch) return { name: 'gallery', id: galleryMatch[1] }
 
   const editorMatch = BUILDER_EDITOR_RE.exec(hash)
   if (editorMatch) {
