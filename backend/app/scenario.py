@@ -135,6 +135,51 @@ class AchievementDef(BaseModel):
         return value or None
 
 
+_SETUP_ID_RE = re.compile(r"^[a-z0-9_-]+$")
+SETUP_ANSWER_CHARS = 200
+
+
+class SetupQuestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    question: str
+    type: Literal["text", "choice"] = "text"
+    options: list[str] = []
+    default: str | None = None
+
+    @field_validator("id")
+    @classmethod
+    def _validate_id(cls, value: str) -> str:
+        if not _SETUP_ID_RE.match(value):
+            raise ValueError(f"invalid setup question id '{value}', expected [a-z0-9_-]+")
+        return value
+
+    @field_validator("question")
+    @classmethod
+    def _validate_question(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be empty")
+        return value
+
+    @field_validator("options")
+    @classmethod
+    def _validate_options(cls, value: list[str]) -> list[str]:
+        return [item.strip() for item in value if item.strip()]
+
+    @model_validator(mode="after")
+    def _validate_type_shape(self) -> "SetupQuestion":
+        if self.type == "choice":
+            if len(self.options) < 2:
+                raise ValueError("choice question needs at least two options")
+            if self.default is not None and self.default not in self.options:
+                raise ValueError(f"default '{self.default}' is not one of the options")
+        elif self.options:
+            raise ValueError("text question must not declare options")
+        return self
+
+
 class StartConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -149,6 +194,7 @@ class StartConfig(BaseModel):
     hud: HudDefaults
     achievements: list[AchievementDef] = []
     characters: list[str] | None = None
+    setup: list[SetupQuestion] = []
 
     @field_validator("conflict", "mission")
     @classmethod
@@ -165,6 +211,15 @@ class StartConfig(BaseModel):
             if achievement.id in seen:
                 raise ValueError(f"duplicate achievement id '{achievement.id}'")
             seen.add(achievement.id)
+        return self
+
+    @model_validator(mode="after")
+    def _unique_setup_ids(self) -> "StartConfig":
+        seen: set[str] = set()
+        for question in self.setup:
+            if question.id in seen:
+                raise ValueError(f"duplicate setup question id '{question.id}'")
+            seen.add(question.id)
         return self
 
 
@@ -496,6 +551,14 @@ def load_scenario(scenario_id: str) -> LoadedScenario:
             raise ScenarioError(
                 scenario_dir / "starts" / f"{start.id}.yaml",
                 f"unknown stat ids in achievement gates: {unknown_gates}",
+            )
+        reserved_setup_ids = [
+            question.id for question in start.setup if question.id in ("scenario", "start")
+        ]
+        if reserved_setup_ids:
+            raise ScenarioError(
+                scenario_dir / "starts" / f"{start.id}.yaml",
+                f"reserved setup question ids: {reserved_setup_ids}",
             )
 
     if meta.default_start not in starts:

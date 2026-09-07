@@ -12,11 +12,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.cast import CAST_EVENT_KIND, MIND_EVENT_KIND, CastMember, MindView, resolve_cast, seed_cast_ids
 from app.commands import command_views, load_global_commands
-from app.config import CONFIG_DIR
+from app.config import CONFIG_DIR, load_config
 from app.hud import HudState, StatView, ensure_stats, hud_from_start, stat_views
 from app.media import SessionAssets, session_assets
 from app.observability import emit
 from app.scenario import CommandView, ScenarioError, load_scenario
+from app.setup import SetupAnswers, SetupInvalid, apply_setup, read_setup, resolve_answers, setup_event
 
 ACHIEVEMENT_EVENT_KIND = "achievement"
 SESSION_ENDED_KIND = "session_ended"
@@ -201,7 +202,10 @@ def _now_iso() -> str:
 
 
 def create_session(
-    scenario_id: str, start_id: str | None = None, ephemeral: bool = False
+    scenario_id: str,
+    start_id: str | None = None,
+    ephemeral: bool = False,
+    setup: dict[str, str] | None = None,
 ) -> SessionDetail:
     try:
         scenario = load_scenario(scenario_id)
@@ -211,6 +215,13 @@ def create_session(
         start = scenario.start(start_id)
     except ScenarioError:
         raise StartNotFound(start_id or scenario.meta.default_start) from None
+
+    config = load_config()
+    if config.flag("setup"):
+        answered = resolve_answers(start, setup)
+    else:
+        answered = dict(setup or {})
+    answers = SetupAnswers(answers=answered)
 
     hud = hud_from_start(start)
     hud = hud.model_copy(update={"stats": {stat.id: stat.default for stat in scenario.stats}})
@@ -235,12 +246,15 @@ def create_session(
                     int(ephemeral),
                 ),
             )
+            if answers.answers:
+                _append_in_tx(conn, session_id, [setup_event(answers)], now)
     except sqlite3.Error as exc:
         emit("session_db_error", op="create_session", error=str(exc))
         raise
     finally:
         conn.close()
 
+    raw_setup = setup or {}
     emit(
         "session_created",
         session_id=session_id,
@@ -248,6 +262,17 @@ def create_session(
         start_id=start.id,
         ephemeral=ephemeral,
     )
+    emit(
+        "session_setup",
+        session_id=session_id,
+        start_id=start.id,
+        questions=len(start.setup),
+        answered=sum(1 for question in start.setup if question.id in raw_setup),
+        defaulted=sum(1 for question in start.setup if question.id not in raw_setup),
+        free=answers.free,
+    )
+
+    scenario, start = apply_setup(scenario, start, answers)
 
     assets = session_assets(scenario)
     _emit_session_assets(session_id, assets)
@@ -382,6 +407,7 @@ def get_session(session_id: str) -> SessionDetail:
         start = scenario.starts[row.start_id]
     except (ScenarioError, KeyError):
         raise ScenarioNotFound(row.scenario_id) from None
+    scenario, start = apply_setup(scenario, start, read_setup(row.id))
 
     events = read_events(
         session_id,
