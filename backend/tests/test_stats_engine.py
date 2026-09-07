@@ -67,6 +67,35 @@ def test_apply_stat_unknown_id_is_noop():
     assert "fantasma" not in new_hud.stats
 
 
+def test_apply_stat_clamped_by_stat_max_delta():
+    stat = StatDef(id="reputacao", name="Reputação", min=0, max=100, default=40, max_delta=5)
+    hud = _hud(reputacao=50)
+
+    new_hud, change = apply_stat(hud, [stat], "reputacao", 40)
+
+    assert change == (5, 55)
+
+
+def test_apply_stat_max_delta_clamps_per_tag_not_per_turn():
+    stat = StatDef(id="ouro", name="Ouro", min=0, max=1_000_000, default=0, max_delta=500)
+    hud = _hud(ouro=0)
+
+    hud, first_change = apply_stat(hud, [stat], "ouro", 500)
+    hud, second_change = apply_stat(hud, [stat], "ouro", 500)
+
+    assert first_change == (500, 500)
+    assert second_change == (500, 1000)
+    assert hud.stats["ouro"] == 1000
+
+
+def test_apply_stat_without_max_delta_moves_freely():
+    hud = _hud(reputacao=50)
+
+    new_hud, change = apply_stat(hud, [REPUTACAO], "reputacao", 40)
+
+    assert change == (40, 90)
+
+
 def test_apply_stat_on_dynamic_stat_clamps_by_its_own_range_and_writes_dynamic_stats():
     hud = HudState(
         location="patio",

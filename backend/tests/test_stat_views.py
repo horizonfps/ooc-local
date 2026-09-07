@@ -172,6 +172,29 @@ def test_stat_views_dynamic_stats_come_after_declared_with_none_fields(scenarios
     assert dynamic_view.value == 3
 
 
+def test_stat_views_declared_stat_kind_is_stat(scenarios_root):
+    scenario = _make_scenario(scenarios_root)
+    hud = HudState(location="patio", time="08:00", weather="clear")
+
+    views = stat_views(scenario, hud)
+
+    assert views[0].kind == "stat"
+
+
+def test_stat_views_dynamic_stat_kind_matches_dynamic_stat(scenarios_root):
+    scenario = _make_scenario(scenarios_root)
+    hud = HudState(
+        location="patio",
+        time="08:00",
+        weather="clear",
+        dynamic_stats={"espada": DynamicStat(name="Espada", value=1, max=1, kind="item")},
+    )
+
+    views = stat_views(scenario, hud)
+
+    assert views[-1].kind == "item"
+
+
 def test_mind_view_and_minds_event_contract():
     entries = {"chloe": MindView(attitude="curiosa", emoji="🙂", event="conheceu o jogador")}
 
@@ -208,6 +231,17 @@ def test_post_sessions_route_returns_stats_with_defaults_and_saves_hud(client, s
     get_response = client.get(f"/api/sessions/{body['id']}")
     assert get_response.status_code == 200
     assert get_response.json()["stats"] == body["stats"]
+
+
+def test_get_session_route_stats_include_kind(client, scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola", stats=STATS_TWO)
+
+    create = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"})
+    body = create.json()
+
+    get_response = client.get(f"/api/sessions/{body['id']}")
+    assert get_response.status_code == 200
+    assert {s["kind"] for s in get_response.json()["stats"]} == {"stat"}
 
 
 def test_get_session_route_with_legacy_hud_missing_stats_key_responds_with_defaults(

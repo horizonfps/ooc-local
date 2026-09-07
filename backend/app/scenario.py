@@ -137,6 +137,7 @@ class StatDef(BaseModel):
     default: int
     description: str | None = None
     levels: list[StatLevel] = []
+    max_delta: int | None = Field(default=None, ge=1)
 
     @field_validator("id")
     @classmethod
@@ -224,6 +225,7 @@ class ScenarioMeta(BaseModel):
     default_start: str = "default"
     world_mode: Literal["guided", "custom"] = "guided"
     allow_dynamic_stats: bool = False
+    max_dynamic_stats: int | None = Field(default=None, ge=1)
 
 
 class LoadedScenario(BaseModel):

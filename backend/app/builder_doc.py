@@ -255,6 +255,10 @@ def _serialize_meta(meta: ScenarioMeta) -> bytes:
     data["world_mode"] = meta.world_mode
     data["tags"] = meta.tags
     data["default_start"] = meta.default_start
+    if meta.allow_dynamic_stats:
+        data["allow_dynamic_stats"] = meta.allow_dynamic_stats
+    if meta.max_dynamic_stats is not None:
+        data["max_dynamic_stats"] = meta.max_dynamic_stats
     return _dump_yaml(data)
 
 
@@ -324,6 +328,8 @@ def _serialize_stat_def(stat: StatDef) -> dict:
     data["default"] = stat.default
     if stat.description is not None:
         data["description"] = stat.description
+    if stat.max_delta is not None:
+        data["max_delta"] = stat.max_delta
     if stat.levels:
         data["levels"] = [{"from": level.from_, "text": level.text} for level in stat.levels]
     return data
