@@ -276,6 +276,8 @@ def test_timeout_reaches_httpx_client_from_provider_options(monkeypatch):
     captured_timeouts = []
 
     class _FakeResponse:
+        status_code = 200
+
         def raise_for_status(self):
             pass
 

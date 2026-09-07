@@ -7,10 +7,15 @@ from app.config import ProviderConfig
 from app.llm.base import ChatMessage, GenerationOptions, LLMProvider
 
 
+class ProviderAuthError(RuntimeError):
+    """Missing or rejected API key, distinct from a transport failure."""
+
+
 class OpenAICompatProvider(LLMProvider):
     def __init__(self, provider: ProviderConfig, options: GenerationOptions | None = None):
         self.base_url = provider.base_url.rstrip("/")
         self.api_key = provider.api_key
+        self.api_key_env = provider.api_key_env
         self.structured_output = provider.structured_output
         self.options = options or GenerationOptions()
 
@@ -43,6 +48,10 @@ class OpenAICompatProvider(LLMProvider):
             async with client.stream(
                 "POST", f"{self.base_url}/chat/completions", json=payload, headers=headers
             ) as response:
+                if response.status_code in (401, 403):
+                    raise ProviderAuthError(
+                        f"provider rejected the credential from ${self.api_key_env}"
+                    )
                 response.raise_for_status()
                 async for line in response.aiter_lines():
                     if not line.startswith("data:"):
