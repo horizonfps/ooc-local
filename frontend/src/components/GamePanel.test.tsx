@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { GamePanel } from './GamePanel'
+import { GamePanel, buildAchievementTurns } from './GamePanel'
 import { t } from '../i18n'
 import type { CommandView, SessionDetail, StatView } from '../api'
 
@@ -1436,6 +1436,193 @@ describe('GamePanel', () => {
 
       await screen.findByText(t('game.ended.title'))
       await waitFor(() => expect(document.activeElement?.className).toContain('game-ended-banner'))
+    })
+
+    it('renders a milestone block for the same turn as soon as the stream carries its text, without refetch', async () => {
+      const user = userEvent.setup()
+      const fetchMock = mockRoutedFetch({
+        get: () => jsonResponse(session()),
+        post: () =>
+          sseResponse([
+            { delta: 'The bell rings.' },
+            {
+              achievements: [
+                { id: 'first-bell', name: 'First Bell', type: 'achievement', rarity: 'rare', turn: 1, text: 'The bell rings across the yard.' },
+              ],
+            },
+            '[DONE]',
+          ]),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const getCallsBefore = fetchMock.mock.calls.filter((c) => c[1]?.method !== 'POST').length
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'ring{Enter}')
+
+      const milestoneBlock = await screen.findByText('The bell rings across the yard.')
+      expect(milestoneBlock.closest('.game-unlock--milestone')).not.toBeNull()
+      const getCallsAfter = fetchMock.mock.calls.filter((c) => c[1]?.method !== 'POST').length
+      expect(getCallsAfter).toBe(getCallsBefore)
+    })
+
+    it('produces markup for the milestone block identical to what a GET would render for the same event', async () => {
+      const achievement = { id: 'first-bell', name: 'First Bell', type: 'achievement' as const, rarity: 'rare', turn: 1 }
+      const milestoneText = 'The bell rings across the yard.'
+
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session()),
+        post: () => sseResponse([{ delta: 'The bell rings.' }, { achievements: [{ ...achievement, text: milestoneText }] }, '[DONE]']),
+      })
+      const { unmount } = render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'ring{Enter}')
+
+      const streamedBlock = (await screen.findByText(milestoneText)).closest('.game-unlock--milestone') as HTMLElement
+      const streamedHtml = streamedBlock.outerHTML
+      unmount()
+
+      // Same event, but the way `_build_turns` would surface it on a `GET`: a
+      // turn with kind "milestone" carrying the text and the achievement.
+      mockRoutedFetch({
+        get: () =>
+          jsonResponse(
+            session({ turns: [{ index: 1, role: 'narrator', text: milestoneText, kind: 'milestone', achievement }] }),
+          ),
+        post: () => sseResponse(['[DONE]']),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const refetchedBlock = (await screen.findByText(milestoneText)).closest('.game-unlock--milestone') as HTMLElement
+      expect(streamedHtml).toBe(refetchedBlock.outerHTML)
+    })
+
+    it('buildAchievementTurns strips text from the achievement, so the object matches what a GET returns', () => {
+      const result = buildAchievementTurns(
+        [{ id: 'first-bell', name: 'First Bell', type: 'achievement', rarity: 'rare', turn: 1, text: 'The bell rings across the yard.' }],
+        1,
+      )
+      expect(result).toEqual([
+        {
+          index: 1,
+          role: 'narrator',
+          text: 'The bell rings across the yard.',
+          kind: 'milestone',
+          achievement: { id: 'first-bell', name: 'First Bell', type: 'achievement', rarity: 'rare', turn: 1 },
+        },
+      ])
+    })
+
+    it('buildAchievementTurns tags an ending as epilogue and keeps the current index unchanged', () => {
+      const result = buildAchievementTurns(
+        [{ id: 'good-end', name: 'A Good End', type: 'ending', rarity: 'legendary', turn: 2, text: 'And so the story closes.' }],
+        3,
+      )
+      expect(result).toEqual([
+        {
+          index: 3,
+          role: 'narrator',
+          text: 'And so the story closes.',
+          kind: 'epilogue',
+          achievement: { id: 'good-end', name: 'A Good End', type: 'ending', rarity: 'legendary', turn: 2 },
+        },
+      ])
+    })
+
+    it('buildAchievementTurns skips items with no text', () => {
+      const result = buildAchievementTurns(
+        [{ id: 'first-bell', name: 'First Bell', type: 'achievement', rarity: 'rare', turn: 1 }],
+        1,
+      )
+      expect(result).toEqual([])
+    })
+
+    it('renders the epilogue block alongside the ending banner as soon as the stream carries its text', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session()),
+        post: () =>
+          sseResponse([
+            { delta: 'The story closes.' },
+            {
+              achievements: [
+                { id: 'good-end', name: 'A Good End', type: 'ending', rarity: 'legendary', turn: 2, text: 'And so the story closes.' },
+              ],
+            },
+            { ended: { achievementId: 'good-end' } },
+            '[DONE]',
+          ]),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'end it{Enter}')
+
+      await screen.findByText(t('game.ended.body', { name: 'A Good End' }))
+      const epilogueBlock = await screen.findByText('And so the story closes.')
+      expect(epilogueBlock.closest('.game-unlock--epilogue')).not.toBeNull()
+    })
+
+    it('does not render a block when the stream achievement has no text', async () => {
+      const user = userEvent.setup()
+      mockRoutedFetch({
+        get: () => jsonResponse(session()),
+        post: () =>
+          sseResponse([
+            { delta: 'Nothing special.' },
+            { achievements: [{ id: 'first-bell', name: 'First Bell', type: 'achievement', rarity: 'rare', turn: 1 }] },
+            '[DONE]',
+          ]),
+      })
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'nothing{Enter}')
+
+      await screen.findByText('Nothing special.')
+      expect(document.querySelector('.game-unlock')).toBeNull()
+    })
+
+    it('keeps the locally assembled milestone block, without duplicating it, after a later refetch', async () => {
+      const user = userEvent.setup()
+      let ended = false
+      mockRoutedFetch({
+        get: () =>
+          jsonResponse(
+            ended
+              ? session({ turns: [milestoneTurn] })
+              : session(),
+          ),
+        post: () =>
+          sseResponse([
+            { delta: 'The bell rings.' },
+            {
+              achievements: [
+                { id: 'first-bell', name: 'First Bell', type: 'achievement', rarity: 'rare', turn: 1, text: 'The bell rings across the yard.' },
+              ],
+            },
+            '[DONE]',
+          ]),
+      })
+      const { unmount } = render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      const textarea = screen.getByRole('textbox', { name: t('game.input.label') })
+      await user.type(textarea, 'ring{Enter}')
+      await screen.findByText('The bell rings across the yard.')
+
+      unmount()
+      ended = true
+      render(<GamePanel sessionId="sess-1" />)
+
+      await screen.findByText('Once upon a time.')
+      expect(screen.getAllByText('The bell rings across the yard.')).toHaveLength(1)
     })
   })
 })

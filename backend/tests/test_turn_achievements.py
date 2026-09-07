@@ -715,6 +715,102 @@ def test_prose_from_utility_rejects_and_writes_nothing(scenarios_root, monkeypat
     assert stored == []
 
 
+def test_stream_publishes_milestone_text(scenarios_root, monkeypatch):
+    client = _setup(scenarios_root, monkeypatch)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    monkeypatch.setattr(
+        OpenAICompatProvider,
+        "stream_chat",
+        _route(
+            ["turno 1", "turno 2", "turno 3", "nota do marco"],
+            ['{"verdicts": [{"id": "primeira-descoberta", "met": true}]}'],
+        ),
+    )
+
+    _turn(client, session["id"])
+    _turn(client, session["id"])
+    status, events = _turn(client, session["id"])
+    assert status == 200
+
+    achievements_event = next(e for e in events if "achievements" in e)
+    assert achievements_event["achievements"][0]["text"] == "nota do marco"
+
+
+def test_stream_publishes_epilogue_text(scenarios_root, monkeypatch):
+    client = _setup(scenarios_root, monkeypatch, start=ENDING_START)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    monkeypatch.setattr(
+        OpenAICompatProvider,
+        "stream_chat",
+        _route(
+            ["t1", "t2", "t3", "nota do marco", "texto do epilogo"],
+            ['{"verdicts": [{"id": "marco-e-final", "met": true}, {"id": "final-feliz", "met": true}]}'],
+        ),
+    )
+
+    _turn(client, session["id"])
+    _turn(client, session["id"])
+    status, events = _turn(client, session["id"])
+    assert status == 200
+
+    achievements_event = next(e for e in events if "achievements" in e)
+    by_id = {a["id"]: a for a in achievements_event["achievements"]}
+    assert by_id["marco-e-final"]["text"] == "nota do marco"
+    assert by_id["final-feliz"]["text"] == "texto do epilogo"
+
+
+def test_stream_achievement_without_text_omits_text(scenarios_root, monkeypatch):
+    client = _setup(scenarios_root, monkeypatch)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    narrator_calls = []
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            yield '{"verdicts": [{"id": "primeira-descoberta", "met": true}]}'
+            return
+        narrator_calls.append(messages)
+        if len(narrator_calls) == 4:  # the milestone call
+            raise RuntimeError("narrator offline")
+        yield "turno normal"
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    _turn(client, session["id"])
+    _turn(client, session["id"])
+    status, events = _turn(client, session["id"])
+    assert status == 200
+
+    achievements_event = next(e for e in events if "achievements" in e)
+    assert achievements_event["achievements"][0].get("text") is None
+
+
+def test_read_achievements_and_session_detail_do_not_carry_text(scenarios_root, monkeypatch):
+    client = _setup(scenarios_root, monkeypatch)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    monkeypatch.setattr(
+        OpenAICompatProvider,
+        "stream_chat",
+        _route(
+            ["turno 1", "turno 2", "turno 3", "nota do marco"],
+            ['{"verdicts": [{"id": "primeira-descoberta", "met": true}]}'],
+        ),
+    )
+
+    _turn(client, session["id"])
+    _turn(client, session["id"])
+    _turn(client, session["id"])
+
+    read = sessions.read_achievements(session["id"])
+    assert all(not hasattr(a, "text") for a in read)
+
+    detail = client.get(f"/api/sessions/{session['id']}").json()
+    assert all("text" not in a for a in detail["achievements"])
+
+
 def test_utility_unavailable_emits_failed_and_turn_completes(scenarios_root, monkeypatch):
     client = _setup(scenarios_root, monkeypatch, config=_config(with_utility=False))
     session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()

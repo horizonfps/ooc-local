@@ -25,6 +25,7 @@ import {
   type SessionDetail,
   type StatView,
   type TurnView,
+  type UnlockedStreamView,
   type UnlockedView,
 } from '../api'
 import { classifyError, describeError, type ErrorKind } from '../errors'
@@ -43,6 +44,24 @@ function rarityClass(value: string | undefined | null): KnownRarity {
 
 function rarityKey(value: string | undefined | null): StringKey {
   return `game.rarity.${rarityClass(value)}` as StringKey
+}
+
+// Mirrors the achievement branch of `_build_turns` on the backend: same index
+// (not incremented), same kind, and an achievement stripped of `text` so it
+// matches `UnlockedView` exactly, the same shape a `GET` would return.
+export function buildAchievementTurns(unlocked: UnlockedStreamView[], index: number): TurnView[] {
+  return unlocked
+    .filter((a): a is UnlockedStreamView & { text: string } => Boolean(a.text))
+    .map((a) => {
+      const { text, ...achievement } = a
+      return {
+        index,
+        role: 'narrator',
+        text,
+        kind: achievement.type === 'ending' ? 'epilogue' : 'milestone',
+        achievement,
+      }
+    })
 }
 
 const STAGE_STORAGE_KEY = 'ooc-local:stage'
@@ -396,6 +415,9 @@ export function GamePanel(props: GamePanelProps) {
               )
               .join(' ')
             setUnlockAnnouncement(announcement)
+
+            const textTurns = buildAchievementTurns(unlocked, index)
+            if (textTurns.length > 0) setExtraTurns((prev) => [...prev, ...textTurns])
           },
           onEnded: () => {
             setEnded({ name: lastEndingRef.current?.name ?? null })
@@ -758,7 +780,11 @@ export function GamePanel(props: GamePanelProps) {
             if (kind === 'milestone' || kind === 'epilogue') {
               const rarity = rarityClass(turn.achievement?.rarity)
               return (
-                <li key={key} className={`game-turn game-unlock game-unlock--${kind}`}>
+                <li
+                  key={key}
+                  className={`game-turn game-unlock game-unlock--${kind}`}
+                  data-turn-index={turn.index}
+                >
                   <span className="game-unlock-label">
                     {kind === 'epilogue' ? t('game.ending.label') : t('game.milestone.label')}
                   </span>

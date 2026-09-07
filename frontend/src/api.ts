@@ -30,6 +30,7 @@ export type UnlockedView = {
   rarity: string
   turn: number
 }
+export type UnlockedStreamView = UnlockedView & { text?: string | null }
 export type TurnView = {
   index: number
   role: 'player' | 'narrator'
@@ -321,13 +322,13 @@ export type TurnHandlers = {
   onHud: (hud: TurnHudPayload) => void
   onSuggestions: (suggestions: string[]) => void
   onError: (err: unknown) => void
-  onAchievements?: (unlocked: UnlockedView[]) => void
+  onAchievements?: (unlocked: UnlockedStreamView[]) => void
   onEnded?: (achievementId: string) => void
 }
 
 type TurnEvent = {
   delta?: string; hud?: TurnHudPayload; suggestions?: string[]; error?: string
-  achievements?: UnlockedView[]
+  achievements?: UnlockedStreamView[]
   ended?: { achievementId: string }
 }
 

@@ -52,6 +52,7 @@ from app.sessions import (
     Event,
     ScenarioNotFound,
     SessionRow,
+    UnlockedStreamView,
     UnlockedView,
     append_events,
     get_compact,
@@ -645,7 +646,7 @@ async def run_turn(
                         structured=_utility_structured(config),
                     )
 
-        unlocked_views: list[UnlockedView] = []
+        unlocked_views: list[UnlockedStreamView] = []
         ended_id: str | None = None
 
         if config.flag("achievements") and new_hud.turn % ACHIEVEMENT_CHECK_EVERY == 0:
@@ -731,12 +732,13 @@ async def run_turn(
                                     model=_narrator_model(config),
                                     error=milestone_error,
                                 )
-                            view = UnlockedView(
+                            view = UnlockedStreamView(
                                 id=achievement.id,
                                 name=achievement.name,
                                 type=achievement.type,
                                 rarity=achievement.rarity,
                                 turn=new_hud.turn,
+                                text=text,
                             )
                             post_events.append((
                                 ACHIEVEMENT_EVENT_KIND,
@@ -797,12 +799,13 @@ async def run_turn(
                                     },
                                 ))
                                 unlocked_views.append(
-                                    UnlockedView(
+                                    UnlockedStreamView(
                                         id=ending.id,
                                         name=ending.name,
                                         type=ending.type,
                                         rarity=ending.rarity,
                                         turn=new_hud.turn,
+                                        text=ending_text,
                                     )
                                 )
                                 post_events.append((SESSION_ENDED_KIND, {"turn": new_hud.turn, "achievement_id": ending.id}))
