@@ -3,6 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ValidationError
 
 from app.cast import MindView, seed_cast_ids
+from app.compact import CompactBlock, compose, effective_blocks, parse_compact_payload
 from app.hud import DynamicStat, HudState, advance, apply_location, ensure_stats, hud_from_start
 from app.scenario import LoadedScenario, ScenarioError, StartConfig, load_scenario
 from app.sessions import (
@@ -132,6 +133,8 @@ def replay_session(session_id: str) -> SessionReplay:
     minds: dict[str, MindView] = {}
     compact: str | None = None
     compact_seq: int | None = None
+    raw_compact_blocks: list[CompactBlock] = []
+    locale = scenario.meta.locale
     exact = True
     unlocked: list[str] = []
     ended = False
@@ -255,8 +258,16 @@ def replay_session(session_id: str) -> SessionReplay:
             if group is not None:
                 close_group(group)
                 group = None
-            compact = event.payload.get("text")
-            compact_seq = event.payload.get("to_seq")
+            block = parse_compact_payload(event.payload)
+            if block is not None:
+                raw_compact_blocks.append(block)
+            blocks = effective_blocks(raw_compact_blocks)
+            if blocks:
+                # compact_seq must never regress: a level-2 merge event's own
+                # to_seq is older than the newest level-1 block it doesn't
+                # touch, but the snapshot needs the composite, not one block.
+                compact = compose(blocks, locale)
+                compact_seq = max(b.to_seq for b in blocks)
             continue
         if event.kind in (SESSION_ENDED_KIND, SESSION_REOPENED_KIND):
             ended = event.kind == SESSION_ENDED_KIND

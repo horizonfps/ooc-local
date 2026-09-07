@@ -314,6 +314,52 @@ def test_compact_applies_from_the_turn_it_was_recorded_on(scenarios_root):
     assert result.turns[2].compact_seq == 2
 
 
+def test_compact_seq_never_regresses_after_a_level_two_merge(scenarios_root):
+    """A level-2 merge event's own to_seq (the range of the two blocks it
+    folds) is older than a newer level-1 block it doesn't touch. The
+    snapshot must carry the composed text of every still-relevant block and
+    the highest covered_seq among them, never regress to the merge event's
+    own smaller to_seq."""
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(detail.id, _turn_events("turno um", "narra um"))
+    sessions.set_compact(
+        detail.id, "bloco 1", 5, {"text": "bloco 1", "level": 1, "from_seq": 1, "to_seq": 5}
+    )
+    sessions.append_events(detail.id, _turn_events("turno dois", "narra dois"))
+    sessions.set_compact(
+        detail.id, "bloco 1\nbloco 2", 10, {"text": "bloco 2", "level": 1, "from_seq": 6, "to_seq": 10}
+    )
+    sessions.append_events(detail.id, _turn_events("turno tres", "narra tres"))
+    sessions.set_compact(
+        detail.id,
+        "bloco 1\nbloco 2\nbloco 3",
+        15,
+        {"text": "bloco 3", "level": 1, "from_seq": 11, "to_seq": 15},
+    )
+    sessions.append_events(detail.id, _turn_events("turno quatro", "narra quatro"))
+    # The merge folds blocks 1 and 2 (oldest two) into a layer. Its own
+    # to_seq (10) is older than block 3's to_seq (15), which the merge never
+    # touched, but the session already covered up to 15 by this point.
+    sessions.set_compact(
+        detail.id, "camada\nbloco 3", 15, {"text": "camada", "level": 2, "from_seq": 1, "to_seq": 10}
+    )
+    sessions.append_events(detail.id, _turn_events("turno cinco", "narra cinco"))
+
+    result = replay.replay_session(detail.id)
+
+    final = result.turns[-1]
+    assert final.compact_seq == 15
+    assert "camada" in final.compact
+    assert "bloco 3" in final.compact
+    assert "bloco 1" not in final.compact
+    assert "bloco 2" not in final.compact
+
+    seqs = [turn.compact_seq for turn in result.turns if turn.compact_seq is not None]
+    assert seqs == sorted(seqs)
+
+
 def test_meta_turn_is_skipped_and_not_in_history(scenarios_root):
     _write_scenario(scenarios_root)
     detail = sessions.create_session("exemplo-escola")

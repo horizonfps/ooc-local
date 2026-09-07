@@ -357,6 +357,99 @@ def test_compact_block_raises_compact_error_on_timeout(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# CompactBlock / read_blocks / compose / needs_merge / merge_oldest
+# ---------------------------------------------------------------------------
+
+
+def _block(text, from_seq, to_seq, level=1):
+    return compact.CompactBlock(text=text, from_seq=from_seq, to_seq=to_seq, level=level)
+
+
+def test_compose_empty_is_empty_string():
+    assert compact.compose([], "pt-br") == ""
+
+
+def test_compose_orders_by_from_seq_and_keeps_both_texts():
+    blocks = [_block("segundo", 10, 20), _block("primeiro", 0, 9)]
+    composed = compact.compose(blocks, "pt-br")
+    assert "primeiro" in composed
+    assert "segundo" in composed
+    assert composed.index("primeiro") < composed.index("segundo")
+
+
+def test_read_blocks_fallback_to_column_text_when_no_events(scenarios_root):
+    _write_scenario(scenarios_root)
+    session = sessions.create_session("exemplo-escola")
+    blocks = compact.read_blocks(session.id, "Resumo legado.")
+    assert len(blocks) == 1
+    assert blocks[0].text == "Resumo legado."
+    assert blocks[0].level == 1
+
+
+def test_read_blocks_no_fallback_and_no_events_is_empty(scenarios_root):
+    _write_scenario(scenarios_root)
+    session = sessions.create_session("exemplo-escola")
+    assert compact.read_blocks(session.id, None) == []
+
+
+def test_read_blocks_ignores_malformed_events(scenarios_root):
+    _write_scenario(scenarios_root)
+    session = sessions.create_session("exemplo-escola")
+    sessions.append_events(
+        session.id,
+        [
+            ("compact", {"text": "sem from_seq", "to_seq": 5}),
+            ("compact", {"from_seq": 0, "to_seq": 5}),
+            ("compact", {"text": 123, "from_seq": 0, "to_seq": 5}),
+            ("compact", {"text": "valido", "from_seq": 0, "to_seq": 5}),
+        ],
+    )
+    blocks = compact.read_blocks(session.id, None)
+    assert len(blocks) == 1
+    assert blocks[0].text == "valido"
+
+
+def test_read_blocks_level_two_replaces_contained_level_one(scenarios_root):
+    _write_scenario(scenarios_root)
+    session = sessions.create_session("exemplo-escola")
+    sessions.append_events(
+        session.id,
+        [
+            ("compact", {"text": "bloco 1", "from_seq": 0, "to_seq": 5, "level": 1}),
+            ("compact", {"text": "bloco 2", "from_seq": 6, "to_seq": 10, "level": 1}),
+            ("compact", {"text": "camada", "from_seq": 0, "to_seq": 10, "level": 2}),
+        ],
+    )
+    blocks = compact.read_blocks(session.id, None)
+    assert len(blocks) == 1
+    assert blocks[0].text == "camada"
+    assert blocks[0].level == 2
+
+
+def test_needs_merge_true_only_past_the_max():
+    blocks = [_block(f"b{i}", i, i, 1) for i in range(compact.COMPACT_MAX_BLOCKS)]
+    assert compact.needs_merge(blocks) is False
+    assert compact.needs_merge([*blocks, _block("new", 99, 99, 1)]) is True
+
+
+def test_merge_oldest_folds_the_two_oldest_level_one_blocks(monkeypatch):
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+
+    async def fake_stream(self, messages, model):
+        yield "fundido"
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    blocks = [_block("mais antigo", 0, 5, 1), _block("segundo mais antigo", 6, 10, 1), _block("recente", 11, 15, 1)]
+    layer = asyncio.run(compact.merge_oldest(blocks, "pt-br"))
+
+    assert layer.level == 2
+    assert layer.text == "fundido"
+    assert layer.from_seq == 0
+    assert layer.to_seq == 10
+
+
+# ---------------------------------------------------------------------------
 # history_events / events_to_messages / select_window
 # ---------------------------------------------------------------------------
 
@@ -622,7 +715,15 @@ def test_second_turn_reuses_compact_without_calling_utility_again(scenarios_root
     assert sessions.get_compact(session["id"])[0] == "Resumo do bloco antigo."
 
 
-def test_second_compaction_replaces_previous_compact(scenarios_root, monkeypatch):
+def _push_long_pairs(session_id, offset=0, count=18):
+    pairs = []
+    for i in range(offset, offset + count):
+        pairs.append(("player_turn", {"text": f"jogador {i} " + "lorem " * 500}))
+        pairs.append(("narrator_turn", {"text": f"narrador {i} " + "ipsum " * 500}))
+    sessions.append_events(session_id, pairs)
+
+
+def test_second_compaction_appends_a_second_block(scenarios_root, monkeypatch):
     _write_scenario(scenarios_root)
     monkeypatch.setattr(main, "load_config", lambda: _config())
     monkeypatch.setattr(turn, "load_config", lambda: _config())
@@ -630,17 +731,62 @@ def test_second_compaction_replaces_previous_compact(scenarios_root, monkeypatch
     client = TestClient(main.app)
     session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
 
-    def _push_long_pairs():
-        pairs = []
-        for i in range(18):
-            pairs.append(("player_turn", {"text": f"jogador {i} " + "lorem " * 500}))
-            pairs.append(("narrator_turn", {"text": f"narrador {i} " + "ipsum " * 500}))
-        sessions.append_events(session["id"], pairs)
+    _push_long_pairs(session["id"])
 
-    _push_long_pairs()
+    responses = iter(["Primeiro resumo.", "Segundo resumo."])
+    captured_narrator = []
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            yield next(responses)
+        else:
+            captured_narrator.append(messages)
+            yield "voce continua andando."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "turno 1"}
+    ) as response:
+        _stream_events(response)
+
+    assert sessions.get_compact(session["id"])[0] == "Primeiro resumo."
+
+    _push_long_pairs(session["id"], offset=18)
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "turno 2"}
+    ) as response:
+        _stream_events(response)
+
+    compact_events = [e for e in sessions.read_events(session["id"]) if e.kind == "compact"]
+    assert len(compact_events) == 2
+    assert compact_events[0].payload["text"] == "Primeiro resumo."
+    assert compact_events[1].payload["text"] == "Segundo resumo."
+
+    composed = sessions.get_compact(session["id"])[0]
+    assert "Primeiro resumo." in composed
+    assert "Segundo resumo." in composed
+    assert composed.index("Primeiro resumo.") < composed.index("Segundo resumo.")
+
+    narrator_system = captured_narrator[-1][0].content
+    assert "RESUMO DA CAMPANHA" in narrator_system
+    assert "Primeiro resumo." in narrator_system
+    assert "Segundo resumo." in narrator_system
+
+
+def test_second_compaction_prompt_has_only_the_outgoing_turns(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    _push_long_pairs(session["id"])
 
     utility_prompts = []
-    responses = iter(["Primeiro resumo.", "Segundo resumo substitui o primeiro."])
+    responses = iter(["Primeiro resumo.", "Segundo resumo."])
 
     async def fake_stream(self, messages, model):
         if model == "utility-model":
@@ -656,9 +802,7 @@ def test_second_compaction_replaces_previous_compact(scenarios_root, monkeypatch
     ) as response:
         _stream_events(response)
 
-    assert sessions.get_compact(session["id"])[0] == "Primeiro resumo."
-
-    _push_long_pairs()
+    _push_long_pairs(session["id"], offset=18)
 
     with client.stream(
         "POST", f"/api/sessions/{session['id']}/turn", json={"message": "turno 2"}
@@ -667,8 +811,210 @@ def test_second_compaction_replaces_previous_compact(scenarios_root, monkeypatch
 
     assert len(utility_prompts) == 2
     second_prompt_text = "\n".join(m.content for m in utility_prompts[1])
-    assert "Primeiro resumo." in second_prompt_text
-    assert sessions.get_compact(session["id"])[0] == "Segundo resumo substitui o primeiro."
+    assert "Primeiro resumo." not in second_prompt_text
+
+
+def test_three_blocks_no_merge_one_utility_call_each(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    responses = iter([f"Resumo {i}." for i in range(1, 4)])
+    utility_calls = []
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            utility_calls.append(messages)
+            yield next(responses)
+        else:
+            yield "voce continua andando."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    for turno in range(3):
+        _push_long_pairs(session["id"], offset=turno * 18)
+        with client.stream(
+            "POST", f"/api/sessions/{session['id']}/turn", json={"message": f"turno {turno}"}
+        ) as response:
+            _stream_events(response)
+
+    assert len(utility_calls) == 3
+    compact_events = [e for e in sessions.read_events(session["id"]) if e.kind == "compact"]
+    assert len(compact_events) == 3
+    assert all(e.payload["level"] == 1 for e in compact_events)
+    composed = sessions.get_compact(session["id"])[0]
+    assert "Resumo 1." in composed and "Resumo 2." in composed and "Resumo 3." in composed
+
+
+def test_fourth_block_triggers_a_merge_into_a_level_two_layer(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    responses = iter(
+        ["Resumo 1.", "Resumo 2.", "Resumo 3.", "Resumo 4.", "Resumo 5.", "Fusao dos dois mais antigos."]
+    )
+    utility_calls = []
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            utility_calls.append(messages)
+            yield next(responses)
+        else:
+            yield "voce continua andando."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    for turno in range(4):
+        _push_long_pairs(session["id"], offset=turno * 18)
+        with client.stream(
+            "POST", f"/api/sessions/{session['id']}/turn", json={"message": f"turno {turno}"}
+        ) as response:
+            _stream_events(response)
+
+    assert len(utility_calls) == 4
+
+    # Fifth compaction: a fifth level-1 block would push the total past
+    # COMPACT_MAX_BLOCKS, so this round makes two utility calls (the new
+    # block, then the merge) and records a level-2 event.
+    _push_long_pairs(session["id"], offset=4 * 18)
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "turno 4"}
+    ) as response:
+        _stream_events(response)
+
+    assert len(utility_calls) == 6
+
+    compact_events = [e for e in sessions.read_events(session["id"]) if e.kind == "compact"]
+    levels = [e.payload["level"] for e in compact_events]
+    assert levels.count(2) == 1
+
+    composed = sessions.get_compact(session["id"])[0]
+    assert "Fusao dos dois mais antigos." in composed
+    assert "Resumo 1." not in composed
+    assert "Resumo 2." not in composed
+    assert "Resumo 3." in composed
+    assert "Resumo 4." in composed
+    assert "Resumo 5." in composed
+
+
+def test_second_merge_folds_a_level_two_layer_back_in(scenarios_root, monkeypatch):
+    """Level-2 layers are never exempt from future merges: once the total
+    block count (level-1 plus level-2) passes COMPACT_MAX_BLOCKS again, the
+    oldest two blocks -- which now includes the earlier layer -- fold again.
+    Otherwise the composed text grows without the bound
+    COMPACT_COMPOSED_MAX_TOKENS is meant to enforce."""
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    responses = iter(
+        [
+            "Resumo 1.",
+            "Resumo 2.",
+            "Resumo 3.",
+            "Resumo 4.",
+            "Resumo 5.",
+            "Fusao 1.",
+            "Resumo 6.",
+            "Fusao 2.",
+        ]
+    )
+    utility_calls = []
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            utility_calls.append(messages)
+            yield next(responses)
+        else:
+            yield "voce continua andando."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    for turno in range(6):
+        _push_long_pairs(session["id"], offset=turno * 18)
+        with client.stream(
+            "POST", f"/api/sessions/{session['id']}/turn", json={"message": f"turno {turno}"}
+        ) as response:
+            _stream_events(response)
+
+    assert len(utility_calls) == 8
+
+    compact_events = [e for e in sessions.read_events(session["id"]) if e.kind == "compact"]
+    levels = [e.payload["level"] for e in compact_events]
+    assert levels.count(2) == 2
+
+    composed = sessions.get_compact(session["id"])[0]
+    assert "Fusao 2." in composed
+    assert "Fusao 1." not in composed
+    assert "Resumo 3." not in composed
+    assert "Resumo 4." in composed
+    assert "Resumo 5." in composed
+    assert "Resumo 6." in composed
+    assert estimate_tokens(composed) < compact.COMPACT_COMPOSED_MAX_TOKENS
+
+
+def test_merge_failure_keeps_new_block_and_composed_stays_with_level_one_blocks(scenarios_root, monkeypatch):
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    responses = iter(["Resumo 1.", "Resumo 2.", "Resumo 3.", "Resumo 4."])
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            yield next(responses)
+        else:
+            yield "voce continua andando."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    for turno in range(4):
+        _push_long_pairs(session["id"], offset=turno * 18)
+        with client.stream(
+            "POST", f"/api/sessions/{session['id']}/turn", json={"message": f"turno {turno}"}
+        ) as response:
+            _stream_events(response)
+
+    call_count = {"n": 0}
+
+    async def failing_merge_stream(self, messages, model):
+        if model == "utility-model":
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                yield "Resumo 5."
+            else:
+                raise RuntimeError("fusao offline")
+        else:
+            yield "voce continua andando."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", failing_merge_stream)
+
+    _push_long_pairs(session["id"], offset=4 * 18)
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "turno 4"}
+    ) as response:
+        _stream_events(response)
+
+    compact_events = [e for e in sessions.read_events(session["id"]) if e.kind == "compact"]
+    levels = [e.payload["level"] for e in compact_events]
+    assert 2 not in levels
+    assert compact_events[-1].payload["text"] == "Resumo 5."
+
+    composed = sessions.get_compact(session["id"])[0]
+    assert "Resumo 5." in composed
 
 
 def test_utility_failure_falls_back_to_truncated_window(scenarios_root, monkeypatch):
@@ -1127,6 +1473,64 @@ def test_legacy_session_with_compact_text_and_null_compact_seq_includes_full_his
     contents = [m.content for m in narrator_messages]
     assert "fala legada" in contents
     assert "resposta legada" in contents
+
+
+def test_legacy_session_compacting_twice_keeps_the_legacy_text_in_the_composed(
+    scenarios_root, monkeypatch
+):
+    """A session created before this PR has legacy text in the column and no
+    `compact` event. The first new-code compaction must persist that legacy
+    text as a real event, or the second compaction (which only sees events,
+    not the column) silently drops it from the composed text."""
+    _write_scenario(scenarios_root)
+    monkeypatch.setattr(main, "load_config", lambda: _config())
+    monkeypatch.setattr(turn, "load_config", lambda: _config())
+    monkeypatch.setattr(compact, "load_config", lambda: _config())
+    client = TestClient(main.app)
+    session = client.post("/api/sessions", json={"scenarioId": "exemplo-escola"}).json()
+
+    conn = sqlite3.connect(sessions.db_path())
+    conn.execute("UPDATE sessions SET compact = ? WHERE id = ?", ("Resumo legado.", session["id"]))
+    conn.commit()
+    conn.close()
+
+    assert sessions.read_events(session["id"], kinds=("compact",)) == []
+
+    _push_long_pairs(session["id"])
+
+    responses = iter(["Primeiro resumo novo.", "Segundo resumo novo."])
+
+    async def fake_stream(self, messages, model):
+        if model == "utility-model":
+            yield next(responses)
+        else:
+            yield "voce continua andando."
+
+    monkeypatch.setattr(OpenAICompatProvider, "stream_chat", fake_stream)
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "turno 1"}
+    ) as response:
+        _stream_events(response)
+
+    composed_after_first = sessions.get_compact(session["id"])[0]
+    assert "Resumo legado." in composed_after_first
+    assert "Primeiro resumo novo." in composed_after_first
+
+    compact_events = [e for e in sessions.read_events(session["id"]) if e.kind == "compact"]
+    assert any(e.payload["text"] == "Resumo legado." for e in compact_events)
+
+    _push_long_pairs(session["id"], offset=18)
+
+    with client.stream(
+        "POST", f"/api/sessions/{session['id']}/turn", json={"message": "turno 2"}
+    ) as response:
+        _stream_events(response)
+
+    composed_after_second = sessions.get_compact(session["id"])[0]
+    assert "Resumo legado." in composed_after_second
+    assert "Primeiro resumo novo." in composed_after_second
+    assert "Segundo resumo novo." in composed_after_second
 
 
 # ---------------------------------------------------------------------------
