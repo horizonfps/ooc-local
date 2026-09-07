@@ -49,4 +49,55 @@ hud:
   location: pátio da escola
   time: "07:50"
   weather: clear
+achievements:
+  - id: primeiro-nome
+    name: Alguém aprendeu meu nome
+    type: achievement
+    rarity: common
+    hint: Basta uma conversa que não morra no primeiro "oi".
+    condition: >
+      Um personagem do 3º B chamou o jogador pelo nome numa conversa, por
+      iniciativa própria, depois de uma troca de mais de uma fala.
+    min_turn: 3
+  - id: escolhi-um-lado
+    name: Escolhi um lado
+    type: achievement
+    rarity: rare
+    hint: Bancar alguém na frente da turma custa caro, e rende.
+    condition: >
+      O jogador se posicionou publicamente a favor da Chloe ou da Ashlee num
+      confronto entre as duas, e a outra ficou sabendo.
+    min_turn: 5
+    stat_gates:
+      - id: reputacao
+        at_least: 50
+  - id: li-o-caderno
+    name: Eu li o caderno
+    type: achievement
+    rarity: epic
+    hint: O caderno preto não fica aberto por muito tempo.
+    condition: >
+      O jogador leu, com os próprios olhos, alguma página do caderno preto da
+      Chloe.
+    min_turn: 4
+  - id: caderno-queimado
+    name: Ninguém mais lê isso
+    type: ending
+    rarity: legendary
+    hint: Algumas coisas só acabam quando viram cinza.
+    condition: >
+      O caderno preto foi destruído de vez, com o jogador presente e ciente do
+      que estava acontecendo.
+    min_turn: 8
+  - id: expulso-do-3b
+    name: Fora do 3º B
+    type: ending
+    rarity: rare
+    condition: >
+      O jogador foi definitivamente rejeitado pela turma: ninguém do 3º B
+      aceita mais falar com ele e a escola registrou o caso.
+    min_turn: 8
+    stat_gates:
+      - id: reputacao
+        at_least: 0
 characters: [chloe, ashlee, mika]

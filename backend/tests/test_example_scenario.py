@@ -236,6 +236,60 @@ def test_example_scenario_lorebook_stems_have_no_accent_or_uppercase():
         assert stem_re.match(path.stem)
 
 
+def test_example_scenario_achievements_ids_types_and_order():
+    scenario = load_scenario("exemplo-escola")
+    achievements = scenario.starts["default"].achievements
+    assert [a.id for a in achievements] == [
+        "primeiro-nome",
+        "escolhi-um-lado",
+        "li-o-caderno",
+        "caderno-queimado",
+        "expulso-do-3b",
+    ]
+    assert [a.type for a in achievements].count("achievement") == 3
+    assert [a.type for a in achievements].count("ending") == 2
+
+
+def test_example_scenario_achievements_rarities_cover_the_enum():
+    scenario = load_scenario("exemplo-escola")
+    achievements = {a.id: a for a in scenario.starts["default"].achievements}
+    assert achievements["primeiro-nome"].rarity == "common"
+    assert achievements["escolhi-um-lado"].rarity == "rare"
+    assert achievements["li-o-caderno"].rarity == "epic"
+    assert achievements["caderno-queimado"].rarity == "legendary"
+    assert achievements["expulso-do-3b"].rarity == "rare"
+    assert {a.rarity for a in achievements.values()} == {"common", "rare", "epic", "legendary"}
+
+
+def test_example_scenario_achievements_stat_gates_point_to_known_stats():
+    scenario = load_scenario("exemplo-escola")
+    stat_ids = {stat.id for stat in scenario.stats}
+    for achievement in scenario.starts["default"].achievements:
+        for gate in achievement.stat_gates:
+            assert gate.id in stat_ids
+
+
+def test_example_scenario_achievements_min_turn_is_greater_than_one():
+    scenario = load_scenario("exemplo-escola")
+    for achievement in scenario.starts["default"].achievements:
+        assert achievement.min_turn is not None
+        assert achievement.min_turn > 1
+
+
+def test_example_scenario_achievements_condition_word_count_within_budget():
+    scenario = load_scenario("exemplo-escola")
+    for achievement in scenario.starts["default"].achievements:
+        word_count = len(achievement.condition.split())
+        assert word_count <= 40
+
+
+def test_example_scenario_achievements_hint_present_and_absent():
+    scenario = load_scenario("exemplo-escola")
+    achievements = scenario.starts["default"].achievements
+    assert any(a.hint for a in achievements)
+    assert any(not a.hint for a in achievements)
+
+
 def test_example_scenario_commands_include_fofoca():
     scenario = load_scenario("exemplo-escola")
     assert [command.name for command in scenario.commands] == ["fofoca"]
