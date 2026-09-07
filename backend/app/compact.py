@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import math
 
+from pydantic import BaseModel
+
 from app.config import load_config
 from app.llm.base import ChatMessage, GenerationOptions
 from app.llm.openai_compat import OpenAICompatProvider
+from app.sessions import read_events
 
 CONTEXT_BUDGET_TOKENS = 24_000
 OUTPUT_RESERVE_TOKENS = 800
@@ -14,6 +17,10 @@ INPUT_BUDGET_TOKENS = CONTEXT_BUDGET_TOKENS - OUTPUT_RESERVE_TOKENS
 
 COMPACT_KEEP_TURNS = 9
 COMPACT_RESERVE_TOKENS = 700
+
+COMPACT_MAX_BLOCKS = 4
+COMPACT_MERGE_BLOCKS = 2
+COMPACT_COMPOSED_MAX_TOKENS = COMPACT_TARGET_TOKENS * COMPACT_MAX_BLOCKS
 
 COMPACT_MAX_TOKENS = 400
 COMPACT_OPTIONS = GenerationOptions(
@@ -30,6 +37,7 @@ _PROMPT_TEMPLATES = {
         ),
         "previous_label": "RESUMO ANTERIOR",
         "outgoing_label": "TURNOS QUE SAEM DA JANELA",
+        "blocks_label": "TURNOS ANTERIORES",
     },
     "en": {
         "system": (
@@ -40,6 +48,7 @@ _PROMPT_TEMPLATES = {
         ),
         "previous_label": "PREVIOUS SUMMARY",
         "outgoing_label": "TURNS LEAVING THE WINDOW",
+        "blocks_label": "EARLIER TURNS",
     },
 }
 
@@ -63,6 +72,7 @@ def select_window(
     tail: ChatMessage,
     window_turns: int,
     keep_turns: int,
+    reserve_tokens: int = COMPACT_RESERVE_TOKENS,
 ) -> int:
     """How many messages leave the START of history. Always even.
 
@@ -76,7 +86,7 @@ def select_window(
         while (len(history) - n) // 2 > keep_turns:
             n += 2
 
-    placeholder = ChatMessage(role="system", content="x" * (COMPACT_RESERVE_TOKENS * 4))
+    placeholder = ChatMessage(role="system", content="x" * (reserve_tokens * 4))
     while (len(history) - n) // 2 > 1 and not fits([system, *history[n:], tail, placeholder]):
         n += 2
 
@@ -114,3 +124,77 @@ async def compact_block(previous: str | None, outgoing: list[ChatMessage], local
     if not text:
         raise CompactError("utility returned an empty compact")
     return text
+
+
+class CompactBlock(BaseModel):
+    text: str
+    from_seq: int
+    to_seq: int
+    level: int = 1
+
+
+def read_blocks(session_id: str, fallback_text: str | None) -> list[CompactBlock]:
+    """Blocks stacked from `compact` events, defensive item by item like
+    read_minds: a malformed payload is dropped, never raised. Level-2 blocks
+    replace the level-1 blocks whose range they contain. Falls back to a
+    single block wrapping the legacy `sessions.compact` column when there is
+    no event at all."""
+    events = read_events(session_id, kinds=("compact",))
+    raw: list[CompactBlock] = []
+    for event in events:
+        payload = event.payload
+        text = payload.get("text")
+        from_seq = payload.get("from_seq")
+        to_seq = payload.get("to_seq")
+        if not isinstance(text, str) or not isinstance(from_seq, int) or not isinstance(to_seq, int):
+            continue
+        level = payload.get("level", 1)
+        if not isinstance(level, int):
+            level = 1
+        raw.append(CompactBlock(text=text, from_seq=from_seq, to_seq=to_seq, level=level))
+
+    layers = [block for block in raw if block.level != 1]
+    blocks = list(layers)
+    for block in raw:
+        if block.level != 1:
+            continue
+        covered = any(
+            layer.from_seq <= block.from_seq and block.to_seq <= layer.to_seq for layer in layers
+        )
+        if not covered:
+            blocks.append(block)
+
+    if not blocks and fallback_text is not None:
+        return [CompactBlock(text=fallback_text, from_seq=0, to_seq=0, level=1)]
+
+    return blocks
+
+
+def compose(blocks: list[CompactBlock], locale: str) -> str:
+    """Deterministic composition, oldest to newest, no network call. A single
+    block is returned as-is so a legacy or first-compaction session keeps the
+    exact text its consumers already expect."""
+    if not blocks:
+        return ""
+
+    ordered = sorted(blocks, key=lambda block: block.from_seq)
+    if len(ordered) == 1:
+        return ordered[0].text
+
+    template = _PROMPT_TEMPLATES.get(locale, _PROMPT_TEMPLATES["pt-br"])
+    label = template["blocks_label"]
+    return "\n\n".join(f"[{label}]\n{block.text}" for block in ordered)
+
+
+def needs_merge(blocks: list[CompactBlock]) -> bool:
+    return sum(1 for block in blocks if block.level == 1) > COMPACT_MAX_BLOCKS
+
+
+async def merge_oldest(blocks: list[CompactBlock], locale: str) -> CompactBlock:
+    """Folds the COMPACT_MERGE_BLOCKS oldest level-1 blocks into one level-2
+    layer, with one utility call."""
+    level1 = sorted((block for block in blocks if block.level == 1), key=lambda block: block.from_seq)
+    oldest = level1[:COMPACT_MERGE_BLOCKS]
+    outgoing = [ChatMessage(role="system", content=block.text) for block in oldest]
+    text = await compact_block(None, outgoing, locale)
+    return CompactBlock(text=text, from_seq=oldest[0].from_seq, to_seq=oldest[-1].to_seq, level=2)
