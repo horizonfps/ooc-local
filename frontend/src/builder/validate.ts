@@ -390,6 +390,8 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
     errors.push(error('stats', 'meta.max_dynamic_stats', t('builder.stats.maxDynamic'), t('builder.validate.maxDynamicPositive')))
   }
 
+  const statIds = new Set(draft.stats.map((stat) => stat.id))
+
   for (const startId of startIds) {
     const start = draft.starts[startId]
     const startLabel = start.name.trim() || startId
@@ -458,6 +460,33 @@ export function validateDraft(draft: BuilderDraft): ValidationError[] {
           ),
         )
       }
+
+      const seenGateIds = new Set<string>()
+      entry.stat_gates.forEach((gate, j) => {
+        if (!statIds.has(gate.id)) {
+          errors.push(
+            error(
+              'achievements',
+              `achievements.${startId}.${i}.stat_gates.${j}.id`,
+              withEntry(t('builder.achievements.gates.stat')),
+              t('builder.validate.gateUnknownStat', { id: gate.id }),
+            ),
+          )
+          return
+        }
+        if (seenGateIds.has(gate.id)) {
+          errors.push(
+            error(
+              'achievements',
+              `achievements.${startId}.${i}.stat_gates.${j}.id`,
+              withEntry(t('builder.achievements.gates.stat')),
+              t('builder.validate.gateDuplicate', { id: gate.id }),
+            ),
+          )
+          return
+        }
+        seenGateIds.add(gate.id)
+      })
     })
   }
 
