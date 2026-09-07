@@ -91,6 +91,18 @@ def _first_arg(payload: dict) -> str | None:
     return None
 
 
+def cut_seq(replay: SessionReplay, turn: int) -> int:
+    """Last seq that survives a rewind to `turn`. 0 means the whole session."""
+    if turn == 0:
+        return 0
+    target_seq = replay.turns[turn - 1].seq
+    events = read_events(replay.session_id)
+    for event in events:
+        if event.seq > target_seq and event.kind == "player_turn":
+            return event.seq - 1
+    return events[-1].seq if events else target_seq
+
+
 def replay_session(session_id: str) -> SessionReplay:
     row = get_session_row(session_id)
     try:

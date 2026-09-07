@@ -14,6 +14,7 @@ from app.llm.openai_compat import OpenAICompatProvider
 from app.observability import emit, setup_logging
 from app.scenario import list_scenarios
 from app.sessions import (
+    RewindTargetNotFound,
     ScenarioNotFound,
     SessionDetail,
     SessionNotEnded,
@@ -28,6 +29,7 @@ from app.sessions import (
     is_session_ended,
     list_sessions,
     reopen_session,
+    rewind_session,
 )
 from app.turn import TURN_ERROR_CODE, load_turn_context, run_turn
 
@@ -118,6 +120,25 @@ async def reopen_session_route(session_id: str) -> SessionDetail:
         raise HTTPException(status_code=404, detail="scenario not found") from None
     except SessionNotEnded:
         raise HTTPException(status_code=409, detail="session is not ended") from None
+
+
+class RewindRequest(BaseModel):
+    turn: int = Field(ge=0)
+
+
+@app.post("/api/sessions/{session_id}/rewind", response_model=SessionDetail)
+async def rewind_session_route(session_id: str, req: RewindRequest) -> SessionDetail:
+    config = load_config()
+    if not config.flag("rewind"):
+        raise HTTPException(status_code=503, detail="rewind disabled by flag")
+    try:
+        return rewind_session(session_id, req.turn)
+    except SessionNotFound:
+        raise HTTPException(status_code=404, detail="session not found") from None
+    except ScenarioNotFound:
+        raise HTTPException(status_code=404, detail="scenario not found") from None
+    except RewindTargetNotFound:
+        raise HTTPException(status_code=409, detail="turn out of range") from None
 
 
 @app.post("/api/chat")
