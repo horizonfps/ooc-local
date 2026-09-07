@@ -556,3 +556,7 @@ def test_think_minds_prose_response_is_still_rejected_with_schema_declared(monke
 
     assert proposed is None
     assert reason == "invalid_json"
+
+
+def test_minds_options_request_low_reasoning_effort():
+    assert MINDS_OPTIONS.reasoning_effort == "low"

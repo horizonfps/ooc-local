@@ -75,6 +75,7 @@ ACHIEVEMENTS_OPTIONS = GenerationOptions(
     timeout_s=45.0,
     json_schema=AchievementsResponse.model_json_schema(),
     schema_name="achievements",
+    reasoning_effort="low",
 )
 
 

@@ -868,3 +868,8 @@ def test_judge_turn_payload_has_no_response_format_when_structured_output_disabl
 
     payload = captured["provider"].build_payload([], "m")
     assert "response_format" not in payload
+
+
+def test_judge_options_request_low_reasoning_effort():
+    assert JUDGE_OPTIONS.reasoning_effort == "low"
+    assert JUDGE_OPTIONS_DYNAMIC.reasoning_effort == "low"

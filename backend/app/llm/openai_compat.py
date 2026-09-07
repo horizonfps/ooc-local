@@ -50,6 +50,8 @@ class OpenAICompatProvider(LLMProvider):
             payload["max_tokens"] = self.options.max_tokens
         if self.options.temperature is not None:
             payload["temperature"] = self.options.temperature
+        if self.options.reasoning_effort is not None:
+            payload["reasoning_effort"] = self.options.reasoning_effort
         if self.structured_output == "json_schema" and self.options.json_schema is not None:
             payload["response_format"] = {
                 "type": "json_schema",
