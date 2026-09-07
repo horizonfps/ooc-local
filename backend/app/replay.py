@@ -45,6 +45,11 @@ class SessionReplay(BaseModel):
     turns: list[TurnSnapshot]
     unlocked: list[str]
     ended: bool
+    events: list[Event]
+
+
+class InvalidRewindTarget(ValueError):
+    """turn is negative or greater than the number of turns played."""
 
 
 def _apply_stat_event(
@@ -89,6 +94,27 @@ def _first_arg(payload: dict) -> str | None:
     if isinstance(args, list) and args and isinstance(args[0], str):
         return args[0]
     return None
+
+
+_TURN_BOUNDARY_KINDS = ("player_turn", "meta_player_turn")
+
+
+def cut_seq(replay: SessionReplay, turn: int) -> int:
+    """Last seq that survives a rewind to `turn`. 0 means the whole session.
+
+    Uses `replay.events`, the exact list `replay_session` already read, so the
+    cut can never diverge from the replay it was computed for.
+    """
+    if turn < 0 or turn > len(replay.turns):
+        raise InvalidRewindTarget(turn)
+    if turn == 0:
+        return 0
+    target_seq = replay.turns[turn - 1].seq
+    events = replay.events
+    for event in events:
+        if event.seq > target_seq and event.kind in _TURN_BOUNDARY_KINDS:
+            return event.seq - 1
+    return events[-1].seq if events else target_seq
 
 
 def replay_session(session_id: str) -> SessionReplay:
@@ -256,4 +282,5 @@ def replay_session(session_id: str) -> SessionReplay:
         turns=turns,
         unlocked=unlocked,
         ended=ended,
+        events=events,
     )

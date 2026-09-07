@@ -611,3 +611,49 @@ def test_valid_and_malformed_achievement_in_same_turn(scenarios_root):
 
     assert result.turns[0].exact is False
     assert result.unlocked == ["valido"]
+
+
+def test_rewind_event_mid_session_cuts_turns_and_stays_exact(scenarios_root):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(detail.id, _turn_events("turno um", "narra um"))
+    events_after_first = sessions.read_events(detail.id)
+    to_seq = events_after_first[-1].seq
+    sessions.append_events(detail.id, _turn_events("turno dois", "narra dois"))
+    sessions.append_events(
+        detail.id, [(sessions.REWIND_EVENT_KIND, {"to_seq": to_seq, "turn": 1})]
+    )
+    sessions.append_events(detail.id, _turn_events("turno tres", "narra tres"))
+
+    result = replay.replay_session(detail.id)
+
+    assert [snapshot.message for snapshot in result.turns] == ["turno um", "turno tres"]
+    assert result.turns[0].exact is True
+    assert result.turns[1].exact is True
+
+
+def test_rewind_to_seq_mid_turn_drops_the_whole_incomplete_group(scenarios_root):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+
+    sessions.append_events(detail.id, _turn_events("turno um", "narra um"))
+    first_seq = sessions.read_events(detail.id)[-1].seq
+    sessions.append_events(
+        detail.id,
+        [
+            ("player_turn", {"text": "turno dois"}),
+            ("narrator_turn", {"text": "narra dois", "suggestions": []}),
+        ],
+    )
+    sessions.append_events(
+        detail.id, [(sessions.REWIND_EVENT_KIND, {"to_seq": first_seq + 1, "turn": 1})]
+    )
+
+    result = replay.replay_session(detail.id)
+
+    assert [snapshot.message for snapshot in result.turns] == ["turno um"]
+    # the incomplete group discarded by the cut is always the tail of the
+    # filtered stream, so it can never come before a surviving turn and taint
+    # its already-recorded `exact`.
+    assert result.turns[0].exact is True

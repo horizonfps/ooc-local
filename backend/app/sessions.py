@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.cast import CAST_EVENT_KIND, MIND_EVENT_KIND, CastMember, MindView, resolve_cast, seed_cast_ids
 from app.commands import command_views, load_global_commands
 from app.config import CONFIG_DIR
-from app.hud import HudState, StatView, hud_from_start, stat_views
+from app.hud import HudState, StatView, ensure_stats, hud_from_start, stat_views
 from app.media import SessionAssets, session_assets
 from app.observability import emit
 from app.scenario import CommandView, ScenarioError, load_scenario
@@ -21,6 +21,7 @@ from app.scenario import CommandView, ScenarioError, load_scenario
 ACHIEVEMENT_EVENT_KIND = "achievement"
 SESSION_ENDED_KIND = "session_ended"
 SESSION_REOPENED_KIND = "session_reopened"
+REWIND_EVENT_KIND = "rewind"
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -67,6 +68,10 @@ class ScenarioNotFound(Exception):
 
 
 class StartNotFound(Exception):
+    pass
+
+
+class RewindTargetNotFound(Exception):
     pass
 
 
@@ -472,15 +477,30 @@ def purge_ephemeral_sessions() -> int:
     return count
 
 
+def _apply_rewinds(events: list[Event]) -> list[Event]:
+    """Drops the range each rewind marker discards. Markers are applied in seq
+    order, so two rewinds compose instead of cancelling each other."""
+    kept: list[Event] = []
+    for event in events:
+        if event.kind == REWIND_EVENT_KIND:
+            to_seq = event.payload.get("to_seq")
+            if isinstance(to_seq, int):
+                kept = [survivor for survivor in kept if survivor.seq <= to_seq]
+            continue
+        kept.append(event)
+    return kept
+
+
 def read_events(session_id: str, kinds: tuple[str, ...] | None = None) -> list[Event]:
     conn = _connect()
     try:
         if kinds:
-            placeholders = ",".join("?" * len(kinds))
+            fetch_kinds = tuple(dict.fromkeys((*kinds, REWIND_EVENT_KIND)))
+            placeholders = ",".join("?" * len(fetch_kinds))
             cur = conn.execute(
                 f"SELECT id, seq, kind, payload, created_at FROM events "
                 f"WHERE session_id = ? AND kind IN ({placeholders}) ORDER BY seq",
-                (session_id, *kinds),
+                (session_id, *fetch_kinds),
             )
         else:
             cur = conn.execute(
@@ -491,10 +511,14 @@ def read_events(session_id: str, kinds: tuple[str, ...] | None = None) -> list[E
     finally:
         conn.close()
 
-    return [
+    events = [
         Event(id=row[0], seq=row[1], kind=row[2], payload=json.loads(row[3]), created_at=row[4])
         for row in rows
     ]
+    events = _apply_rewinds(events)
+    if kinds:
+        events = [event for event in events if event.kind in kinds]
+    return events
 
 
 def _append_in_tx(conn: sqlite3.Connection, session_id: str, events: list[NewEvent], now: str) -> int:
@@ -655,6 +679,104 @@ def reopen_session(session_id: str) -> SessionDetail:
         achievements=len(detail.achievements),
     )
     return detail
+
+
+def rewind_session(session_id: str, turn: int) -> SessionDetail:
+    """Recomputes the target state and writes the marker in one transaction.
+
+    `BEGIN IMMEDIATE` is taken before the replay is read, not after, so an
+    in-flight turn either finished (and is visible to the replay) or blocks on
+    its own `append_events` transaction until this one commits or rolls back.
+    Without that ordering a turn could land above `to_seq` after the cut was
+    computed and survive the rewind.
+    """
+    from app.replay import InvalidRewindTarget, cut_seq, replay_session
+
+    now = _now_iso()
+    conn = _connect()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+
+        rep = replay_session(session_id)
+        was_ended = is_session_ended(session_id)
+
+        try:
+            to_seq = cut_seq(rep, turn)
+        except InvalidRewindTarget:
+            raise RewindTargetNotFound(session_id) from None
+
+        if turn == 0:
+            hud_new = ensure_stats(hud_from_start(rep.start), rep.scenario.stats)
+        else:
+            hud_new = rep.turns[turn - 1].hud_end
+
+        # The compact vigente at the target: the last `compact` event that
+        # survives the cut, independent of turn boundaries.
+        compact_new: str | None = None
+        compact_seq_new: int | None = None
+        for event in rep.events:
+            if event.seq > to_seq:
+                break
+            if event.kind == "compact":
+                compact_new = event.payload.get("text")
+                compact_seq_new = event.payload.get("to_seq")
+
+        dropped = [event for event in rep.events if event.seq > to_seq]
+        dropped_events = len(dropped)
+        dropped_turns = len(rep.turns) - turn
+        dropped_achievements = sum(1 for event in dropped if event.kind == ACHIEVEMENT_EVENT_KIND)
+
+        _append_in_tx(
+            conn,
+            session_id,
+            [
+                (
+                    REWIND_EVENT_KIND,
+                    {
+                        "to_seq": to_seq,
+                        "turn": turn,
+                        "dropped_events": dropped_events,
+                        "dropped_turns": dropped_turns,
+                    },
+                )
+            ],
+            now,
+        )
+        conn.execute(
+            "UPDATE sessions SET hud = ?, compact = ?, compact_seq = ?, updated_at = ? WHERE id = ?",
+            (hud_new.model_dump_json(), compact_new, compact_seq_new, now, session_id),
+        )
+        conn.commit()
+    except sqlite3.Error as exc:
+        conn.rollback()
+        emit("session_db_error", op="rewind_session", error=str(exc))
+        raise
+    except RewindTargetNotFound:
+        conn.rollback()
+        emit("rewind_rejected", session_id=session_id, turn=turn, reason="out_of_range")
+        raise
+    except (SessionNotFound, ScenarioNotFound):
+        conn.rollback()
+        emit("rewind_rejected", session_id=session_id, turn=turn, reason="not_found")
+        raise
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    emit(
+        "session_rewound",
+        session_id=session_id,
+        turn=turn,
+        to_seq=to_seq,
+        dropped_events=dropped_events,
+        dropped_turns=dropped_turns,
+        was_ended=was_ended,
+        dropped_achievements=dropped_achievements,
+    )
+
+    return get_session(session_id)
 
 
 def _build_turns(events: list[Event]) -> list[TurnView]:
