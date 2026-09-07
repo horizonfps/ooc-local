@@ -14,6 +14,7 @@ from app import scenario as scenario_module
 from app.config import load_config
 from app.observability import emit
 from app.scenario import (
+    AchievementDef,
     Character,
     CommandDef,
     LoreEntry,
@@ -229,6 +230,15 @@ def _validate_document(doc: ScenarioDocument) -> None:
         if stat.id in seen_stat_ids:
             errors.append(f"duplicate stat id '{stat.id}'")
         seen_stat_ids.add(stat.id)
+    declared_stat_ids = {stat.id for stat in doc.stats}
+    for start_id, start in doc.starts.items():
+        for achievement in start.achievements:
+            unknown = [g.id for g in achievement.stat_gates if g.id not in declared_stat_ids]
+            if unknown:
+                errors.append(
+                    f"achievement '{achievement.id}' in start '{start_id}' "
+                    f"references unknown stat ids: {unknown}"
+                )
     seen_command_names: set[str] = set()
     for command in doc.commands:
         if command.name in seen_command_names:
@@ -287,9 +297,28 @@ def _serialize_start(start: StartConfig) -> bytes:
         "time": start.hud.time,
         "weather": start.hud.weather,
     }
+    if start.achievements:
+        data["achievements"] = [_serialize_achievement(a) for a in start.achievements]
     if start.characters is not None:
         data["characters"] = start.characters
     return _dump_yaml(data)
+
+
+def _serialize_achievement(achievement: AchievementDef) -> dict:
+    data: dict = {
+        "id": achievement.id,
+        "name": achievement.name,
+        "type": achievement.type,
+        "rarity": achievement.rarity,
+    }
+    if achievement.hint is not None:
+        data["hint"] = achievement.hint
+    data["condition"] = achievement.condition
+    if achievement.min_turn is not None:
+        data["min_turn"] = achievement.min_turn
+    if achievement.stat_gates:
+        data["stat_gates"] = [{"id": g.id, "at_least": g.at_least} for g in achievement.stat_gates]
+    return data
 
 
 def _serialize_character(character: Character) -> bytes:

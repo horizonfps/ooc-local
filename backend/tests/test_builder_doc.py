@@ -349,3 +349,21 @@ def test_editing_stats_file_on_disk_changes_revision(client, scenarios_root):
     after = compute_revision("exemplo-escola")
 
     assert before != after
+
+
+ACHIEVEMENT_START = DEFAULT_START + """\
+achievements:
+  - id: primeira-alianca
+    name: Escolhi um lado
+    type: achievement
+    condition: cond
+"""
+
+
+def test_read_document_returns_achievements_in_correct_start(client, scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola", starts={"default.yaml": ACHIEVEMENT_START})
+
+    response = client.get("/api/builder/scenarios/exemplo-escola")
+
+    body = response.json()
+    assert [a["id"] for a in body["starts"]["default"]["achievements"]] == ["primeira-alianca"]
