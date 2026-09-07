@@ -1,18 +1,31 @@
 import json
+import time
 from collections.abc import AsyncIterator
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
 from app.config import ProviderConfig
-from app.llm.base import ChatMessage, GenerationOptions, LLMProvider
+from app.llm.base import ChatMessage, EmbeddingOptions, GenerationOptions, LLMProvider
+from app.observability import emit
 
 
 class ProviderAuthError(RuntimeError):
     """Missing or rejected API key, distinct from a transport failure."""
 
 
+class EmbedError(RuntimeError):
+    """Embedding request failed or came back in an unusable shape."""
+
+
 SYSTEM_INSTRUCTIONS_TAG = "system-instructions"
 SYSTEM_FOLD_ACK = "Understood."
+
+
+def _loggable_base_url(base_url: str) -> str:
+    """Base URL without query string, so a credential passed there never reaches the logs."""
+    parts = urlsplit(base_url)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
 
 
 def _fold_system_into_user(messages: list[ChatMessage]) -> list[ChatMessage]:
@@ -30,7 +43,12 @@ def _fold_system_into_user(messages: list[ChatMessage]) -> list[ChatMessage]:
 
 
 class OpenAICompatProvider(LLMProvider):
-    def __init__(self, provider: ProviderConfig, options: GenerationOptions | None = None):
+    def __init__(
+        self,
+        provider: ProviderConfig,
+        options: GenerationOptions | None = None,
+        embedding_options: EmbeddingOptions | None = None,
+    ):
         self.base_url = provider.base_url.rstrip("/")
         self.api_key = provider.api_key
         self.api_key_env = provider.api_key_env
@@ -38,6 +56,7 @@ class OpenAICompatProvider(LLMProvider):
         self.system_mode = provider.system_mode
         self.supports_temperature = provider.supports_temperature
         self.options = options or GenerationOptions()
+        self.embedding_options = embedding_options or EmbeddingOptions()
 
     def build_payload(self, messages: list[ChatMessage], model: str) -> dict:
         if self.system_mode == "fold_into_user":
@@ -88,3 +107,93 @@ class OpenAICompatProvider(LLMProvider):
                     )
                     if delta:
                         yield delta
+
+    async def embed(self, texts: list[str], model: str) -> list[list[float]]:
+        if not texts:
+            return []
+        start = time.monotonic()
+        error: str | None = None
+        vectors: list[list[float]] = []
+        try:
+            headers = {"Authorization": f"Bearer {self.api_key}"}
+            timeout = httpx.Timeout(self.embedding_options.timeout_s, connect=10.0)
+            batch_size = self.embedding_options.batch_size
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                for i in range(0, len(texts), batch_size):
+                    batch = texts[i : i + batch_size]
+                    vectors.extend(await self._embed_batch(client, headers, batch, model))
+            if len(vectors) != len(texts):
+                raise EmbedError(
+                    f"expected {len(texts)} vectors, got {len(vectors)}"
+                )
+            return vectors
+        except ProviderAuthError:
+            error = "auth"
+            raise
+        except EmbedError as exc:
+            error = str(exc)
+            raise
+        except httpx.HTTPError as exc:
+            error = str(exc)
+            raise EmbedError(f"embedding request failed: {exc}") from exc
+        except Exception as exc:
+            error = str(exc)
+            raise
+        finally:
+            emit(
+                "embed_call",
+                provider=_loggable_base_url(self.base_url),
+                model=model,
+                texts=len(texts),
+                batches=(len(texts) + self.embedding_options.batch_size - 1)
+                // self.embedding_options.batch_size
+                if texts
+                else 0,
+                dim=len(vectors[0]) if vectors else None,
+                duration_ms=int((time.monotonic() - start) * 1000),
+                error=error,
+            )
+
+    async def _embed_batch(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        batch: list[str],
+        model: str,
+    ) -> list[list[float]]:
+        payload = {"model": model, "input": batch, "encoding_format": "float"}
+        response = await client.post(f"{self.base_url}/embeddings", json=payload, headers=headers)
+        if response.status_code in (401, 403):
+            raise ProviderAuthError(
+                f"provider rejected the credential from ${self.api_key_env}"
+            )
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise EmbedError(f"embedding request failed with status {response.status_code}") from exc
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise EmbedError("embedding response body is not valid JSON") from exc
+        data = body.get("data")
+        if not isinstance(data, list):
+            raise EmbedError("embedding response is missing 'data'")
+        indexed: list[tuple[int, list[float]]] = []
+        for position, item in enumerate(data):
+            if not isinstance(item, dict):
+                raise EmbedError("embedding response item is not an object")
+            embedding = item.get("embedding")
+            if not isinstance(embedding, list) or not all(
+                isinstance(value, (int, float)) for value in embedding
+            ):
+                raise EmbedError("embedding response item has a malformed 'embedding'")
+            index = item.get("index", position)
+            if not isinstance(index, int):
+                raise EmbedError("embedding response item has a malformed 'index'")
+            indexed.append((index, embedding))
+        if len(indexed) != len(batch):
+            raise EmbedError(
+                f"expected {len(batch)} vectors in batch, got {len(indexed)}"
+            )
+        indexed.sort(key=lambda pair: pair[0])
+        return [embedding for _, embedding in indexed]

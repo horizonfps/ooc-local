@@ -22,6 +22,9 @@ providers:
 models:
   narrator: {provider: openrouter, model: anthropic/claude-sonnet-5}
   utility:  {provider: openrouter, model: google/gemini-3.8-flash}
+  # Optional third role, local only. Without it the session memory falls back
+  # to the progressive summary.
+  # embedder: {provider: local, model: nomic-embed-text}
 """
 
 

@@ -51,3 +51,40 @@ def test_provider_without_supports_temperature_defaults_to_true():
 def test_provider_accepts_supports_temperature_false():
     config = ProviderConfig(base_url="http://x/v1", supports_temperature=False)
     assert config.supports_temperature is False
+
+
+def test_config_without_embedder_role_loads_and_is_absent(tmp_path):
+    path = tmp_path / "config.yaml"
+    config = load_config(path)
+    assert config.models.get("embedder") is None
+
+
+def test_config_with_embedder_role_pointing_at_known_provider(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "providers:\n"
+        "  local: {base_url: http://x/v1}\n"
+        "models:\n"
+        "  narrator: {provider: local, model: m}\n"
+        "  embedder: {provider: local, model: nomic-embed-text}\n",
+        encoding="utf-8",
+    )
+    config = load_config(path)
+    role = config.models.get("embedder")
+    assert role is not None
+    assert role.provider == "local"
+    assert role.model == "nomic-embed-text"
+
+
+def test_config_with_embedder_role_pointing_at_unknown_provider_fails(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "providers:\n"
+        "  local: {base_url: http://x/v1}\n"
+        "models:\n"
+        "  narrator: {provider: local, model: m}\n"
+        "  embedder: {provider: ghost, model: m}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError, match="embedder"):
+        load_config(path)

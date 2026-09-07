@@ -19,6 +19,11 @@ class GenerationOptions(BaseModel):
     reasoning_effort: Literal["low", "medium", "high"] | None = None
 
 
+class EmbeddingOptions(BaseModel):
+    timeout_s: float = 60.0
+    batch_size: int = 32
+
+
 class LLMProvider(ABC):
     @abstractmethod
     def stream_chat(self, messages: list[ChatMessage], model: str) -> AsyncIterator[str]:
@@ -28,3 +33,7 @@ class LLMProvider(ABC):
         """Non-streamed call, built on top of stream_chat."""
         parts = [delta async for delta in self.stream_chat(messages, model)]
         return "".join(parts)
+
+    async def embed(self, texts: list[str], model: str) -> list[list[float]]:
+        """Vectors in the same order as texts. Providers without embedding support raise NotImplementedError."""
+        raise NotImplementedError
