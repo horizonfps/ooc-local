@@ -448,3 +448,42 @@ def test_cast_event_with_unknown_character_is_filtered_like_the_engine(scenarios
     assert result.turns[0].cast_after == ["chloe"]
     assert result.turns[1].cast_before == ["chloe"]
     assert result.turns[0].exact is True
+
+
+def test_dynamic_stat_event_with_definition_replays_exactly(scenarios_root):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+
+    created = ("stat", {"id": "confianca", "delta": 0, "value": 10, "source": "judge",
+                        "name": "Confiança", "min": 0, "max": 20})
+    sessions.append_events(detail.id, _turn_events("eu ando", "voce anda", stats=[created]))
+    sessions.append_events(
+        detail.id,
+        _turn_events("eu falo", "voce fala", stats=[_stat_event("confianca", 5, 15, "judge")]),
+    )
+
+    result = replay.replay_session(detail.id)
+
+    assert [turn.exact for turn in result.turns] == [True, True]
+    dynamic = result.turns[1].hud_end.dynamic_stats["confianca"]
+    assert (dynamic.name, dynamic.min, dynamic.max, dynamic.value) == ("Confiança", 0, 20, 15)
+
+
+@pytest.mark.parametrize(
+    "definition",
+    [
+        {"name": "Confiança", "min": 0},
+        {"name": "Confiança", "min": 5, "max": 5},
+        {"name": 7, "min": 0, "max": 20},
+    ],
+)
+def test_dynamic_stat_event_with_broken_definition_stays_inexact(scenarios_root, definition):
+    _write_scenario(scenarios_root)
+    detail = sessions.create_session("exemplo-escola")
+    created = ("stat", {"id": "confianca", "delta": 0, "value": 10, "source": "judge", **definition})
+    sessions.append_events(detail.id, _turn_events("eu ando", "voce anda", stats=[created]))
+
+    result = replay.replay_session(detail.id)
+
+    assert result.turns[0].exact is False
+    assert result.turns[0].hud_end.dynamic_stats["confianca"].value == 10
