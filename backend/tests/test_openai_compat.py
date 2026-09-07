@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from app.config import ProviderConfig
 from app.llm.base import ChatMessage, EmbeddingOptions, GenerationOptions
+from app.llm import openai_compat
 from app.llm.openai_compat import (
     SYSTEM_FOLD_ACK,
     SYSTEM_INSTRUCTIONS_TAG,
@@ -203,13 +204,13 @@ def test_supports_temperature_false_without_temperature_option_is_fine():
 
 def _mock_provider(monkeypatch, handler, embedding_options: EmbeddingOptions | None = None) -> OpenAICompatProvider:
     transport = httpx.MockTransport(handler)
-    original = httpx.AsyncClient.__init__
 
-    def patched(self, *args, **kwargs):
-        kwargs["transport"] = transport
-        original(self, *args, **kwargs)
+    class _TransportClient(httpx.AsyncClient):
+        def __init__(self, *args, **kwargs):
+            kwargs["transport"] = transport
+            super().__init__(*args, **kwargs)
 
-    monkeypatch.setattr(httpx.AsyncClient, "__init__", patched)
+    monkeypatch.setattr("app.llm.openai_compat.httpx.AsyncClient", _TransportClient)
     config = ProviderConfig(base_url="http://x/v1", api_key_env="OPENROUTER_API_KEY")
     return OpenAICompatProvider(config, embedding_options=embedding_options)
 
@@ -224,7 +225,11 @@ async def test_embed_two_texts_one_batch_preserves_order(monkeypatch):
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request)
-        assert json.loads(request.content) == {"model": "m", "input": ["a", "b"]}
+        assert json.loads(request.content) == {
+            "model": "m",
+            "input": ["a", "b"],
+            "encoding_format": "float",
+        }
         return _embed_response([[1.0, 2.0], [3.0, 4.0]])
 
     provider = _mock_provider(monkeypatch, handler)
@@ -232,7 +237,7 @@ async def test_embed_two_texts_one_batch_preserves_order(monkeypatch):
     vectors = await provider.embed(["a", "b"], "m")
 
     assert len(calls) == 1
-    assert calls[0].url.path.endswith("/embeddings")
+    assert str(calls[0].url) == "http://x/v1/embeddings"
     assert vectors == [[1.0, 2.0], [3.0, 4.0]]
 
 
@@ -267,6 +272,151 @@ async def test_embed_empty_list_makes_no_request(monkeypatch):
 
     assert vectors == []
     assert called is False
+
+
+@pytest.mark.asyncio
+async def test_embed_reorders_vectors_by_response_index(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {"embedding": [3.0, 4.0], "index": 1},
+                    {"embedding": [1.0, 2.0], "index": 0},
+                ]
+            },
+        )
+
+    provider = _mock_provider(monkeypatch, handler)
+
+    vectors = await provider.embed(["a", "b"], "m")
+
+    assert vectors == [[1.0, 2.0], [3.0, 4.0]]
+
+
+@pytest.mark.asyncio
+async def test_embed_sends_encoding_format_float(monkeypatch):
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content)
+        return _embed_response([[1.0]])
+
+    provider = _mock_provider(monkeypatch, handler)
+
+    await provider.embed(["a"], "m")
+
+    assert captured["payload"]["encoding_format"] == "float"
+
+
+@pytest.mark.asyncio
+async def test_embed_item_not_a_dict_raises_embed_error(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": ["not-a-dict"]})
+
+    provider = _mock_provider(monkeypatch, handler)
+
+    with pytest.raises(EmbedError):
+        await provider.embed(["a"], "m")
+
+
+@pytest.mark.asyncio
+async def test_embed_embedding_wrong_type_raises_embed_error(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": [{"embedding": "base64-blob"}]})
+
+    provider = _mock_provider(monkeypatch, handler)
+
+    with pytest.raises(EmbedError):
+        await provider.embed(["a"], "m")
+
+
+@pytest.mark.asyncio
+async def test_embed_batch_count_mismatch_raises_before_totals_line_up(monkeypatch):
+    """Batch A over-returns and batch B under-returns by the same amount: the
+    total across batches matches len(texts), so only the per-batch check catches it."""
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if len(calls) == 1:
+            return _embed_response([[1.0], [2.0]])
+        return _embed_response([])
+
+    provider = _mock_provider(monkeypatch, handler, EmbeddingOptions(batch_size=1))
+
+    with pytest.raises(EmbedError):
+        await provider.embed(["a", "b"], "m")
+
+
+@pytest.mark.asyncio
+async def test_embed_non_json_body_raises_embed_error(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="not json", headers={"content-type": "text/plain"})
+
+    provider = _mock_provider(monkeypatch, handler)
+
+    with pytest.raises(EmbedError):
+        await provider.embed(["a"], "m")
+
+
+@pytest.mark.asyncio
+async def test_embed_without_credential_env_set_still_sends_request(monkeypatch):
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == "Bearer none"
+        return _embed_response([[1.0]])
+
+    provider = _mock_provider(monkeypatch, handler)
+
+    vectors = await provider.embed(["a"], "m")
+
+    assert vectors == [[1.0]]
+
+
+@pytest.mark.asyncio
+async def test_embed_call_event_emitted_on_success(monkeypatch):
+    events = []
+    monkeypatch.setattr(openai_compat, "emit", lambda event, **props: events.append((event, props)))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _embed_response([[1.0, 2.0], [3.0, 4.0]])
+
+    provider = _mock_provider(monkeypatch, handler)
+
+    await provider.embed(["a", "b"], "m")
+
+    assert len(events) == 1
+    name, props = events[0]
+    assert name == "embed_call"
+    assert props["model"] == "m"
+    assert props["texts"] == 2
+    assert props["batches"] == 1
+    assert props["dim"] == 2
+    assert isinstance(props["duration_ms"], int)
+    assert props["error"] is None
+    assert "?" not in props["provider"]
+
+
+@pytest.mark.asyncio
+async def test_embed_call_event_emitted_on_failure(monkeypatch):
+    events = []
+    monkeypatch.setattr(openai_compat, "emit", lambda event, **props: events.append((event, props)))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="boom")
+
+    provider = _mock_provider(monkeypatch, handler)
+
+    with pytest.raises(EmbedError):
+        await provider.embed(["a"], "m")
+
+    assert len(events) == 1
+    name, props = events[0]
+    assert name == "embed_call"
+    assert props["error"] is not None
+    assert props["dim"] is None
 
 
 @pytest.mark.asyncio
@@ -345,14 +495,14 @@ async def test_embed_timeout_option_reaches_httpx_timeout(monkeypatch):
         return _embed_response([[1.0]])
 
     transport = httpx.MockTransport(handler)
-    original = httpx.AsyncClient.__init__
 
-    def patched(self, *args, **kwargs):
-        captured["timeout"] = kwargs.get("timeout")
-        kwargs["transport"] = transport
-        original(self, *args, **kwargs)
+    class _TransportClient(httpx.AsyncClient):
+        def __init__(self, *args, **kwargs):
+            captured["timeout"] = kwargs.get("timeout")
+            kwargs["transport"] = transport
+            super().__init__(*args, **kwargs)
 
-    monkeypatch.setattr(httpx.AsyncClient, "__init__", patched)
+    monkeypatch.setattr("app.llm.openai_compat.httpx.AsyncClient", _TransportClient)
     config = ProviderConfig(base_url="http://x/v1")
     provider = OpenAICompatProvider(config, embedding_options=EmbeddingOptions(timeout_s=7.5))
 

@@ -35,5 +35,5 @@ class LLMProvider(ABC):
         return "".join(parts)
 
     async def embed(self, texts: list[str], model: str) -> list[list[float]]:
-        """Vectors in the same order as texts. Raises EmbedError."""
+        """Vectors in the same order as texts. Providers without embedding support raise NotImplementedError."""
         raise NotImplementedError

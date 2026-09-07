@@ -1,6 +1,7 @@
 import json
 import time
 from collections.abc import AsyncIterator
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
@@ -19,6 +20,12 @@ class EmbedError(RuntimeError):
 
 SYSTEM_INSTRUCTIONS_TAG = "system-instructions"
 SYSTEM_FOLD_ACK = "Understood."
+
+
+def _loggable_base_url(base_url: str) -> str:
+    """Base URL without query string, so a credential passed there never reaches the logs."""
+    parts = urlsplit(base_url)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
 
 
 def _fold_system_into_user(messages: list[ChatMessage]) -> list[ChatMessage]:
@@ -129,10 +136,13 @@ class OpenAICompatProvider(LLMProvider):
         except httpx.HTTPError as exc:
             error = str(exc)
             raise EmbedError(f"embedding request failed: {exc}") from exc
+        except Exception as exc:
+            error = str(exc)
+            raise
         finally:
             emit(
                 "embed_call",
-                provider=self.base_url,
+                provider=_loggable_base_url(self.base_url),
                 model=model,
                 texts=len(texts),
                 batches=(len(texts) + self.embedding_options.batch_size - 1)
@@ -151,7 +161,7 @@ class OpenAICompatProvider(LLMProvider):
         batch: list[str],
         model: str,
     ) -> list[list[float]]:
-        payload = {"model": model, "input": batch}
+        payload = {"model": model, "input": batch, "encoding_format": "float"}
         response = await client.post(f"{self.base_url}/embeddings", json=payload, headers=headers)
         if response.status_code in (401, 403):
             raise ProviderAuthError(
@@ -168,14 +178,22 @@ class OpenAICompatProvider(LLMProvider):
         data = body.get("data")
         if not isinstance(data, list):
             raise EmbedError("embedding response is missing 'data'")
-        vectors: list[list[float]] = []
-        for item in data:
-            embedding = item.get("embedding") if isinstance(item, dict) else None
-            if embedding is None:
-                raise EmbedError("embedding response item is missing 'embedding'")
-            vectors.append(embedding)
-        if len(vectors) != len(batch):
+        indexed: list[tuple[int, list[float]]] = []
+        for position, item in enumerate(data):
+            if not isinstance(item, dict):
+                raise EmbedError("embedding response item is not an object")
+            embedding = item.get("embedding")
+            if not isinstance(embedding, list) or not all(
+                isinstance(value, (int, float)) for value in embedding
+            ):
+                raise EmbedError("embedding response item has a malformed 'embedding'")
+            index = item.get("index", position)
+            if not isinstance(index, int):
+                raise EmbedError("embedding response item has a malformed 'index'")
+            indexed.append((index, embedding))
+        if len(indexed) != len(batch):
             raise EmbedError(
-                f"expected {len(batch)} vectors in batch, got {len(vectors)}"
+                f"expected {len(batch)} vectors in batch, got {len(indexed)}"
             )
-        return vectors
+        indexed.sort(key=lambda pair: pair[0])
+        return [embedding for _, embedding in indexed]
