@@ -12,7 +12,8 @@ from app.config import load_config
 from app.llm.base import ChatMessage
 from app.llm.openai_compat import OpenAICompatProvider
 from app.observability import emit, setup_logging
-from app.scenario import list_scenarios
+from app.scenario import SetupQuestion, list_scenarios
+from app.setup import SetupInvalid
 from app.sessions import (
     RewindTargetNotFound,
     ScenarioNotFound,
@@ -55,6 +56,22 @@ class CreateSessionRequest(BaseModel):
     scenario_id: str = Field(alias="scenarioId")
     start_id: str | None = Field(default=None, alias="startId")
     ephemeral: bool = False
+    setup: dict[str, str] | None = None
+
+
+class ScenarioStartItem(BaseModel):
+    id: str
+    name: str
+    isDefault: bool
+    setup: list[SetupQuestion]
+
+
+class ScenarioListItem(BaseModel):
+    id: str
+    name: str
+    tagline: str | None
+    locale: str
+    starts: list[ScenarioStartItem]
 
 
 @app.get("/api/health")
@@ -62,15 +79,24 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/api/scenarios")
-async def scenarios() -> list[dict[str, str | None]]:
+@app.get("/api/scenarios", response_model=list[ScenarioListItem])
+async def scenarios() -> list[ScenarioListItem]:
     return [
-        {
-            "id": scenario.id,
-            "name": scenario.meta.name,
-            "tagline": scenario.meta.tagline,
-            "locale": scenario.meta.locale,
-        }
+        ScenarioListItem(
+            id=scenario.id,
+            name=scenario.meta.name,
+            tagline=scenario.meta.tagline,
+            locale=scenario.meta.locale,
+            starts=[
+                ScenarioStartItem(
+                    id=start.id,
+                    name=start.name,
+                    isDefault=start.id == scenario.meta.default_start,
+                    setup=start.setup,
+                )
+                for start in scenario.starts.values()
+            ],
+        )
         for scenario in list_scenarios()
     ]
 
@@ -78,11 +104,13 @@ async def scenarios() -> list[dict[str, str | None]]:
 @app.post("/api/sessions", response_model=SessionDetail, status_code=201)
 async def create_session_route(req: CreateSessionRequest) -> SessionDetail:
     try:
-        return create_session(req.scenario_id, req.start_id, req.ephemeral)
+        return create_session(req.scenario_id, req.start_id, req.ephemeral, req.setup)
     except ScenarioNotFound:
         raise HTTPException(status_code=404, detail="scenario not found") from None
     except StartNotFound:
         raise HTTPException(status_code=404, detail="start not found") from None
+    except SetupInvalid as exc:
+        raise HTTPException(status_code=422, detail=exc.errors) from None
 
 
 @app.get("/api/sessions", response_model=list[SessionSummary])

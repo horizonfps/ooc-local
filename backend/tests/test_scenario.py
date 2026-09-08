@@ -855,3 +855,96 @@ achievements:
 
     assert result == []
     assert events and events[0][0] == "scenario_invalid"
+
+
+def test_setup_question_choice_needs_two_options(monkeypatch, tmp_path):
+    start = DEFAULT_START + """\
+setup:
+  - id: turma
+    question: qual turma?
+    type: choice
+    options: ["3o A"]
+"""
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    with pytest.raises(ScenarioError) as exc:
+        load_scenario("exemplo-escola")
+    assert "default" in str(exc.value.path)
+
+
+def test_setup_question_default_outside_options_raises(monkeypatch, tmp_path):
+    start = DEFAULT_START + """\
+setup:
+  - id: turma
+    question: qual turma?
+    type: choice
+    options: ["3o A", "3o B"]
+    default: "3o C"
+"""
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    with pytest.raises(ScenarioError):
+        load_scenario("exemplo-escola")
+
+
+def test_setup_question_duplicate_id_raises(monkeypatch, tmp_path):
+    start = DEFAULT_START + """\
+setup:
+  - id: turma
+    question: qual turma?
+    type: text
+  - id: turma
+    question: outra pergunta
+    type: text
+"""
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    with pytest.raises(ScenarioError):
+        load_scenario("exemplo-escola")
+
+
+def test_setup_question_invalid_id_charset_raises(monkeypatch, tmp_path):
+    start = DEFAULT_START + """\
+setup:
+  - id: "Turma Legal"
+    question: qual turma?
+    type: text
+"""
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    with pytest.raises(ScenarioError):
+        load_scenario("exemplo-escola")
+
+
+def test_setup_question_id_scenario_or_start_is_reserved(monkeypatch, tmp_path):
+    start = DEFAULT_START + """\
+setup:
+  - id: scenario
+    question: reservado
+    type: text
+    default: x
+"""
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    with pytest.raises(ScenarioError):
+        load_scenario("exemplo-escola")
+
+
+def test_setup_question_id_player_is_accepted(monkeypatch, tmp_path):
+    start = DEFAULT_START + """\
+setup:
+  - id: player
+    question: como se chama?
+    type: text
+    default: Alex
+"""
+    _write_scenario(tmp_path, "exemplo-escola", starts={"default.yaml": start})
+    monkeypatch.setattr("app.scenario.scenarios_dir", lambda: tmp_path)
+
+    scenario = load_scenario("exemplo-escola")
+    assert scenario.starts["default"].setup[0].id == "player"

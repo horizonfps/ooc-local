@@ -65,6 +65,7 @@ from app.minds import MINDS_RAW_LOG_CHARS, MindsError, merge_minds, think_minds
 from app.observability import emit
 from app.prompt import MASTER_PROMPT_VERSION, build_master_prompt, format_player_message
 from app.scenario import Character, LoadedScenario, LoreEntry, ScenarioError, StartConfig, load_scenario
+from app.setup import apply_setup, read_setup
 from app.sessions import (
     ACHIEVEMENT_EVENT_KIND,
     SESSION_ENDED_KIND,
@@ -120,6 +121,7 @@ def load_turn_context(session_id: str) -> TurnContext:
         start = scenario.starts[row.start_id]
     except (ScenarioError, KeyError):
         raise ScenarioNotFound(row.scenario_id) from None
+    scenario, start = apply_setup(scenario, start, read_setup(session_id), session_id)
 
     ids = read_cast_ids(session_id)
     if ids is None:

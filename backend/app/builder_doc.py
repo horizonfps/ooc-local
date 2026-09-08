@@ -20,6 +20,7 @@ from app.scenario import (
     LoreEntry,
     ScenarioError,
     ScenarioMeta,
+    SetupQuestion,
     StartConfig,
     StatDef,
 )
@@ -301,6 +302,8 @@ def _serialize_start(start: StartConfig) -> bytes:
         data["achievements"] = [_serialize_achievement(a) for a in start.achievements]
     if start.characters is not None:
         data["characters"] = start.characters
+    if start.setup:
+        data["setup"] = [_serialize_setup_question(q) for q in start.setup]
     return _dump_yaml(data)
 
 
@@ -318,6 +321,15 @@ def _serialize_achievement(achievement: AchievementDef) -> dict:
         data["min_turn"] = achievement.min_turn
     if achievement.stat_gates:
         data["stat_gates"] = [{"id": g.id, "at_least": g.at_least} for g in achievement.stat_gates]
+    return data
+
+
+def _serialize_setup_question(question: SetupQuestion) -> dict:
+    data: dict = {"id": question.id, "question": question.question, "type": question.type}
+    if question.options:
+        data["options"] = question.options
+    if question.default is not None:
+        data["default"] = question.default
     return data
 
 
