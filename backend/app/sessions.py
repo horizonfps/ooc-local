@@ -17,7 +17,15 @@ from app.hud import HudState, StatView, ensure_stats, hud_from_start, stat_views
 from app.media import SessionAssets, session_assets
 from app.observability import emit
 from app.scenario import CommandView, ScenarioError, load_scenario
-from app.setup import SetupAnswers, SetupInvalid, apply_setup, read_setup, resolve_answers, setup_event
+from app.setup import (
+    SETUP_EVENT_KIND,
+    SetupAnswers,
+    SetupInvalid,
+    apply_setup,
+    read_setup,
+    resolve_answers,
+    setup_event,
+)
 
 ACHIEVEMENT_EVENT_KIND = "achievement"
 SESSION_ENDED_KIND = "session_ended"
@@ -218,7 +226,7 @@ def create_session(
 
     config = load_config()
     if config.flag("setup"):
-        answered = resolve_answers(start, setup)
+        answered = resolve_answers(start, setup, scenario_id)
     else:
         answered = dict(setup or {})
     answers = SetupAnswers(answers=answered)
@@ -272,7 +280,7 @@ def create_session(
         free=answers.free,
     )
 
-    scenario, start = apply_setup(scenario, start, answers)
+    scenario, start = apply_setup(scenario, start, answers, session_id)
 
     assets = session_assets(scenario)
     _emit_session_assets(session_id, assets)
@@ -407,7 +415,7 @@ def get_session(session_id: str) -> SessionDetail:
         start = scenario.starts[row.start_id]
     except (ScenarioError, KeyError):
         raise ScenarioNotFound(row.scenario_id) from None
-    scenario, start = apply_setup(scenario, start, read_setup(row.id))
+    scenario, start = apply_setup(scenario, start, read_setup(row.id), row.id)
 
     events = read_events(
         session_id,
@@ -505,13 +513,18 @@ def purge_ephemeral_sessions() -> int:
 
 def _apply_rewinds(events: list[Event]) -> list[Event]:
     """Drops the range each rewind marker discards. Markers are applied in seq
-    order, so two rewinds compose instead of cancelling each other."""
+    order, so two rewinds compose instead of cancelling each other. The setup
+    event is session-creation data, not turn history, so it survives any cut."""
     kept: list[Event] = []
     for event in events:
         if event.kind == REWIND_EVENT_KIND:
             to_seq = event.payload.get("to_seq")
             if isinstance(to_seq, int):
-                kept = [survivor for survivor in kept if survivor.seq <= to_seq]
+                kept = [
+                    survivor
+                    for survivor in kept
+                    if survivor.seq <= to_seq or survivor.kind == SETUP_EVENT_KIND
+                ]
             continue
         kept.append(event)
     return kept

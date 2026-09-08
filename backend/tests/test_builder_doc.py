@@ -173,6 +173,38 @@ def test_get_returns_null_conflict_and_mission_when_absent(client, scenarios_roo
     assert body["starts"]["default"]["mission"] is None
 
 
+def test_get_returns_setup_questions_for_start(client, scenarios_root):
+    start_with_setup = DEFAULT_START + (
+        "setup:\n"
+        "  - id: player\n"
+        "    question: Como voce se chama?\n"
+        "    type: text\n"
+        "    default: Alex\n"
+        "  - id: turma\n"
+        "    question: Em que turma?\n"
+        "    type: choice\n"
+        "    options: [\"3o A\", \"3o B\"]\n"
+        "    default: \"3o B\"\n"
+    )
+    _write_scenario(scenarios_root, "exemplo-escola", starts={"default.yaml": start_with_setup})
+
+    response = client.get("/api/builder/scenarios/exemplo-escola")
+
+    body = response.json()
+    setup = body["starts"]["default"]["setup"]
+    assert [q["id"] for q in setup] == ["player", "turma"]
+    assert setup[1]["options"] == ["3o A", "3o B"]
+    assert setup[1]["default"] == "3o B"
+
+
+def test_get_returns_empty_setup_when_start_declares_none(client, scenarios_root):
+    _write_scenario(scenarios_root, "exemplo-escola")
+
+    response = client.get("/api/builder/scenarios/exemplo-escola")
+
+    assert response.json()["starts"]["default"]["setup"] == []
+
+
 def test_revision_stable_across_reads(client, scenarios_root):
     _write_scenario(scenarios_root, "exemplo-escola")
 

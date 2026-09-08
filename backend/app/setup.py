@@ -26,7 +26,9 @@ class SetupInvalid(Exception):
         super().__init__("; ".join(errors))
 
 
-def resolve_answers(start: StartConfig, raw: dict[str, str] | None) -> dict[str, str]:
+def resolve_answers(
+    start: StartConfig, raw: dict[str, str] | None, scenario_id: str | None = None
+) -> dict[str, str]:
     """Validates and completes raw answers with defaults. Unknown keys are
     dropped silently; missing or invalid answers raise SetupInvalid."""
     raw = raw or {}
@@ -39,6 +41,7 @@ def resolve_answers(start: StartConfig, raw: dict[str, str] | None) -> dict[str,
                 errors.append(question.id)
                 emit(
                     "setup_rejected",
+                    scenario_id=scenario_id,
                     start_id=start.id,
                     reason="missing_answer",
                     question_id=question.id,
@@ -49,6 +52,7 @@ def resolve_answers(start: StartConfig, raw: dict[str, str] | None) -> dict[str,
             errors.append(question.id)
             emit(
                 "setup_rejected",
+                scenario_id=scenario_id,
                 start_id=start.id,
                 reason="too_long",
                 question_id=question.id,
@@ -58,6 +62,7 @@ def resolve_answers(start: StartConfig, raw: dict[str, str] | None) -> dict[str,
             errors.append(question.id)
             emit(
                 "setup_rejected",
+                scenario_id=scenario_id,
                 start_id=start.id,
                 reason="invalid_choice",
                 question_id=question.id,
@@ -86,7 +91,10 @@ def render(text: str, values: dict[str, str]) -> tuple[str, list[str]]:
 
 
 def apply_setup(
-    scenario: LoadedScenario, start: StartConfig, answers: SetupAnswers
+    scenario: LoadedScenario,
+    start: StartConfig,
+    answers: SetupAnswers,
+    session_id: str | None = None,
 ) -> tuple[LoadedScenario, StartConfig]:
     """Returns copies of scenario and start with {{var}} interpolated in world,
     prologue, opening_scene, conflict, mission and lorebook entry bodies."""
@@ -95,28 +103,33 @@ def apply_setup(
         return scenario, start
 
     values = dict(answers.answers)
-    values.setdefault("start", start.name)
-    values.setdefault("scenario", scenario.meta.name)
-    values.setdefault("player", answers.answers.get("player", ""))
+    values.setdefault("player", "")
+    # Builtins always win: a stored answer keyed "start"/"scenario" (reachable
+    # only with the flag off, where raw answers skip validation) must not
+    # shadow them.
+    values["start"] = start.name
+    values["scenario"] = scenario.meta.name
 
     unknown_total: list[str] = []
     fields_changed = 0
+    substitutions_made = 0
 
     def _apply_field(session_field: str, text: str | None) -> str | None:
-        nonlocal fields_changed
+        nonlocal fields_changed, substitutions_made
         if text is None:
             return None
         rendered, unknown = render(text, values)
         for name in unknown:
-            emit("setup_unknown_variable", field=session_field, name=name)
+            emit("setup_unknown_variable", session_id=session_id, field=session_field, name=name)
         unknown_total.extend(unknown)
         if rendered != text:
             fields_changed += 1
+            substitutions_made += len(_VAR_RE.findall(text))
         return rendered
 
     new_world = _apply_field("world", scenario.world)
     start_updates = {}
-    for field in ("prologue", "opening_scene", "conflict", "mission"):
+    for field in _INTERPOLATED_FIELDS[1:]:
         start_updates[field] = _apply_field(field, getattr(start, field))
 
     new_lorebook = {}
@@ -129,8 +142,9 @@ def apply_setup(
 
     emit(
         "setup_applied",
+        session_id=session_id,
         fields=fields_changed,
-        substitutions=len(values),
+        substitutions=substitutions_made,
     )
     return new_scenario, new_start
 

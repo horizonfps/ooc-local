@@ -367,6 +367,32 @@ def test_get_put_get_roundtrip_without_changes_keeps_revision(client, scenarios_
     assert second["revision"] == first["revision"]
 
 
+def test_get_put_get_roundtrip_preserves_setup_questions(client, scenarios_root):
+    """Saving through the builder must not wipe the author's setup questions."""
+    start_with_setup = DEFAULT_START + (
+        "setup:\n"
+        "  - id: player\n"
+        "    question: Como voce se chama?\n"
+        "    type: text\n"
+        "    default: Alex\n"
+        "  - id: turma\n"
+        "    question: Em que turma?\n"
+        "    type: choice\n"
+        "    options: [\"3o A\", \"3o B\"]\n"
+        "    default: \"3o B\"\n"
+    )
+    _write_scenario(scenarios_root, "exemplo-escola", starts={"default.yaml": start_with_setup})
+
+    first = client.get("/api/builder/scenarios/exemplo-escola").json()
+    assert [q["id"] for q in first["starts"]["default"]["setup"]] == ["player", "turma"]
+
+    put_response = client.put("/api/builder/scenarios/exemplo-escola", json=first)
+    assert put_response.status_code == 200
+
+    second = client.get("/api/builder/scenarios/exemplo-escola").json()
+    assert second["starts"]["default"]["setup"] == first["starts"]["default"]["setup"]
+
+
 def test_put_disabled_by_flag_returns_503_and_writes_nothing(client, scenarios_root, monkeypatch):
     scenario_dir = _write_scenario(scenarios_root, "exemplo-escola")
     doc = client.get("/api/builder/scenarios/exemplo-escola").json()

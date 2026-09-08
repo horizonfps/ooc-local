@@ -1,8 +1,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app import main, sessions, turn
+from app import main, sessions, setup as setup_lib, turn
 from app.config import Config
+from app.prompt import build_master_prompt
 from app.scenario import ScenarioError, load_scenario
 from app.setup import SetupAnswers, SetupInvalid, apply_setup, read_setup, resolve_answers
 
@@ -144,10 +145,12 @@ def test_create_session_defaults_fill_missing_answers(scenarios_root, client):
     ).json()
 
     assert "Alex" in created["prologue"]
-    assert "3o B" in created["prologue"] or True
 
     events = sessions.read_events(created["id"], kinds=("setup",))
     assert events[0].payload["answers"] == {"player": "Alex", "turma": "3o B"}
+
+    ctx = turn.load_turn_context(created["id"])
+    assert ctx.start.opening_scene == "cena de 3o B"
 
 
 def test_builtin_variables_resolve_scenario_start_player(scenarios_root, client):
@@ -170,6 +173,28 @@ def test_lorebook_body_interpolated_in_turn_context(scenarios_root):
     ctx = turn.load_turn_context(created.id)
 
     assert ctx.scenario.lorebook["segredo"].body == "O segredo pertence a Iury."
+
+
+def test_built_master_prompt_carries_all_interpolated_fields_and_lorebook(scenarios_root):
+    """The point of the whole ticket: the prompt actually sent to the LLM,
+    not just ctx.scenario/ctx.start, must show the resolved variables."""
+    _write_scenario(scenarios_root, lorebook={"segredo.yaml": LOREBOOK_ENTRY})
+
+    created = sessions.create_session("exemplo-escola", setup={"player": "Iury", "turma": "3o A"})
+    ctx = turn.load_turn_context(created.id)
+
+    prompt_text = build_master_prompt(
+        ctx.scenario,
+        ctx.start,
+        ctx.row.hud,
+        ctx.characters,
+        lore=[ctx.scenario.lorebook["segredo"]],
+    )
+
+    assert "cena de 3o A" in prompt_text
+    assert "conflito de Iury" in prompt_text
+    assert "missao de 3o A" in prompt_text
+    assert "O segredo pertence a Iury." in prompt_text
 
 
 # -- edge cases -----------------------------------------------------------
@@ -215,6 +240,89 @@ def test_apply_setup_does_not_mutate_loaded_scenario(scenarios_root):
     assert "{{player}}" in reloaded.starts["default"].prologue
 
 
+def test_player_falls_back_to_empty_string_without_a_player_question(scenarios_root):
+    _write_scenario(scenarios_root, starts={"default.yaml": START_NO_SETUP})
+
+    scenario = load_scenario("exemplo-escola")
+    start = scenario.starts["default"].model_copy(
+        update={"prologue": "Ola, {{player}}! Sou {{scenario}} via {{start}}."}
+    )
+    answers = SetupAnswers(answers={})
+
+    new_scenario, new_start = apply_setup(scenario, start, answers)
+
+    assert new_start.prologue == "Ola, ! Sou Exemplo Escola via Sem setup."
+
+
+def test_rewind_to_zero_and_to_a_middle_turn_keeps_the_setup_event(scenarios_root):
+    """Setup is session-creation data, not turn history: it must survive any rewind."""
+    _write_scenario(scenarios_root)
+
+    created = sessions.create_session(
+        "exemplo-escola", setup={"player": "Iury", "turma": "3o A"}
+    )
+    sessions.append_events(
+        created.id,
+        [
+            ("player_turn", {"text": "turno 1", "mode": "do"}),
+            ("narrator_turn", {"text": "narra 1", "suggestions": []}),
+        ],
+    )
+
+    rewound_zero = sessions.rewind_session(created.id, 0)
+    assert rewound_zero.prologue == "Bem-vindo(a), Iury, ao Exemplo Escola via Começo."
+    assert len(sessions.read_events(created.id, kinds=("setup",))) == 1
+
+    sessions.append_events(
+        created.id,
+        [
+            ("player_turn", {"text": "turno 2", "mode": "do"}),
+            ("narrator_turn", {"text": "narra 2", "suggestions": []}),
+        ],
+    )
+    rewound_mid = sessions.rewind_session(created.id, 1)
+    assert rewound_mid.prologue == "Bem-vindo(a), Iury, ao Exemplo Escola via Começo."
+    assert len(sessions.read_events(created.id, kinds=("setup",))) == 1
+
+
+def test_observability_events_carry_attribution_keys(scenarios_root, monkeypatch):
+    emitted_setup: list[tuple[str, dict]] = []
+    emitted_sessions: list[tuple[str, dict]] = []
+    monkeypatch.setattr(setup_lib, "emit", lambda event, **props: emitted_setup.append((event, props)))
+    monkeypatch.setattr(sessions, "emit", lambda event, **props: emitted_sessions.append((event, props)))
+
+    _write_scenario(scenarios_root)
+
+    created = sessions.create_session(
+        "exemplo-escola", setup={"player": "Iury", "turma": "3o A"}
+    )
+
+    session_setup = [props for name, props in emitted_sessions if name == "session_setup"]
+    assert len(session_setup) == 1
+    assert session_setup[0]["session_id"] == created.id
+
+    setup_applied = [props for name, props in emitted_setup if name == "setup_applied"]
+    assert len(setup_applied) == 1
+    assert setup_applied[0]["session_id"] == created.id
+    assert setup_applied[0]["substitutions"] > 0
+
+    unknown = [props for name, props in emitted_setup if name == "setup_unknown_variable"]
+    assert len(unknown) == 1
+    assert unknown[0]["session_id"] == created.id
+    assert unknown[0]["name"] == "unknown"
+
+    emitted_setup.clear()
+    response_client = TestClient(main.app)
+    response = response_client.post(
+        "/api/sessions",
+        json={"scenarioId": "exemplo-escola", "setup": {"player": "Iury", "turma": "3o C"}},
+    )
+    assert response.status_code == 422
+    rejected = [props for name, props in emitted_setup if name == "setup_rejected"]
+    assert len(rejected) == 1
+    assert rejected[0]["scenario_id"] == "exemplo-escola"
+
+
 def test_get_scenarios_lists_starts_with_setup_and_default_flag(scenarios_root, client):
     _write_scenario(
         scenarios_root,
@@ -223,8 +331,13 @@ def test_get_scenarios_lists_starts_with_setup_and_default_flag(scenarios_root, 
 
     data = client.get("/api/scenarios").json()
     assert len(data) == 1
-    starts = {s["id"]: s for s in data[0]["starts"]}
+    item = data[0]
+    assert item["id"] == "exemplo-escola"
+    assert item["name"] == "Exemplo Escola"
+    assert item["tagline"] == "uma tagline"
+    assert item["locale"] == "pt-br"
 
+    starts = {s["id"]: s for s in item["starts"]}
     assert starts["default"]["isDefault"] is True
     assert starts["other"]["isDefault"] is False
     assert [q["id"] for q in starts["default"]["setup"]] == ["player", "turma"]
@@ -303,6 +416,42 @@ def test_scenario_with_reserved_setup_id_fails_to_load(scenarios_root):
         load_scenario("exemplo-escola")
 
 
+def test_scenario_with_setup_id_start_fails_to_load(scenarios_root):
+    starts = {
+        "default.yaml": (
+            "name: Começo\n"
+            "prologue: p\n"
+            "opening_scene: c\n"
+            "hud:\n  location: patio\n"
+            "setup:\n"
+            "  - id: start\n"
+            "    question: reservado\n"
+            "    type: text\n"
+            "    default: x\n"
+        )
+    }
+    _write_scenario(scenarios_root, starts=starts)
+
+    with pytest.raises(ScenarioError):
+        load_scenario("exemplo-escola")
+
+
+def test_answer_at_exactly_setup_answer_chars_is_accepted(scenarios_root, client):
+    from app.scenario import SETUP_ANSWER_CHARS
+
+    _write_scenario(scenarios_root)
+
+    response = client.post(
+        "/api/sessions",
+        json={
+            "scenarioId": "exemplo-escola",
+            "setup": {"player": "x" * SETUP_ANSWER_CHARS, "turma": "3o A"},
+        },
+    )
+
+    assert response.status_code == 201
+
+
 def test_resolve_answers_unit_missing_invalid_choice_and_too_long():
     from app.scenario import HudDefaults, SetupQuestion, StartConfig
 
@@ -342,3 +491,60 @@ def test_kill_switch_disables_interpolation_and_validation(scenarios_root, clien
     created = client.post("/api/sessions", json={"scenarioId": "exemplo-escola", "setup": {}}).json()
 
     assert created["prologue"] == "Bem-vindo(a), {{player}}, ao {{scenario}} via {{start}}."
+
+
+def test_kill_switch_skips_validation_even_when_required_answer_is_missing(scenarios_root, client, monkeypatch):
+    """A question without a default would 422 with the flag on; off, it must
+    not, because sessions.create_session skips resolve_answers entirely."""
+    starts = {
+        "default.yaml": (
+            "name: Começo\n"
+            "prologue: p\n"
+            "opening_scene: c\n"
+            "hud:\n  location: patio\n"
+            "setup:\n"
+            "  - id: player\n"
+            "    question: Como voce se chama?\n"
+            "    type: text\n"
+            "  - id: turma\n"
+            "    question: Em que turma?\n"
+            "    type: choice\n"
+            "    options: [\"3o A\", \"3o B\"]\n"
+        )
+    }
+    _write_scenario(scenarios_root, starts=starts)
+
+    off_config = Config.model_validate(
+        {
+            "providers": {"local": {"base_url": "http://x/v1"}},
+            "models": {"narrator": {"provider": "local", "model": "m"}},
+            "flags": {"setup": False},
+        }
+    )
+    monkeypatch.setattr("app.setup.load_config", lambda: off_config)
+    monkeypatch.setattr("app.sessions.load_config", lambda: off_config)
+
+    response = client.post(
+        "/api/sessions",
+        json={"scenarioId": "exemplo-escola", "setup": {"turma": "totalmente invalida"}},
+    )
+
+    assert response.status_code == 201
+    events = sessions.read_events(response.json()["id"], kinds=("setup",))
+    assert events[0].payload["answers"] == {"turma": "totalmente invalida"}
+
+
+def test_builtin_variables_are_not_overridable_by_a_raw_answer(scenarios_root):
+    """Reachable only with the flag off, where sessions.create_session stores
+    raw client answers without going through resolve_answers."""
+    _write_scenario(scenarios_root, starts={"default.yaml": START_NO_SETUP})
+
+    scenario = load_scenario("exemplo-escola")
+    start = scenario.starts["default"].model_copy(
+        update={"prologue": "Ola de {{start}} em {{scenario}}."}
+    )
+    answers = SetupAnswers(answers={"start": "hacked", "scenario": "hacked"})
+
+    _, new_start = apply_setup(scenario, start, answers)
+
+    assert new_start.prologue == "Ola de Sem setup em Exemplo Escola."

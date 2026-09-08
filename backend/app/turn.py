@@ -121,7 +121,7 @@ def load_turn_context(session_id: str) -> TurnContext:
         start = scenario.starts[row.start_id]
     except (ScenarioError, KeyError):
         raise ScenarioNotFound(row.scenario_id) from None
-    scenario, start = apply_setup(scenario, start, read_setup(session_id))
+    scenario, start = apply_setup(scenario, start, read_setup(session_id), session_id)
 
     ids = read_cast_ids(session_id)
     if ids is None:
