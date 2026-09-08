@@ -10,7 +10,7 @@ from app.scenario import LoadedScenario, SETUP_ANSWER_CHARS, StartConfig
 
 BUILTIN_VARIABLES = ("player", "start", "scenario")
 SETUP_EVENT_KIND = "setup"
-_VAR_RE = re.compile(r"\{\{\s*([a-z0-9_-]+)\s*\}\}")
+_VAR_RE = re.compile(r"\{\{\s*([A-Za-z0-9_-]+)\s*\}\}")
 
 _INTERPOLATED_FIELDS = ("world", "prologue", "opening_scene", "conflict", "mission")
 
@@ -75,8 +75,12 @@ def resolve_answers(
 
 
 def render(text: str, values: dict[str, str]) -> tuple[str, list[str]]:
-    """Substitutes {{var}} occurrences. Unknown variables become empty
-    strings; {{ without a closing }} is left literal."""
+    """Substitutes {{var}} occurrences. The braces accept any case, but a
+    variable only resolves against its exact lowercase id: {{Player}} is
+    unknown even though {{player}} resolves, since ids are always lowercase
+    (_SETUP_ID_RE) and a case-insensitive match would be an invisible rule the
+    builder never validates. Unknown variables become empty strings; {{
+    without a closing }} is left literal."""
     unknown: list[str] = []
 
     def _replace(match: re.Match[str]) -> str:

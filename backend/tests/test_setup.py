@@ -214,6 +214,33 @@ def test_unknown_key_ignored_variable_unknown_and_unclosed_literal(scenarios_roo
     assert "{{ nome" in ctx.scenario.world
 
 
+def test_uppercase_variable_names_are_unknown_lowercase_still_resolves(scenarios_root, monkeypatch):
+    """{{Player}} and {{PLAYER}} must not reach the narrator literally: the
+    detection regex accepts any case, but resolution only matches the exact
+    lowercase id. Case-insensitive resolution would be an invisible rule the
+    builder never validates."""
+    emitted: list[tuple[str, dict]] = []
+    monkeypatch.setattr(setup_lib, "emit", lambda event, **props: emitted.append((event, props)))
+
+    _write_scenario(scenarios_root, starts={"default.yaml": START_NO_SETUP})
+    scenario = load_scenario("exemplo-escola")
+    start = scenario.starts["default"].model_copy(
+        update={"prologue": "Ola, {{Player}}! {{PLAYER}} e {{player}}."}
+    )
+    answers = SetupAnswers(answers={"player": "Iury"})
+
+    _, new_start = apply_setup(scenario, start, answers, "session-x")
+
+    assert new_start.prologue == "Ola, !  e Iury."
+    unknown = [
+        props
+        for name, props in emitted
+        if name == "setup_unknown_variable" and props["field"] == "prologue"
+    ]
+    assert {props["name"] for props in unknown} == {"Player", "PLAYER"}
+    assert all(props["session_id"] == "session-x" for props in unknown)
+
+
 def test_session_without_setup_event_resolves_only_builtins(scenarios_root):
     _write_scenario(scenarios_root, starts={"default.yaml": START_NO_SETUP})
 
